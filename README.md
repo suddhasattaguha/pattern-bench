@@ -11,6 +11,8 @@ Single HTML file, zero dependencies, zero build step. Open
 ## What it does today
 
 - An infinite, pannable, zoomable canvas (SVG + HTML hybrid).
+- A dark/light theme toggle in the toolbar (in-memory only — resets to dark
+  on reload, since artifacts can't use localStorage).
 - A **Base Flow Design** component library, organized into two columns:
   Entry-Route and Exit-Route. Dragging a compatible block onto the canvas
   auto-docks it to the correct open end of the flow — no manual positioning.
@@ -33,14 +35,23 @@ Single HTML file, zero dependencies, zero build step. Open
 
 ## Current base patterns
 
-| Block | Route | Connector |
-|---|---|---|
-| API-to-Process | Entry | API |
-| File-to-Process | Entry | File (SFTP-style folder pickup) |
-| Consume-to-Process | Entry | Topic/Queue |
-| Process-to-Publish | Exit | Topic |
-| Process-to-API | Exit | API |
-| Process-to-File | Exit | File |
+| Block | Route | Entry connector | Exit connector |
+|---|---|---|---|
+| API-to-Process | Entry | API | Process |
+| File-to-Process | Entry | File (SFTP-style folder pickup) | Process |
+| Consume-to-Process | Entry | Topic/Queue | Process |
+| Consume-to-API | Entry | Topic/Queue | API |
+| Consume-to-Publish | Entry | Topic/Queue | Topic (relay) |
+| API-to-Publish | Entry | API | Topic |
+| File-to-API | Entry | File | API |
+| Process-to-Publish | Exit | Process | Topic |
+| Process-to-API | Exit | Process | API |
+| Process-to-File | Exit | Process | File |
+
+The last four Entry-Route blocks above are "bridge" patterns: two
+real-world touchpoints connected directly, with no separate processing
+step called out (e.g. a topic-to-topic relay, or a file arrival that
+directly calls an external API).
 
 ## Architecture notes (for whoever picks this up next)
 

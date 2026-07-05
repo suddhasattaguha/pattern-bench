@@ -72,3 +72,20 @@ one logical change each with a real diff behind them.
 - Design how a versioned-artifact block attaches to a base-flow block.
 - Add persistence (export/import, or `window.storage` if hosted as an
   artifact).
+
+## Stage 7 — Theme toggle + broader base palette (v1.3)
+- Added a dark/light mode toggle button to the toolbar. All icon colors
+  (fills, strokes, dashed asset-boundary lines) now route through CSS
+  custom properties instead of hardcoded hex, so already-rendered blocks
+  re-theme live without needing to regenerate any markup — verified this
+  works by testing that SVG presentation attributes resolve `var()` at
+  computed-style time. Theme state is in-memory only (artifacts can't use
+  localStorage), so it resets to dark on reload.
+- Added four new "bridge" pattern blocks that connect two real-world
+  touchpoints directly, with no intermediate processing step called out:
+  Consume-to-API, Consume-to-Publish (topic-to-topic relay), API-to-Publish,
+  and File-to-API. Base palette is now 10 blocks, still split cleanly into
+  Entry-Route / Exit-Route (the rule: Entry-Route if the block's entry
+  connector is a real-world touchpoint — api/file/topic — Exit-Route if its
+  entry connector is "process").
+
