@@ -410,11 +410,16 @@
     const labelMarkup = label
       ? `<text x="${x+6}" y="${y+9.5}" font-family="${FONT_MONO}" font-size="6.5" letter-spacing="0.04em" fill="${COLOR_MUTED}" opacity="0.85">${label}</text>`
       : '';
+    // shape-rendering="crispEdges" matters here: a plain 1px stroke centered
+    // on an integer coordinate straddles two pixel rows at ~50% coverage
+    // each, so it always partially blends with whatever renders underneath
+    // — regardless of z-index — once a box overshoots into a neighboring
+    // block. crispEdges snaps it to a single full-opacity pixel row instead.
     return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(232,237,242,0.035)"></rect>
-      <line x1="${x}" y1="${y}" x2="${x+w}" y2="${y}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>
-      <line x1="${x}" y1="${y+h}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>
-      <line x1="${x}" y1="${y}" x2="${x}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>
-      <line x1="${x+w}" y1="${y}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>
+      <line x1="${x}" y1="${y}" x2="${x+w}" y2="${y}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
+      <line x1="${x}" y1="${y+h}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
+      <line x1="${x}" y1="${y}" x2="${x}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
+      <line x1="${x+w}" y1="${y}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
       ${labelMarkup}`;
   }
 
@@ -523,7 +528,7 @@
     return `
       <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
       <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${assetBox(-10, -11, 50, 52, 'iPaaS')}
+        ${assetBox(-16, -11, 62, 52, 'iPaaS')}
         ${arrowMarker(-9, 15)}
         <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
         <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
@@ -531,7 +536,7 @@
         ${iconCaption('Process Flow', 15, 37)}
       </g>
       <g class="icon-group" data-anchor="exit" data-type="topic" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
-        ${assetBox(-10, -11, 50, 52, 'Message Broker')}
+        ${assetBox(-16, -11, 62, 52, 'Message Broker')}
         ${arrowMarker(-9, 15)}
         <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
         <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
@@ -637,7 +642,7 @@
     return `
       <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
       <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${assetBox(-10, -11, 50, 52, 'iPaaS')}
+        ${assetBox(-16, -11, 62, 52, 'iPaaS')}
         ${arrowMarker(-9, 15)}
         <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
         <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
@@ -699,7 +704,7 @@
     return `
       <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
       <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${assetBox(-10, -11, 50, 52, 'iPaaS')}
+        ${assetBox(-16, -11, 62, 52, 'iPaaS')}
         ${arrowMarker(-9, 15)}
         <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
         <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
@@ -805,7 +810,7 @@
         ${iconCaption('Queue', 23, 24)}
       </g>
       <g class="icon-group" data-anchor="exit" data-type="topic" data-half-x="17" data-half-y="15" data-default-transform="${topicOutT}" transform="${topicOutT}">
-        ${assetBox(-10, -11, 50, 52, 'Message Broker')}
+        ${assetBox(-16, -11, 62, 52, 'Message Broker')}
         ${arrowMarker(-9, 15)}
         <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
         <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
@@ -839,7 +844,7 @@
         ${apiIconMarkup(color)}
       </g>
       <g class="icon-group" data-anchor="exit" data-type="topic" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
-        ${assetBox(-10, -11, 50, 52, 'Message Broker')}
+        ${assetBox(-16, -11, 62, 52, 'Message Broker')}
         ${arrowMarker(-9, 15)}
         <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
         <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>

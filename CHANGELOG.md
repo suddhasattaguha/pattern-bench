@@ -111,3 +111,24 @@ one logical change each with a real diff behind them.
   each icon's own `<g>`, same as the existing arrowheads and boundary
   boxes, so they travel, hide, and reappear correctly when icons merge.
 
+## Stage 10 — Root-causing the "shortened boundary" artifact (v1.6)
+- Finally diagnosed the boundary-box-looks-incomplete-after-merging issue
+  that kept resurfacing: it was never a z-index/stacking bug (the z-boost
+  mechanism from Stage 4 was working correctly the whole time). The real
+  cause is a sub-pixel rendering quirk: a plain `stroke-width="1"` SVG line
+  centered on an integer coordinate straddles two physical pixel rows at
+  ~50% coverage each, so it always partially blends with whatever renders
+  underneath, independent of z-index. Quantitatively verified with a
+  forced-color test: the affected dashed line was rendering at an
+  *effective* opacity of ~0.435 instead of its intended 0.85 — roughly
+  half strength — which reads as a faded/incomplete box exactly where a
+  box overshoots into a neighboring block.
+  Fix: added `shape-rendering="crispEdges"` to the four border lines in
+  `assetBox()`, which snaps them to a single full-coverage pixel row.
+  Re-verified with the same forced-color technique: effective opacity is
+  now ~0.855, matching the intended 0.85 almost exactly, on both the
+  topic/queue (Message Broker) and process (iPaaS) merge cases.
+- Elongated the single-icon nested boxes (used for non-owner Process/Topic
+  icons showing standalone) from 50×52 to 62×52, for a more spacious,
+  deliberate look even when only one icon is present.
+
