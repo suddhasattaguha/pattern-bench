@@ -99,3 +99,15 @@ one logical change each with a real diff behind them.
   stay pinned at the top of their column while the block list beneath
   scrolls, instead of scrolling away with the content.
 
+## Stage 9 — Legibility labels (v1.5)
+- Every asset-boundary box that contains a "process" icon now shows a tiny
+  "iPaaS" subheader; every box containing a topic and/or queue icon shows
+  "Message Broker". Boxes with only an API or File icon stay unlabeled
+  (not requested).
+- Every non-API icon now carries a small caption naming its role: gear ->
+  "Process Flow", topic -> "Topic", queue -> "Queue", the folder icon ->
+  "SFTP". (API already had its own "API" text baked into the home-plate
+  shape, so it was left as-is per the request.) Captions are nested inside
+  each icon's own `<g>`, same as the existing arrowheads and boundary
+  boxes, so they travel, hide, and reappear correctly when icons merge.
+
