@@ -186,13 +186,19 @@
     gap:8px;
   }
   .quad-title{
+    position:sticky;
+    top:0;
+    z-index:5;
+    background:var(--panel);
     font-family:var(--font-mono);
     font-size:9px;
     color:var(--text-faint);
     text-transform:uppercase;
     letter-spacing:0.06em;
-    margin-bottom:2px;
+    margin:-18px -8px 2px;
+    padding:8px 8px 6px;
     line-height:1.4;
+    box-shadow:0 1px 0 var(--panel-border);
   }
   .quad-empty{
     font-family:var(--font-mono);
@@ -820,34 +826,6 @@
   }
 
   // ---------------------------------------------------------------
-  // Block diagram: File-to-API
-  // A file arrival directly triggers a call to an external API — no
-  // separate processing step shown.
-  // ---------------------------------------------------------------
-  function fileToApiDiagram(w, h, color){
-    const cy = h/2;
-    const fileT = `translate(0, ${cy-12})`;
-    const apiT = `translate(${w-44}, ${cy-11})`;
-    const boundY = cy - 26;
-    const boundH = 52;
-    const assetLeftX = 18;
-    const assetRightX = Math.round(w * 0.4);
-    return `
-      ${assetBox(assetLeftX, boundY, assetRightX-assetLeftX, boundH)}
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="file" data-boundary="true" data-fixed="true" data-half-x="18" data-half-y="12" data-default-transform="${fileT}" transform="${fileT}">
-        ${fileIconMarkup(color)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="api" data-fixed="true" data-half-x="22" data-half-y="11" data-default-transform="${apiT}" transform="${apiT}">
-        ${assetBox(22, -15, 40, 52)}
-        ${arrowMarker(-9, 11)}
-        ${apiIconMarkup(color)}
-      </g>
-      <polygon points="10,${cy-4} 17,${cy} 10,${cy+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>
-    `;
-  }
-
-  // ---------------------------------------------------------------
   // Block template registry (this grows as you define more patterns)
   // ---------------------------------------------------------------
   const templates = [
@@ -920,7 +898,7 @@
     {
       id:'consume-to-api',
       label:'Consume-to-API',
-      route:'entry',
+      route:'exit',
       purpose:'A subscription queue on the event broker consumes from an upstream topic and posts the result straight to an external API — a direct relay with no separate processing step called out.',
       size:'wide',
       color:'#7C93AC',
@@ -949,17 +927,6 @@
       entryType:'api',
       exitType:'topic',
       diagram: apiToPublishDiagram
-    },
-    {
-      id:'file-to-api',
-      label:'File-to-API',
-      route:'entry',
-      purpose:'A file arrival directly triggers a call to an external API, with no separate processing step called out.',
-      size:'wide',
-      color:'#4FB6AC',
-      entryType:'file',
-      exitType:'api',
-      diagram: fileToApiDiagram
     }
   ];
   const templatesById = {};

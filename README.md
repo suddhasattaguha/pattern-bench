@@ -40,18 +40,18 @@ Single HTML file, zero dependencies, zero build step. Open
 | API-to-Process | Entry | API | Process |
 | File-to-Process | Entry | File (SFTP-style folder pickup) | Process |
 | Consume-to-Process | Entry | Topic/Queue | Process |
-| Consume-to-API | Entry | Topic/Queue | API |
 | Consume-to-Publish | Entry | Topic/Queue | Topic (relay) |
 | API-to-Publish | Entry | API | Topic |
-| File-to-API | Entry | File | API |
 | Process-to-Publish | Exit | Process | Topic |
 | Process-to-API | Exit | Process | API |
 | Process-to-File | Exit | Process | File |
+| Consume-to-API | Exit | Topic/Queue | API |
 
-The last four Entry-Route blocks above are "bridge" patterns: two
-real-world touchpoints connected directly, with no separate processing
-step called out (e.g. a topic-to-topic relay, or a file arrival that
-directly calls an external API).
+The bridge patterns (Consume-to-Publish, API-to-Publish, Consume-to-API)
+connect two real-world touchpoints directly, with no separate processing
+step called out. Route classification (Entry vs. Exit) is a purely visual
+grouping in the palette — it doesn't affect docking compatibility, which is
+always driven by `entryType`/`exitType` matching regardless of `route`.
 
 ## Architecture notes (for whoever picks this up next)
 

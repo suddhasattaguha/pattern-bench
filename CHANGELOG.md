@@ -89,3 +89,13 @@ one logical change each with a real diff behind them.
   connector is a real-world touchpoint — api/file/topic — Exit-Route if its
   entry connector is "process").
 
+## Stage 8 — Palette cleanup (v1.4)
+- Removed File-to-API (redundant bridge pattern for now — File-to-Process
+  already covers the File connector's main use case).
+- Reclassified Consume-to-API from Entry-Route to Exit-Route (purely a
+  palette-grouping change; docking compatibility is unaffected, since that's
+  driven by `entryType`/`exitType`, not `route`).
+- Palette column headers (Entry-Route / Exit-Route) are now sticky — they
+  stay pinned at the top of their column while the block list beneath
+  scrolls, instead of scrolling away with the content.
+
