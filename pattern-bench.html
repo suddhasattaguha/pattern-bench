@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pattern Bench — Architecture Canvas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0A1929;
+    --ink-deep:#071320;
+    --panel:#10233A;
+    --panel-border:#1C3A57;
+    --grid-line: rgba(94,149,219,0.14);
+    --grid-line-strong: rgba(94,149,219,0.28);
+    --accent-amber:#E8A33D;
+    --accent-teal:#4FB6AC;
+    --text-primary:#E8EDF2;
+    --text-muted:#7C93AC;
+    --text-faint:#4C6885;
+    --block-bg:#16324D;
+    --block-bg-hover:#1B3C5C;
+    --block-border:#2E5478;
+    --danger:#D9614B;
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    --font-ui:'Inter', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--ink-deep);
+    color:var(--text-primary);
+    font-family:var(--font-ui);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    display:grid;
+    grid-template-rows:52px 1fr;
+    grid-template-columns:260px 1fr;
+    grid-template-areas:
+      "topbar topbar"
+      "palette canvas";
+    height:100vh;
+    width:100vw;
+  }
+
+  /* ---------- TOPBAR ---------- */
+  .topbar{
+    grid-area:topbar;
+    background:var(--panel);
+    border-bottom:1px solid var(--panel-border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 16px;
+    z-index:20;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-family:var(--font-mono);
+    font-weight:600;
+    letter-spacing:0.02em;
+    font-size:14px;
+  }
+  .brand .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--accent-amber);
+    box-shadow:0 0 8px var(--accent-amber);
+  }
+  .brand .sub{
+    color:var(--text-muted);
+    font-weight:400;
+    font-size:11px;
+    border-left:1px solid var(--panel-border);
+    padding-left:10px;
+    margin-left:2px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+  }
+  .toolbar{ display:flex; align-items:center; gap:6px; }
+  .btn{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--text-primary);
+    background:var(--block-bg);
+    border:1px solid var(--block-border);
+    border-radius:4px;
+    padding:6px 10px;
+    cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    transition:background .12s, border-color .12s;
+  }
+  .btn:hover{ background:var(--block-bg-hover); border-color:var(--accent-teal); }
+  .btn:active{ transform:translateY(1px); }
+  .btn.danger:hover{ border-color:var(--danger); color:#FFD9D1; }
+  .btn.toggle-on{ border-color:var(--accent-amber); color:var(--accent-amber); }
+  .zoom-readout{ font-family:var(--font-mono); font-size:12px; color:var(--text-muted); min-width:44px; text-align:center; }
+  .divider{ width:1px; height:22px; background:var(--panel-border); margin:0 4px; }
+
+  /* ---------- PALETTE ---------- */
+  .palette{
+    grid-area:palette;
+    background:var(--panel);
+    border-right:1px solid var(--panel-border);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .palette-head{ padding:14px 14px 10px; border-bottom:1px solid var(--panel-border); }
+  .palette-head h2{ margin:0 0 3px; font-size:13px; font-weight:600; letter-spacing:0.02em; }
+  .palette-head p{ margin:0; font-size:11px; color:var(--text-muted); line-height:1.4; }
+  .palette-tabs{
+    display:flex;
+    border-bottom:1px solid var(--panel-border);
+    background:var(--panel);
+  }
+  .palette-tab{
+    flex:1;
+    background:none;
+    border:none;
+    border-bottom:2px solid transparent;
+    color:var(--text-muted);
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    padding:9px 6px;
+    cursor:pointer;
+    transition:color .12s, border-color .12s;
+  }
+  .palette-tab:hover{ color:var(--text-primary); }
+  .palette-tab.active{ color:var(--accent-amber); border-bottom-color:var(--accent-amber); }
+  .quadrant-grid{
+    flex:1;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:1fr 1fr;
+    gap:1px;
+    background:var(--panel-border);
+    position:relative;
+    overflow:hidden;
+  }
+  .quadrant-grid.two-col{ grid-template-rows:1fr; }
+  .axis-label{
+    position:absolute;
+    font-family:var(--font-mono);
+    font-size:8.5px;
+    letter-spacing:0.08em;
+    color:var(--text-muted);
+    text-transform:uppercase;
+    z-index:5;
+    pointer-events:none;
+    white-space:nowrap;
+  }
+  .axis-label.axis-top{ top:2px; left:50%; transform:translateX(-50%); }
+  .axis-label.axis-left{ left:3px; top:50%; transform:translateY(-50%) rotate(-90deg); transform-origin:left center; }
+
+  .quad{
+    background:var(--panel);
+    padding:18px 8px 8px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .quad-title{
+    font-family:var(--font-mono);
+    font-size:9px;
+    color:var(--text-faint);
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    margin-bottom:2px;
+    line-height:1.4;
+  }
+  .quad-empty{
+    font-family:var(--font-mono);
+    font-size:10px;
+    color:var(--text-faint);
+    text-align:center;
+    padding:16px 4px;
+    border:1px dashed var(--panel-border);
+    border-radius:6px;
+    opacity:0.8;
+  }
+
+  .palette-block{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+    background:var(--panel);
+    border:1px solid var(--block-border);
+    border-radius:6px;
+    padding:8px 8px 7px;
+    cursor:grab;
+    user-select:none;
+    transition:border-color .12s, background .12s, transform .08s;
+  }
+  .palette-block:hover{ border-color:var(--accent-teal); background:var(--block-bg); }
+  .palette-block:active{ cursor:grabbing; transform:scale(0.98); }
+  .palette-block.dragging-source{ opacity:0.4; }
+  .palette-block.unavailable{
+    opacity:0.32;
+    filter:grayscale(0.85);
+    cursor:not-allowed;
+  }
+  .palette-block.unavailable:hover{ border-color:var(--block-border); background:var(--panel); }
+  .palette-block svg{ width:100%; height:auto; display:block; }
+  .pb-label{
+    font-family:var(--font-mono);
+    font-size:10px;
+    text-align:center;
+    color:var(--text-primary);
+  }
+
+  /* ---------- CANVAS (infinite) ---------- */
+  .canvas-wrap{
+    grid-area:canvas;
+    position:relative;
+    overflow:hidden;
+    background:var(--ink);
+    cursor:grab;
+  }
+  .canvas-wrap.panning{ cursor:grabbing; }
+  .canvas-wrap.drag-over{ outline:2px dashed var(--accent-teal); outline-offset:-2px; }
+
+  .world{ position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; }
+
+  .coord-readout{
+    position:absolute; bottom:14px; right:16px;
+    font-family:var(--font-mono); font-size:11px; color:var(--text-muted);
+    background:rgba(16,35,58,0.85); border:1px solid var(--panel-border);
+    border-radius:4px; padding:6px 10px; z-index:15; pointer-events:none;
+    backdrop-filter:blur(2px);
+  }
+  .coord-readout span{ color:var(--accent-teal); }
+
+  .empty-hint{
+    position:absolute; top:16px; left:16px;
+    font-family:var(--font-mono); font-size:12px; color:var(--text-muted);
+    background:rgba(16,35,58,0.85); border:1px dashed var(--panel-border);
+    border-radius:6px; padding:10px 14px; max-width:300px; line-height:1.5;
+    pointer-events:none; z-index:15; backdrop-filter:blur(2px);
+  }
+  .empty-hint b{ color:var(--text-primary); }
+
+  /* ---------- CANVAS BLOCKS ---------- */
+  .cblock{
+    position:absolute;
+    cursor:grab;
+    user-select:none;
+    touch-action:none;
+    z-index:10;
+  }
+  /* Whichever block "keeps" a merged icon can have that icon (and its
+     boundary) physically poke a few pixels into the neighboring block's own
+     rendered area, since the icon sits right at the shared seam. Both
+     blocks default to the same z-index, so whichever was created later
+     would otherwise paint on top and clip it. Boosting the keeper above the
+     baseline layer (but still below active drag/selection) fixes that. */
+  .cblock.z-boost{ z-index:20; }
+  .cblock.selected{ z-index:11; }
+  .cblock.dragging{ z-index:50; opacity:0.94; }
+  .cblock svg.cblock-svg{ display:block; overflow:visible; }
+  .cblock-shell{ fill:var(--block-bg); stroke:var(--block-border); stroke-width:1.5; transition:stroke .12s, filter .12s; }
+  .cblock:hover .cblock-shell{ stroke:var(--accent-teal); }
+  .cblock.selected .cblock-shell{
+    stroke:var(--accent-amber);
+    filter:drop-shadow(0 0 4px rgba(232,163,61,0.55));
+  }
+  .cblock-label{
+    position:absolute;
+    left:0; right:0; bottom:9px;
+    text-align:center;
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    font-weight:500;
+    color:var(--text-primary);
+    outline:none;
+    pointer-events:auto;
+    z-index:2;
+  }
+  .cblock-label[contenteditable="true"]{ cursor:text; border-bottom:1px dashed var(--accent-amber); }
+
+  .icon-group{ transition:transform .18s ease, opacity .18s ease; }
+  .icon-group.icon-hidden{ opacity:0; }
+  circle.port{ fill:var(--ink); stroke:var(--accent-teal); stroke-width:1.6; transition:stroke .12s, fill .12s, opacity .15s; }
+  circle.port.snap-target{ stroke:var(--accent-amber); }
+  circle.port.merged{ opacity:0; }
+
+  .delete-x{
+    position:absolute; top:-8px; right:-8px;
+    width:16px; height:16px; border-radius:50%;
+    background:var(--danger); color:#fff; font-size:10px; line-height:16px;
+    text-align:center; cursor:pointer; display:none;
+    font-family:var(--font-ui); font-weight:700; z-index:3;
+  }
+  .cblock.selected .delete-x{ display:block; }
+
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:var(--panel); }
+  ::-webkit-scrollbar-thumb{ background:var(--panel-border); border-radius:5px; }
+  ::-webkit-scrollbar-thumb:hover{ background:var(--block-border); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      PATTERN BENCH
+      <span class="sub">architecture canvas — v0.3</span>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="zoomOut" title="Zoom out">−</button>
+      <div class="zoom-readout" id="zoomReadout">100%</div>
+      <button class="btn" id="zoomIn" title="Zoom in">+</button>
+      <button class="btn" id="zoomReset" title="Reset view">Reset view</button>
+      <div class="divider"></div>
+      <button class="btn" id="snapToggle" title="Toggle grid snapping">Snap: On</button>
+      <div class="divider"></div>
+      <button class="btn danger" id="clearCanvas" title="Remove all blocks">Clear canvas</button>
+    </div>
+  </header>
+
+  <aside class="palette">
+    <div class="palette-head">
+      <h2>Component Library</h2>
+      <p id="paletteHeadDesc">Build one flow at a time. Only patterns that fit its open ends stay available here.</p>
+    </div>
+    <div class="palette-tabs">
+      <button class="palette-tab active" id="tabBaseFlow" data-tab="base">Base Flow Design</button>
+      <button class="palette-tab" id="tabVersioned" data-tab="versioned">Versioned Artifacts</button>
+    </div>
+    <div class="quadrant-grid two-col" id="quadrantGrid"></div>
+    <div class="quadrant-grid" id="versionGrid" style="display:none;">
+      <span class="axis-label axis-top">Axes to be defined together</span>
+      <span class="axis-label axis-left">Axes to be defined together</span>
+    </div>
+  </aside>
+
+  <main class="canvas-wrap" id="canvasWrap">
+    <div class="world" id="world"></div>
+    <div class="empty-hint" id="staticHint">Drag any pattern from the library to start a flow. From there, only patterns that actually fit the open ends stay available — drop one anywhere and it docks into place automatically, upstream or downstream. Drag any block to move the whole flow. Double-click a label to rename, press <b>Delete</b> to remove an end block.</div>
+    <div class="coord-readout" id="coordReadout">x: <span id="coordX">0</span>&nbsp; y: <span id="coordY">0</span>&nbsp; zoom: <span id="coordZoom">100%</span></div>
+  </main>
+
+</div>
+
+<script>
+(function(){
+  const COLOR_TEAL = '#4FB6AC';
+  const COLOR_BG = '#16324D';
+  const COLOR_MUTED = '#7C93AC';
+  const FONT_MONO = "'JetBrains Mono', monospace";
+
+  // ---------------------------------------------------------------
+  // Geometry constants — every block shares the same height so
+  // docked flows stay level, and the same notch/tab radius so any
+  // two blocks can interlock.
+  // ---------------------------------------------------------------
+  const SIZE_WIDTH = { small:150, medium:210, wide:280 };
+  const BLOCK_H = 100;
+  // The canvas builds exactly one end-to-end pattern at a time. chainOrder
+  // holds the blocks in left-to-right sequence; the palette is filtered
+  // against whatever the two open ends of that sequence currently require.
+  let chainOrder = [];
+  const CORNER_R = 10;
+  const TAB_R = 12;
+  const ICON_HALF = 15; // fallback half-size if an icon doesn't specify its own data-half-x/y
+
+  // Asset-boundary box: fill + full dashed border by default (this is what
+  // Asset-boundary box: a permanently complete, fully-bordered rectangle.
+  // It never opens up or partially hides — whichever block "owns" a shared
+  // icon just keeps its own box exactly as-is, merged or not, and the
+  // non-owner's box (if any) fades away entirely together with its icon.
+  // That's what guarantees every box always reads as one solid rectangle,
+  // never half-open.
+  function assetBox(x, y, w, h){
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(232,237,242,0.035)"></rect>
+      <line x1="${x}" y1="${y}" x2="${x+w}" y2="${y}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>
+      <line x1="${x}" y1="${y+h}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>
+      <line x1="${x}" y1="${y}" x2="${x}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>
+      <line x1="${x+w}" y1="${y}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85"></line>`;
+  }
+
+  // A small teal arrowhead marking the message flow stepping into an icon.
+  // Meant to be nested inside that icon's own <g> so it travels, hides and
+  // reappears together with it (including when the icon slides to a seam).
+  function arrowMarker(x, y){
+    return `<polygon points="${x},${y-4} ${x+7},${y} ${x},${y+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>`;
+  }
+
+  // Shared "API" icon: a home-plate shape — tapered, angular point on the
+  // entry side (message flowing in), flat edge on the exit side. Used for
+  // every API touchpoint, inbound or outbound, so the visual language for
+  // "this is an external contract boundary" stays consistent everywhere.
+  function apiIconMarkup(color){
+    return `<path d="M10,0 L44,0 L44,22 L10,22 L0,11 Z" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></path>
+      <text x="28" y="14.5" text-anchor="middle" font-family="${FONT_MONO}" font-size="8" fill="${color}" font-weight="700">API</text>`;
+  }
+
+  // A file/document icon — same family as the API home-plate (an external
+  // contract touchpoint that always sits at the edge of its asset, never
+  // buried inside it): a folded-corner document, local box 0-36 x 0-24.
+  function fileIconMarkup(color){
+    return `<path d="M2,8 L13,8 L16,11 L34,11 L34,22 L2,22 Z" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.5"></path>
+      <path d="M10,1 L20,1 L23,4 L23,13 L10,13 Z" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.3"></path>
+      <path d="M20,1 L20,4 L23,4 Z" fill="none" stroke="${color}" stroke-width="1.05"></path>
+      <line x1="12.5" y1="7" x2="20.5" y2="7" stroke="${color}" stroke-width="0.9" opacity="0.7"></line>
+      <line x1="12.5" y1="9.5" x2="20.5" y2="9.5" stroke="${color}" stroke-width="0.9" opacity="0.7"></line>`;
+  }
+
+  // Puzzle silhouette: rounded rect with a convex tab on the right
+  // edge (exit) and a concave notch on the left edge (entry).
+  function puzzlePath(w, h, cr, r){
+    const cy = h/2;
+    return [
+      `M ${cr},0`,
+      `H ${w-cr}`,
+      `A ${cr},${cr} 0 0 1 ${w},${cr}`,
+      `V ${cy-r}`,
+      `A ${r},${r} 0 0 1 ${w},${cy+r}`,
+      `V ${h-cr}`,
+      `A ${cr},${cr} 0 0 1 ${w-cr},${h}`,
+      `H ${cr}`,
+      `A ${cr},${cr} 0 0 1 0,${h-cr}`,
+      `V ${cy+r}`,
+      `A ${r},${r} 0 0 0 0,${cy-r}`,
+      `V ${cr}`,
+      `A ${cr},${cr} 0 0 1 ${cr},0`,
+      'Z'
+    ].join(' ');
+  }
+
+  // ---------------------------------------------------------------
+  // Block diagram: API-to-Process
+  // Entry (left) -> API gateway icon -> processing icon -> Exit (right)
+  // ---------------------------------------------------------------
+  function apiToProcessDiagram(w, h, color){
+    const cy = h/2;
+    const procCx = w * 0.68;
+    // The API gateway sits fully inside the lego-block's own puzzle-piece
+    // shell — that outer shape is the physical block boundary and the icon
+    // never crosses it. What DOES sit on an edge is the icon relative to the
+    // dashed asset-context box: the box's edge runs straight through the
+    // icon's center, so half of it reads as "inside this asset" and half as
+    // the connector nub leading out to the block's own physical edge.
+    const gatewayT = `translate(0, ${cy-11})`;
+    const gearT = `translate(${procCx-15}, ${cy-15})`;
+    const boundY = cy - 26;
+    const boundH = 52;
+    const assetLeftX = 22; // the gateway icon's own local half-width — its center (API sits AT the edge)
+    const assetRightX = w + 15; // process icon's half-width past the true edge — box fully ENCLOSES it
+    return `
+      ${assetBox(assetLeftX, boundY, assetRightX-assetLeftX, boundH)}
+      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
+      <g class="icon-group" data-anchor="entry" data-type="api" data-boundary="true" data-fixed="true" data-half-x="22" data-half-y="11" data-default-transform="${gatewayT}" transform="${gatewayT}">
+        ${apiIconMarkup(color)}
+      </g>
+      <g class="icon-group" data-anchor="exit" data-type="process" data-boundary="true" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
+        ${arrowMarker(-9, 15)}
+        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
+        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
+        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
+      </g>
+      <polygon points="10,${cy-4} 17,${cy} 10,${cy+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>
+    `;
+  }
+
+  // ---------------------------------------------------------------
+  // Block diagram: Process-to-Publish
+  // Entry (left) -> processing icon -> topic icon -> Exit (right)
+  // ---------------------------------------------------------------
+  function processToPublishDiagram(w, h, color){
+    const cy = h/2;
+    const procCx = w * 0.30;
+    const topicCx = w * 0.70;
+    const gearT = `translate(${procCx-15}, ${cy-15})`;
+    const topicT = `translate(${topicCx-17}, ${cy-15})`;
+    return `
+      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
+      <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
+        ${assetBox(-10, -11, 50, 52)}
+        ${arrowMarker(-9, 15)}
+        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
+        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
+        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
+      </g>
+      <g class="icon-group" data-anchor="exit" data-type="topic" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
+        ${assetBox(-10, -11, 50, 52)}
+        ${arrowMarker(-9, 15)}
+        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
+        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
+        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
+        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
+        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
+        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
+      </g>
+    `;
+  }
+
+  // ---------------------------------------------------------------
+  // Block diagram: Consume-to-Process
+  // Entry (docks to a topic) -> topic (merges with upstream) -> queue
+  // [asset boundary: broker] -> processing step [asset boundary: new
+  // independent platform] -> Exit
+  // ---------------------------------------------------------------
+  function consumeToProcessDiagram(w, h, color){
+    const cy = h/2;
+    const topicCx = w * 0.14;
+    const queueCx = w * 0.36;
+    const procCx = w * 0.80;
+    const topicT = `translate(${topicCx-17}, ${cy-15})`;
+    const queueT = `translate(${queueCx-25}, ${cy-7})`;
+    const procT = `translate(${procCx-15}, ${cy-15})`;
+
+    // b1 (broker: topic+queue) and b2 (independent processing platform) are
+    // both permanently complete boxes — they never open up on any side,
+    // merged or not. Unlike an API (which sits AT its box's edge), a
+    // process/topic icon should read as fully enclosed by its asset, so
+    // each box overshoots past the block's own true edge by that icon's
+    // half-width, wrapping all the way around it once it's docked and
+    // straddling the seam.
+    const b1x = -17; // topic icon's half-width past the true edge — box fully ENCLOSES it
+    const b1w = (queueCx + 30) - b1x;
+    const b2x = procCx - 24;
+    const b2w = (w + 15) - b2x; // process icon's half-width past the true edge
+    const bandY = cy - 26;
+    const bandH = 52;
+    const transitionX = (b1x + b1w + b2x) / 2;
+
+    return `
+      ${assetBox(b1x, bandY, b1w, bandH)}
+      ${assetBox(b2x, bandY, b2w, bandH)}
+      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
+      <line x1="${transitionX}" y1="${bandY-4}" x2="${transitionX}" y2="${bandY+bandH+4}" stroke="${COLOR_TEAL}" stroke-width="1" stroke-dasharray="2,3" opacity="0.45"></line>
+      <g class="icon-group" data-anchor="entry" data-type="topic" data-boundary="true" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
+        ${arrowMarker(-9, 15)}
+        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
+        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
+        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
+        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
+        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
+        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
+      </g>
+      <g class="icon-group" data-anchor="free" data-type="queue" transform="${queueT}">
+        ${arrowMarker(-9, 7)}
+        <rect x="4" y="0" width="42" height="14" rx="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.5"></rect>
+        <ellipse cx="4" cy="7" rx="2.6" ry="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.3"></ellipse>
+        <line x1="13" y1="2.5" x2="13" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
+        <line x1="22" y1="2.5" x2="22" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
+        <line x1="31" y1="2.5" x2="31" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
+        <line x1="40" y1="2.5" x2="40" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
+      </g>
+      <g class="icon-group" data-anchor="exit" data-type="process" data-boundary="true" data-half-x="15" data-half-y="15" data-default-transform="${procT}" transform="${procT}">
+        ${arrowMarker(-9, 15)}
+        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
+        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
+        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
+      </g>
+    `;
+  }
+
+  // ---------------------------------------------------------------
+  // Block diagram: Process-to-API
+  // Entry (processing, merges with upstream owner) -> posts to an
+  // external target API -> Exit. The API icon is the same generic,
+  // mergeable "api" type as API-to-Process's gateway, and gets its own
+  // asset-boundary box too — it belongs to some platform/asset (external
+  // application or another hybrid-middleware asset), that's all that
+  // matters, not which.
+  // ---------------------------------------------------------------
+  function processToApiDiagram(w, h, color){
+    const cy = h/2;
+    const procCx = w * 0.30;
+    // The target API sits fully inside the lego-block's own shell — that
+    // outer puzzle-piece shape is the physical block boundary, and the icon
+    // never crosses it. Its dashed asset-context box (nested with it) starts
+    // right at the icon — an API always marks the entry point into whatever
+    // asset it belongs to, so it sits on the box's LEFT edge, with the asset
+    // itself extending outward from there (matching API-to-Process's
+    // gateway, which follows the same left-edge convention). Since
+    // API-to-Process's gateway is the "owner" of any api-type merge, this
+    // icon simply fades away entirely when docked; nothing here needs to
+    // slide or continue past the boundary, so no continuation stub is
+    // needed on this side.
+    const apiT = `translate(${w-44}, ${cy-11})`;
+    const gearT = `translate(${procCx-15}, ${cy-15})`;
+    return `
+      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
+      <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
+        ${assetBox(-10, -11, 50, 52)}
+        ${arrowMarker(-9, 15)}
+        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
+        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
+        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
+      </g>
+      <g class="icon-group" data-anchor="exit" data-type="api" data-fixed="true" data-half-x="22" data-half-y="11" data-default-transform="${apiT}" transform="${apiT}">
+        ${assetBox(22, -15, 40, 52)}
+        ${arrowMarker(-9, 11)}
+        ${apiIconMarkup(color)}
+      </g>
+    `;
+  }
+
+  // ---------------------------------------------------------------
+  // Block diagram: File-to-Process
+  // A file dropped at (or polled from) an external location triggers
+  // processing. Same edge-anchored family as API-to-Process's gateway: the
+  // file icon sits fully inside the shell, flush against the entry edge,
+  // and the asset boundary starts right at its center.
+  // ---------------------------------------------------------------
+  function fileToProcessDiagram(w, h, color){
+    const cy = h/2;
+    const procCx = w * 0.68;
+    const fileT = `translate(0, ${cy-12})`;
+    const gearT = `translate(${procCx-15}, ${cy-15})`;
+    const boundY = cy - 26;
+    const boundH = 52;
+    const assetLeftX = 18; // the file icon's own local half-width — its center
+    const assetRightX = w + 15; // process icon's half-width past the true edge — box fully ENCLOSES it
+    return `
+      ${assetBox(assetLeftX, boundY, assetRightX-assetLeftX, boundH)}
+      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
+      <g class="icon-group" data-anchor="entry" data-type="file" data-boundary="true" data-fixed="true" data-half-x="18" data-half-y="12" data-default-transform="${fileT}" transform="${fileT}">
+        ${fileIconMarkup(color)}
+      </g>
+      <g class="icon-group" data-anchor="exit" data-type="process" data-boundary="true" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
+        ${arrowMarker(-9, 15)}
+        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
+        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
+        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
+      </g>
+      <polygon points="10,${cy-4} 17,${cy} 10,${cy+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>
+    `;
+  }
+
+  // ---------------------------------------------------------------
+  // Block diagram: Process-to-File
+  // A processing step writes its output to a file delivered to an external
+  // location. Mirror of Process-to-API, same edge-anchored file icon.
+  // ---------------------------------------------------------------
+  function processToFileDiagram(w, h, color){
+    const cy = h/2;
+    const procCx = w * 0.30;
+    const fileT = `translate(${w-36}, ${cy-12})`;
+    const gearT = `translate(${procCx-15}, ${cy-15})`;
+    return `
+      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
+      <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
+        ${assetBox(-10, -11, 50, 52)}
+        ${arrowMarker(-9, 15)}
+        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
+        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
+        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
+      </g>
+      <g class="icon-group" data-anchor="exit" data-type="file" data-fixed="true" data-half-x="18" data-half-y="12" data-default-transform="${fileT}" transform="${fileT}">
+        ${assetBox(18, -14, 20, 52)}
+        ${arrowMarker(-9, 12)}
+        ${fileIconMarkup(color)}
+      </g>
+    `;
+  }
+
+  // ---------------------------------------------------------------
+  // Block template registry (this grows as you define more patterns)
+  // ---------------------------------------------------------------
+  const templates = [
+    {
+      id:'api-to-process',
+      label:'API-to-Process',
+      route:'entry',
+      purpose:'API endpoint as entry gateway, feeding a processing layer that performs business logic or mapping (platform-agnostic: Logic App, Function App, BTP IS iFlow, etc).',
+      size:'medium',
+      color:'#4FB6AC',
+      entryType:'api',
+      exitType:'process',
+      diagram: apiToProcessDiagram
+    },
+    {
+      id:'process-to-publish',
+      label:'Process-to-Publish',
+      route:'exit',
+      purpose:'A processing component publishes an output message/event to a topic on an event broker.',
+      size:'medium',
+      color:'#D9614B',
+      entryType:'process',
+      exitType:'topic',
+      diagram: processToPublishDiagram
+    },
+    {
+      id:'consume-to-process',
+      label:'Consume-to-Process',
+      route:'entry',
+      purpose:'A subscription queue on the event broker consumes from the upstream topic, then hands off to a processing step on a second, completely independent platform/asset.',
+      size:'wide',
+      color:'#7C93AC',
+      entryType:'topic',
+      exitType:'process',
+      diagram: consumeToProcessDiagram
+    },
+    {
+      id:'process-to-api',
+      label:'Process-to-API',
+      route:'exit',
+      purpose:'A processing component posts an output message/event to an external API belonging to a target application.',
+      size:'medium',
+      color:'#E8A33D',
+      entryType:'process',
+      exitType:'api',
+      diagram: processToApiDiagram
+    },
+    {
+      id:'file-to-process',
+      label:'File-to-Process',
+      route:'entry',
+      purpose:'A file dropped or polled from an external location (SFTP, file share, mailbox attachment) triggers a processing step.',
+      size:'medium',
+      color:'#4FB6AC',
+      entryType:'file',
+      exitType:'process',
+      diagram: fileToProcessDiagram
+    },
+    {
+      id:'process-to-file',
+      label:'Process-to-File',
+      route:'exit',
+      purpose:'A processing component writes its output as a file delivered to an external location (SFTP, file share, report drop).',
+      size:'medium',
+      color:'#E8A33D',
+      entryType:'process',
+      exitType:'file',
+      diagram: processToFileDiagram
+    }
+  ];
+  const templatesById = {};
+  templates.forEach(t => templatesById[t.id] = t);
+
+  // ---------------------------------------------------------------
+  // Chain compatibility: which palette templates can currently attach,
+  // and to which open end (upstream/entry or downstream/exit)
+  // ---------------------------------------------------------------
+  function getIconType(blockEl, anchor){
+    const icon = blockEl.querySelector('.icon-group[data-anchor="' + anchor + '"]');
+    return icon ? icon.dataset.type : null;
+  }
+
+  function getChainOpenRequirements(){
+    if(chainOrder.length === 0) return null;
+    return {
+      leftRequiredType: getIconType(chainOrder[0], 'entry'),   // a new block's EXIT must match this to prepend
+      rightRequiredType: getIconType(chainOrder[chainOrder.length-1], 'exit') // a new block's ENTRY must match this to append
+    };
+  }
+
+  // Returns 'right' (append downstream), 'left' (prepend upstream), or null.
+  // Downstream is preferred when a template could technically fit either end.
+  function chainAttachSide(tpl){
+    const req = getChainOpenRequirements();
+    if(!req) return 'start';
+    if(tpl.entryType === req.rightRequiredType) return 'right';
+    if(tpl.exitType === req.leftRequiredType) return 'left';
+    return null;
+  }
+
+  function isTemplateCompatible(tpl){
+    return chainAttachSide(tpl) !== null;
+  }
+
+  const routes = [
+    { id:'entry', title:'Entry-Route', color:'var(--accent-teal)' },
+    { id:'exit', title:'Exit-Route', color:'var(--accent-amber)' }
+  ];
+
+  function buildBlockMarkup(tpl){
+    const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
+    const shell = puzzlePath(w, BLOCK_H, CORNER_R, TAB_R);
+    const diagram = tpl.diagram ? tpl.diagram(w, BLOCK_H, tpl.color) : '';
+    const svg =
+      '<svg class="cblock-svg" width="' + w + '" height="' + BLOCK_H + '" viewBox="0 0 ' + w + ' ' + BLOCK_H + '">' +
+        '<path class="cblock-shell" d="' + shell + '"></path>' +
+        diagram +
+        '<circle class="port left" cx="0" cy="' + (BLOCK_H/2) + '" r="5"></circle>' +
+        '<circle class="port right" cx="' + w + '" cy="' + (BLOCK_H/2) + '" r="5"></circle>' +
+      '</svg>';
+    return { svg:svg, width:w, height:BLOCK_H };
+  }
+
+  // ---------------------------------------------------------------
+  // Palette
+  // ---------------------------------------------------------------
+  const paletteItemsByTemplateId = {};
+  const quadrantGrid = document.getElementById('quadrantGrid');
+  routes.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'quad';
+    div.dataset.route = r.id;
+    const titleEl = document.createElement('div');
+    titleEl.className = 'quad-title';
+    titleEl.textContent = r.title;
+    titleEl.style.color = r.color;
+    div.appendChild(titleEl);
+
+    const blocksForRoute = templates.filter(t => t.route === r.id);
+    if(blocksForRoute.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'quad-empty';
+      empty.textContent = 'No patterns defined yet';
+      div.appendChild(empty);
+    } else {
+      blocksForRoute.forEach(tpl => {
+        const built = buildBlockMarkup(tpl);
+        const item = document.createElement('div');
+        item.className = 'palette-block';
+        item.draggable = true;
+        item.title = tpl.purpose || '';
+        item.innerHTML = built.svg + '<div class="pb-label">' + tpl.label + '</div>';
+        item.addEventListener('dragstart', (e) => {
+          if(item.classList.contains('unavailable')){ e.preventDefault(); return; }
+          e.dataTransfer.setData('application/json', JSON.stringify({templateId: tpl.id}));
+          e.dataTransfer.effectAllowed = 'copy';
+          item.classList.add('dragging-source');
+        });
+        item.addEventListener('dragend', () => item.classList.remove('dragging-source'));
+        div.appendChild(item);
+        paletteItemsByTemplateId[tpl.id] = item;
+      });
+    }
+    quadrantGrid.appendChild(div);
+  });
+
+  // ---------------------------------------------------------------
+  // Versioned Artifacts palette — same quadrant shell, empty until we
+  // define its axes and populate it with versioned-artifact blocks.
+  // ---------------------------------------------------------------
+  const versionGrid = document.getElementById('versionGrid');
+  for(let i = 1; i <= 4; i++){
+    const div = document.createElement('div');
+    div.className = 'quad';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'quad-title';
+    titleEl.textContent = 'Quadrant ' + i + ' — axis TBD';
+    titleEl.style.color = 'var(--text-faint)';
+    div.appendChild(titleEl);
+    const empty = document.createElement('div');
+    empty.className = 'quad-empty';
+    empty.textContent = 'No versioned artifacts defined yet';
+    div.appendChild(empty);
+    versionGrid.appendChild(div);
+  }
+
+  const paletteTabs = document.querySelectorAll('.palette-tab');
+  const paletteHeadDesc = document.getElementById('paletteHeadDesc');
+  const PALETTE_TAB_DESC = {
+    base: 'Build one flow at a time. Only patterns that fit its open ends stay available here.',
+    versioned: 'Versioned artifact blocks will land here once we define their axes — for evaluating how a version change ripples upstream and downstream.'
+  };
+  paletteTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      paletteTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const isBase = tab.dataset.tab === 'base';
+      quadrantGrid.style.display = isBase ? 'grid' : 'none';
+      versionGrid.style.display = isBase ? 'none' : 'grid';
+      paletteHeadDesc.textContent = PALETTE_TAB_DESC[tab.dataset.tab];
+    });
+  });
+
+  // Re-checked after every block is added or removed from the canvas: only
+  // patterns that can actually extend the current end-to-end flow (at its
+  // open entry or open exit) stay draggable — everything else greys out.
+  function refreshPaletteAvailability(){
+    templates.forEach(tpl => {
+      const item = paletteItemsByTemplateId[tpl.id];
+      if(!item) return;
+      const compatible = isTemplateCompatible(tpl);
+      item.classList.toggle('unavailable', !compatible);
+      item.draggable = compatible;
+      if(!compatible && chainOrder.length > 0){
+        item.title = 'Doesn\'t match the open ends of your current flow';
+      } else {
+        item.title = tpl.purpose || '';
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // Infinite canvas state: pan (screen px) + zoom
+  // ---------------------------------------------------------------
+  const canvasWrap = document.getElementById('canvasWrap');
+  const world = document.getElementById('world');
+  const staticHint = document.getElementById('staticHint');
+  const coordX = document.getElementById('coordX');
+  const coordY = document.getElementById('coordY');
+  const coordZoom = document.getElementById('coordZoom');
+  const zoomReadout = document.getElementById('zoomReadout');
+
+  let panX = 60, panY = 60, zoom = 1;
+  let snap = true;
+  let selectedBlock = null;
+  let blockCounter = 0;
+
+  function applyTransform(){
+    world.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
+    zoomReadout.textContent = Math.round(zoom*100) + '%';
+    coordZoom.textContent = Math.round(zoom*100) + '%';
+    updateGrid();
+  }
+
+  function updateGrid(){
+    const fine = 20 * zoom;
+    const strong = 100 * zoom;
+    const offX = ((panX % fine) + fine) % fine;
+    const offY = ((panY % fine) + fine) % fine;
+    const offXs = ((panX % strong) + strong) % strong;
+    const offYs = ((panY % strong) + strong) % strong;
+    canvasWrap.style.backgroundImage =
+      'linear-gradient(var(--grid-line) 1px, transparent 1px),' +
+      'linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),' +
+      'linear-gradient(var(--grid-line-strong) 1px, transparent 1px),' +
+      'linear-gradient(90deg, var(--grid-line-strong) 1px, transparent 1px)';
+    canvasWrap.style.backgroundSize = fine+'px '+fine+'px, '+fine+'px '+fine+'px, '+strong+'px '+strong+'px, '+strong+'px '+strong+'px';
+    canvasWrap.style.backgroundPosition = offX+'px '+offY+'px, '+offX+'px '+offY+'px, '+offXs+'px '+offYs+'px, '+offXs+'px '+offYs+'px';
+  }
+
+  function clientToWorld(clientX, clientY){
+    const rect = canvasWrap.getBoundingClientRect();
+    return { x:(clientX-rect.left-panX)/zoom, y:(clientY-rect.top-panY)/zoom };
+  }
+
+  function setZoomAtScreenPoint(newZoom, screenX, screenY){
+    newZoom = Math.min(2.5, Math.max(0.25, newZoom));
+    const rect = canvasWrap.getBoundingClientRect();
+    const wx = (screenX-rect.left-panX)/zoom;
+    const wy = (screenY-rect.top-panY)/zoom;
+    zoom = newZoom;
+    panX = (screenX-rect.left) - wx*zoom;
+    panY = (screenY-rect.top) - wy*zoom;
+    applyTransform();
+  }
+
+  document.getElementById('zoomIn').addEventListener('click', () => {
+    const rect = canvasWrap.getBoundingClientRect();
+    setZoomAtScreenPoint(zoom+0.15, rect.left+rect.width/2, rect.top+rect.height/2);
+  });
+  document.getElementById('zoomOut').addEventListener('click', () => {
+    const rect = canvasWrap.getBoundingClientRect();
+    setZoomAtScreenPoint(zoom-0.15, rect.left+rect.width/2, rect.top+rect.height/2);
+  });
+  document.getElementById('zoomReset').addEventListener('click', () => { panX=60; panY=60; zoom=1; applyTransform(); });
+
+  canvasWrap.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.92 : 1.08;
+    setZoomAtScreenPoint(zoom*factor, e.clientX, e.clientY);
+  }, { passive:false });
+
+  const snapToggle = document.getElementById('snapToggle');
+  snapToggle.addEventListener('click', () => {
+    snap = !snap;
+    snapToggle.textContent = 'Snap: ' + (snap ? 'On' : 'Off');
+    snapToggle.classList.toggle('toggle-on', snap);
+  });
+  snapToggle.classList.add('toggle-on');
+
+  document.getElementById('clearCanvas').addEventListener('click', () => {
+    if(chainOrder.length === 0) return;
+    if(!confirm('Remove the current flow and start over?')) return;
+    resetChain();
+  });
+
+  function gridSnap(v){ return snap ? Math.round(v/20)*20 : v; }
+
+  function updateEmptyHint(){
+    const hasBlocks = world.querySelector('.cblock') !== null;
+    staticHint.style.display = hasBlocks ? 'none' : 'block';
+  }
+
+  function deselectAll(){
+    world.querySelectorAll('.cblock.selected').forEach(b => b.classList.remove('selected'));
+    selectedBlock = null;
+  }
+
+  // ---------------------------------------------------------------
+  // Canvas panning (drag empty space) + click-to-deselect
+  // ---------------------------------------------------------------
+  let isPanning = false, panStartX, panStartY, panOrigX, panOrigY, movedDuringPan = false;
+
+  canvasWrap.addEventListener('pointerdown', (e) => {
+    if(e.target !== canvasWrap && e.target !== world) return;
+    isPanning = true;
+    movedDuringPan = false;
+    panStartX = e.clientX; panStartY = e.clientY;
+    panOrigX = panX; panOrigY = panY;
+    canvasWrap.classList.add('panning');
+    canvasWrap.setPointerCapture(e.pointerId);
+  });
+  canvasWrap.addEventListener('pointermove', (e) => {
+    if(!isPanning) return;
+    const dx = e.clientX - panStartX;
+    const dy = e.clientY - panStartY;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) movedDuringPan = true;
+    panX = panOrigX + dx;
+    panY = panOrigY + dy;
+    applyTransform();
+  });
+  canvasWrap.addEventListener('pointerup', (e) => {
+    if(!isPanning) return;
+    isPanning = false;
+    canvasWrap.classList.remove('panning');
+    canvasWrap.releasePointerCapture(e.pointerId);
+    if(!movedDuringPan) deselectAll();
+  });
+
+  // ---------------------------------------------------------------
+  // Drop from palette -> create block
+  // ---------------------------------------------------------------
+  canvasWrap.addEventListener('dragover', (e) => { e.preventDefault(); canvasWrap.classList.add('drag-over'); });
+  canvasWrap.addEventListener('dragleave', () => canvasWrap.classList.remove('drag-over'));
+  canvasWrap.addEventListener('drop', (e) => {
+    e.preventDefault();
+    canvasWrap.classList.remove('drag-over');
+    const raw = e.dataTransfer.getData('application/json');
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    const tpl = templatesById[data.templateId];
+    if(!tpl) return;
+    if(chainOrder.length > 0 && !isTemplateCompatible(tpl)) return; // defensive; palette already blocks this
+    const pt = clientToWorld(e.clientX, e.clientY);
+    attachToChain(tpl, pt.x, pt.y);
+  });
+
+  // Wherever it's dropped, a compatible pattern snaps straight onto the
+  // correct open end of the current flow — the person never has to nudge
+  // it into position by hand.
+  function attachToChain(tpl, dropX, dropY){
+    const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
+    if(chainOrder.length === 0){
+      const el = createBlock(tpl, gridSnap(dropX - w/2), gridSnap(dropY - BLOCK_H/2));
+      chainOrder = [el];
+      refreshPaletteAvailability();
+      return;
+    }
+    const side = chainAttachSide(tpl);
+    if(!side || side === 'start') return;
+
+    if(side === 'right'){
+      const anchor = chainOrder[chainOrder.length - 1];
+      const x = parseFloat(anchor.style.left) + parseFloat(anchor.style.width);
+      const y = parseFloat(anchor.style.top);
+      const el = createBlock(tpl, x, y);
+      commitDock(anchor, 'right', el, 'left');
+      chainOrder.push(el);
+    } else {
+      const anchor = chainOrder[0];
+      const x = parseFloat(anchor.style.left) - w;
+      const y = parseFloat(anchor.style.top);
+      const el = createBlock(tpl, x, y);
+      commitDock(el, 'right', anchor, 'left');
+      chainOrder.unshift(el);
+    }
+    refreshPaletteAvailability();
+  }
+
+  function commitDock(elA, sideA, elB, sideB){
+    elA.dataset[sideA + 'Linked'] = elB.dataset.id;
+    elB.dataset[sideB + 'Linked'] = elA.dataset.id;
+    elA.querySelector('.port.' + sideA).classList.add('merged');
+    elB.querySelector('.port.' + sideB).classList.add('merged');
+    tryMergeIcons(elA, sideA, elB, sideB);
+  }
+
+  function createBlock(tpl, x, y){
+    blockCounter++;
+    const built = buildBlockMarkup(tpl);
+    const el = document.createElement('div');
+    el.className = 'cblock';
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.width = built.width + 'px';
+    el.style.height = built.height + 'px';
+    el.dataset.id = 'block-' + blockCounter;
+    el.title = tpl.purpose || '';
+    el.innerHTML = built.svg +
+      '<div class="cblock-label" spellcheck="false">' + tpl.label + '</div>' +
+      '<div class="delete-x" title="Delete block">\u00D7</div>';
+    world.appendChild(el);
+    makeDraggable(el);
+    selectBlock(el);
+    updateEmptyHint();
+    return el;
+  }
+
+  function selectBlock(el){
+    deselectAll();
+    el.classList.add('selected');
+    selectedBlock = el;
+  }
+
+  // ---------------------------------------------------------------
+  // Port geometry + docking (merge) logic
+  // ---------------------------------------------------------------
+
+  // A block's entry/exit-anchored icon (e.g. its "process" gear) can fuse
+  // with a matching icon on whatever it docks to, so two lego-blocks that
+  // each own half of the same logical step render as a single shared icon.
+  function findIconByAnchor(elem, anchor){
+    return elem.querySelector('.icon-group[data-anchor="' + anchor + '"]');
+  }
+
+  // The surviving icon of a merge sits right on the shared seam and its
+  // shape (plus, for slid icons, its box border) physically pokes a few
+  // pixels into the neighboring block. Both blocks share the same default
+  // z-index, so whichever was created later would otherwise paint over it.
+  // Track boost need per-side so one side undocking doesn't strip a boost
+  // still required by the other side.
+  function setBoost(elem, side, on){
+    elem.dataset[side + 'Boosted'] = on ? 'true' : '';
+    const boosted = elem.dataset.leftBoosted === 'true' || elem.dataset.rightBoosted === 'true';
+    elem.classList.toggle('z-boost', boosted);
+  }
+
+  function tryMergeIcons(el, mySide, other, otherSide){
+    const mySideAnchor = mySide === 'left' ? 'entry' : 'exit';
+    const otherSideAnchor = otherSide === 'left' ? 'entry' : 'exit';
+    const myIcon = findIconByAnchor(el, mySideAnchor);
+    const otherIcon = findIconByAnchor(other, otherSideAnchor);
+    if(!myIcon || !otherIcon) return;
+    if(myIcon.dataset.type !== otherIcon.dataset.type) return; // different roles, keep both visible
+
+    // If one side's icon is the owner of a drawn asset-boundary box, it must be
+    // the one that survives — otherwise the visible icon could end up outside
+    // the box, depending purely on which block happened to be dragged.
+    const type = myIcon.dataset.type;
+    let keepEl, keepSide, keepIcon, hideEl, hideSide, hideIcon;
+
+    if(type === 'api' || type === 'file'){
+      // An API or file touchpoint is always modeled as living at the entry
+      // of whichever asset it belongs to — the entry-side copy is the
+      // permanent one; the exit-side copy is a stand-in that fades once it
+      // turns out to be the same door. This is derived straight from
+      // anchor, independent of any boundary-flag bookkeeping, so it can't
+      // get the sides backwards.
+      if(mySideAnchor === 'entry'){
+        keepEl = el; keepSide = mySide; keepIcon = myIcon;
+        hideEl = other; hideSide = otherSide; hideIcon = otherIcon;
+      } else {
+        keepEl = other; keepSide = otherSide; keepIcon = otherIcon;
+        hideEl = el; hideSide = mySide; hideIcon = myIcon;
+      }
+    } else {
+      const myIsOwner = myIcon.dataset.boundary === 'true';
+      const otherIsOwner = otherIcon.dataset.boundary === 'true';
+      if(myIsOwner && !otherIsOwner){
+        keepEl = el; keepSide = mySide; keepIcon = myIcon;
+        hideEl = other; hideSide = otherSide; hideIcon = otherIcon;
+      } else {
+        // default (also covers "otherIsOwner" and "neither is an owner"): keep
+        // the stationary block's copy, fade the dragged-in block's copy.
+        keepEl = other; keepSide = otherSide; keepIcon = otherIcon;
+        hideEl = el; hideSide = mySide; hideIcon = myIcon;
+      }
+    }
+
+    hideIcon.classList.add('icon-hidden');
+    hideEl.dataset[hideSide + 'IconAction'] = 'hidden';
+
+    // Boost the keeper above its neighbor's default paint layer so the
+    // surviving icon (which sits right at the shared seam and can overlap
+    // the neighbor's own rendered area by a few pixels) never gets
+    // physically covered by whichever block happens to be later in the DOM.
+    setBoost(keepEl, keepSide, true);
+
+    // Edge-fixed icons (APIs) are already positioned exactly where a merge
+    // would put them — nothing to move. "Inset" icons (process, topic)
+    // normally live inside the block and need to slide out to the seam so
+    // they land exactly where the (now-hidden) neighbor's copy used to be.
+    // Either way, the boxes themselves are untouched: whichever box belongs
+    // to the surviving icon just stays exactly as it always was, so it
+    // always reads as one complete rectangle, never half-open.
+    if(keepIcon.dataset.fixed === 'true'){
+      keepEl.dataset[keepSide + 'IconAction'] = '';
+      return;
+    }
+
+    // Each icon type has its own local geometry (a "process" gear and an
+    // "api" home-plate aren't centered the same way), so the seam offset
+    // has to come from the icon itself, not a single shared constant.
+    const halfX = parseFloat(keepIcon.dataset.halfX) || ICON_HALF;
+    const halfY = parseFloat(keepIcon.dataset.halfY) || ICON_HALF;
+    const keepAnchor = keepSide === 'left' ? 'entry' : 'exit';
+    const keepW = parseFloat(keepEl.style.width);
+    // Tuck the icon fully inside the lego-block shell — its outer edge
+    // touches the block's own boundary but never crosses it (same rule as
+    // the API icons). The permanent asset box's edge already sits at the
+    // icon's center for this same reason, so the two line up automatically.
+    // Unlike APIs (always at the edge), a merged process/topic icon should
+    // read as fully *enclosed* by its asset — so it straddles the block's
+    // physical edge, and the owner's box (below) extends past that edge to
+    // fully wrap around it rather than stopping at the boundary.
+    const seamX = keepAnchor === 'entry' ? -halfX : (keepW - halfX);
+    keepIcon.setAttribute('transform', 'translate(' + seamX + ',' + (BLOCK_H/2 - halfY) + ')');
+    keepEl.dataset[keepSide + 'IconAction'] = 'moved';
+  }
+
+  function restoreMergedIcon(elem, side){
+    setBoost(elem, side, false);
+
+    const action = elem.dataset[side + 'IconAction'];
+    if(!action) return;
+    const anchor = side === 'left' ? 'entry' : 'exit';
+    const icon = findIconByAnchor(elem, anchor);
+    if(icon){
+      if(action === 'hidden') icon.classList.remove('icon-hidden');
+      else if(action === 'moved') icon.setAttribute('transform', icon.dataset.defaultTransform);
+    }
+    elem.dataset[side + 'IconAction'] = '';
+  }
+
+  function clearLink(el, side){
+    const linkedId = el.dataset[side + 'Linked'];
+    if(!linkedId) return;
+    const other = world.querySelector('[data-id="' + linkedId + '"]');
+    el.dataset[side + 'Linked'] = '';
+    el.querySelector('.port.' + side).classList.remove('merged');
+    restoreMergedIcon(el, side);
+    if(other){
+      const otherSide = side === 'left' ? 'right' : 'left';
+      other.dataset[otherSide + 'Linked'] = '';
+      other.querySelector('.port.' + otherSide).classList.remove('merged');
+      restoreMergedIcon(other, otherSide);
+    }
+  }
+
+  // Only the end blocks of the single chain can be removed individually
+  // (shrinking that end); removing anything in the middle would split the
+  // flow into two, which this canvas doesn't support, so it resets instead.
+  function removeChainBlock(el){
+    const idx = chainOrder.indexOf(el);
+    if(idx === -1){ el.remove(); return; }
+    if(chainOrder.length === 1){
+      chainOrder = [];
+      el.remove();
+    } else if(idx === 0){
+      const neighbor = chainOrder[1];
+      neighbor.dataset.leftLinked = '';
+      neighbor.querySelector('.port.left').classList.remove('merged');
+      restoreMergedIcon(neighbor, 'left');
+      chainOrder.shift();
+      el.remove();
+    } else if(idx === chainOrder.length - 1){
+      const neighbor = chainOrder[chainOrder.length - 2];
+      neighbor.dataset.rightLinked = '';
+      neighbor.querySelector('.port.right').classList.remove('merged');
+      restoreMergedIcon(neighbor, 'right');
+      chainOrder.pop();
+      el.remove();
+    } else {
+      if(!confirm('Removing a block from the middle of the flow would split it in two, which isn\'t supported here — this will clear the whole flow instead. Continue?')) return;
+      resetChain();
+      return;
+    }
+    if(selectedBlock === el) selectedBlock = null;
+    updateEmptyHint();
+    refreshPaletteAvailability();
+  }
+
+  function resetChain(){
+    chainOrder.forEach(b => b.remove());
+    chainOrder = [];
+    selectedBlock = null;
+    updateEmptyHint();
+    refreshPaletteAvailability();
+  }
+
+  function makeDraggable(el){
+    let dragging = false;
+    let startX, startY;
+    let dragGroup = null; // {el, origLeft, origTop}[] — the whole chain moves together
+
+    el.addEventListener('pointerdown', (e) => {
+      if(e.target.classList.contains('delete-x')) return;
+      if(e.target.classList.contains('cblock-label') && e.target.isContentEditable) return;
+      e.stopPropagation();
+      selectBlock(el);
+      dragging = true;
+      el.setPointerCapture(e.pointerId);
+      startX = e.clientX; startY = e.clientY;
+
+      const groupBlocks = chainOrder.indexOf(el) !== -1 ? chainOrder : [el];
+      dragGroup = groupBlocks.map(b => ({
+        el: b,
+        origLeft: parseFloat(b.style.left),
+        origTop: parseFloat(b.style.top)
+      }));
+      dragGroup.forEach(g => g.el.classList.add('dragging'));
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if(!dragging) return;
+      const dx = (e.clientX - startX) / zoom;
+      const dy = (e.clientY - startY) / zoom;
+      // Snap the grabbed block; apply the same resulting offset to the rest
+      // of the chain so relative spacing (and the docked seams) never drifts.
+      const grabbed = dragGroup.find(g => g.el === el);
+      const snappedLeft = gridSnap(grabbed.origLeft + dx);
+      const snappedTop = gridSnap(grabbed.origTop + dy);
+      const appliedDx = snappedLeft - grabbed.origLeft;
+      const appliedDy = snappedTop - grabbed.origTop;
+      dragGroup.forEach(g => {
+        g.el.style.left = (g.origLeft + appliedDx) + 'px';
+        g.el.style.top = (g.origTop + appliedDy) + 'px';
+      });
+      coordX.textContent = Math.round(snappedLeft);
+      coordY.textContent = Math.round(snappedTop);
+    });
+
+    el.addEventListener('pointerup', (e) => {
+      if(!dragging) return;
+      dragging = false;
+      el.releasePointerCapture(e.pointerId);
+      if(dragGroup) dragGroup.forEach(g => g.el.classList.remove('dragging'));
+      dragGroup = null;
+    });
+
+    el.querySelector('.delete-x').addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeChainBlock(el);
+    });
+
+    const label = el.querySelector('.cblock-label');
+    label.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      label.contentEditable = 'true';
+      label.focus();
+      document.getSelection().selectAllChildren(label);
+    });
+    label.addEventListener('blur', () => { label.contentEditable = 'false'; });
+    label.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); label.blur(); } });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if((e.key === 'Delete' || e.key === 'Backspace') && selectedBlock){
+      const active = document.activeElement;
+      if(active && active.isContentEditable) return;
+      e.preventDefault();
+      removeChainBlock(selectedBlock);
+    }
+  });
+
+  canvasWrap.addEventListener('mousemove', (e) => {
+    const pt = clientToWorld(e.clientX, e.clientY);
+    coordX.textContent = Math.round(pt.x);
+    coordY.textContent = Math.round(pt.y);
+  });
+
+  applyTransform();
+  updateEmptyHint();
+  refreshPaletteAvailability();
+})();
+</script>
+</body>
+</html>
