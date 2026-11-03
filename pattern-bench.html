@@ -115,6 +115,9 @@
   .btn:hover{ background:var(--block-bg-hover); border-color:var(--accent-teal); }
   .btn:active{ transform:translateY(1px); }
   .btn.danger:hover{ border-color:var(--danger); color:#FFD9D1; }
+  .btn:disabled{ opacity:.4; cursor:default; }
+  .btn:disabled:hover{ background:var(--block-bg); border-color:var(--block-border); }
+  .btn:disabled:active{ transform:none; }
   .btn.toggle-on{ border-color:var(--accent-amber); color:var(--accent-amber); }
   .zoom-readout{ font-family:var(--font-mono); font-size:12px; color:var(--text-muted); min-width:44px; text-align:center; }
   .divider{ width:1px; height:22px; background:var(--panel-border); margin:0 4px; }
@@ -271,6 +274,16 @@
   }
   .empty-hint b{ color:var(--text-primary); }
 
+  .toast{
+    position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+    font-family:var(--font-mono); font-size:12px; color:var(--text-primary);
+    background:var(--panel); border:1px solid var(--panel-border);
+    border-radius:6px; padding:8px 14px; z-index:30; pointer-events:none;
+    opacity:0; transition:opacity .2s;
+  }
+  .toast.show{ opacity:1; }
+  .toast.error{ border-color:var(--danger); }
+
   /* ---------- CANVAS BLOCKS ---------- */
   .cblock{
     position:absolute;
@@ -337,7 +350,7 @@
     <div class="brand">
       <span class="dot"></span>
       PATTERN BENCH
-      <span class="sub">architecture canvas — v0.3</span>
+      <span class="sub">architecture canvas — v1.7</span>
     </div>
     <div class="toolbar">
       <button class="btn" id="themeToggle" title="Toggle dark / light mode">🌙 Dark</button>
@@ -348,6 +361,13 @@
       <button class="btn" id="zoomReset" title="Reset view">Reset view</button>
       <div class="divider"></div>
       <button class="btn" id="snapToggle" title="Toggle grid snapping">Snap: On</button>
+      <div class="divider"></div>
+      <button class="btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+      <button class="btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷ Redo</button>
+      <div class="divider"></div>
+      <button class="btn" id="exportBtn" title="Save the current flow as a JSON file">Export</button>
+      <button class="btn" id="importBtn" title="Load a flow from a JSON file">Import</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
       <div class="divider"></div>
       <button class="btn danger" id="clearCanvas" title="Remove all blocks">Clear canvas</button>
     </div>
@@ -372,6 +392,7 @@
   <main class="canvas-wrap" id="canvasWrap">
     <div class="world" id="world"></div>
     <div class="empty-hint" id="staticHint">Drag any pattern from the library to start a flow. From there, only patterns that actually fit the open ends stay available — drop one anywhere and it docks into place automatically, upstream or downstream. Drag any block to move the whole flow. Double-click a label to rename, press <b>Delete</b> to remove an end block.</div>
+    <div class="toast" id="toast"></div>
     <div class="coord-readout" id="coordReadout">x: <span id="coordX">0</span>&nbsp; y: <span id="coordY">0</span>&nbsp; zoom: <span id="coordZoom">100%</span></div>
   </main>
 
@@ -1204,6 +1225,7 @@
     if(chainOrder.length === 0) return;
     if(!confirm('Remove the current flow and start over?')) return;
     resetChain();
+    recordHistory();
   });
 
   function gridSnap(v){ return snap ? Math.round(v/20)*20 : v; }
@@ -1265,6 +1287,7 @@
     if(chainOrder.length > 0 && !isTemplateCompatible(tpl)) return; // defensive; palette already blocks this
     const pt = clientToWorld(e.clientX, e.clientY);
     attachToChain(tpl, pt.x, pt.y);
+    recordHistory();
   });
 
   // Wherever it's dropped, a compatible pattern snaps straight onto the
@@ -1317,6 +1340,8 @@
     el.style.width = built.width + 'px';
     el.style.height = built.height + 'px';
     el.dataset.id = 'block-' + blockCounter;
+    el.dataset.seq = blockCounter;   // creation order — replayed on undo/import so icon merges come out identical
+    el.dataset.tpl = tpl.id;
     el.title = tpl.purpose || '';
     el.innerHTML = built.svg +
       '<div class="cblock-label" spellcheck="false">' + tpl.label + '</div>' +
@@ -1495,11 +1520,13 @@
     } else {
       if(!confirm('Removing a block from the middle of the flow would split it in two, which isn\'t supported here — this will clear the whole flow instead. Continue?')) return;
       resetChain();
+      recordHistory();
       return;
     }
     if(selectedBlock === el) selectedBlock = null;
     updateEmptyHint();
     refreshPaletteAvailability();
+    recordHistory();
   }
 
   function resetChain(){
@@ -1509,6 +1536,182 @@
     updateEmptyHint();
     refreshPaletteAvailability();
   }
+
+  // ---------------------------------------------------------------
+  // Flow file format, undo/redo, export/import
+  // ---------------------------------------------------------------
+  // A flow is fully described by its blocks in left-to-right order (pattern
+  // + label) and where the first block sits — every other position follows
+  // from docking. buildOrder records the order blocks were added (as indices
+  // into blocks) so a reload re-docks them the same way and the merged
+  // seam icons come out exactly as they were.
+  const FLOW_FORMAT = 'pattern-bench-flow';
+  const FLOW_VERSION = 1;
+
+  function serializeFlow(){
+    const first = chainOrder[0];
+    const byCreation = chainOrder.map((b, i) => i)
+      .sort((a, b) => +chainOrder[a].dataset.seq - +chainOrder[b].dataset.seq);
+    return {
+      format: FLOW_FORMAT,
+      version: FLOW_VERSION,
+      origin: first ? { x: parseFloat(first.style.left), y: parseFloat(first.style.top) } : null,
+      blocks: chainOrder.map(b => ({
+        pattern: b.dataset.tpl,
+        label: b.querySelector('.cblock-label').textContent
+      })),
+      buildOrder: byCreation
+    };
+  }
+
+  // Returns an error message, or null if the flow can be loaded.
+  function validateFlow(f){
+    if(!f || typeof f !== 'object') return 'Not a flow file.';
+    if(f.format !== FLOW_FORMAT) return 'Not a Pattern Bench flow file.';
+    if(f.version !== FLOW_VERSION) return 'Unsupported flow file version: ' + f.version;
+    if(!Array.isArray(f.blocks)) return 'Flow file has no block list.';
+    if(f.blocks.length === 0) return null;
+    if(!f.origin || !isFinite(f.origin.x) || !isFinite(f.origin.y)) return 'Flow file has no valid position.';
+    for(let i = 0; i < f.blocks.length; i++){
+      const b = f.blocks[i];
+      if(!b || !templatesById[b.pattern]) return 'Unknown pattern in block ' + (i+1) + ': ' + (b && b.pattern);
+      if(i > 0){
+        const prev = templatesById[f.blocks[i-1].pattern], cur = templatesById[b.pattern];
+        if(prev.exitType !== cur.entryType)
+          return 'Blocks ' + i + ' and ' + (i+1) + ' don\'t fit together (' + prev.exitType + ' → ' + cur.entryType + ').';
+      }
+    }
+    const order = f.buildOrder;
+    if(order !== undefined){
+      const ok = Array.isArray(order) && order.length === f.blocks.length &&
+        order.slice().sort((a,b) => a-b).every((v, i) => v === i);
+      if(!ok) return 'Flow file has an invalid build order.';
+      // each newly added block must extend one end of what's already built
+      let lo = order[0], hi = order[0];
+      for(let k = 1; k < order.length; k++){
+        if(order[k] === hi + 1) hi++;
+        else if(order[k] === lo - 1) lo--;
+        else return 'Flow file has an invalid build order.';
+      }
+    }
+    return null;
+  }
+
+  function loadFlow(f){
+    resetChain();
+    if(f.blocks.length === 0) return;
+    const order = f.buildOrder || f.blocks.map((b, i) => i);
+    // first-built block's position, derived from the leftmost block's origin
+    let x = f.origin.x;
+    for(let i = 0; i < order[0]; i++) x += SIZE_WIDTH[templatesById[f.blocks[i].pattern].size] || SIZE_WIDTH.medium;
+    const y = f.origin.y;
+    let lo = order[0], hi = order[0];
+    order.forEach((idx, k) => {
+      const tpl = templatesById[f.blocks[idx].pattern];
+      const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
+      let el;
+      if(k === 0){
+        el = createBlock(tpl, x, y);
+        chainOrder = [el];
+      } else if(idx === hi + 1){
+        const anchor = chainOrder[chainOrder.length - 1];
+        el = createBlock(tpl, parseFloat(anchor.style.left) + parseFloat(anchor.style.width), y);
+        commitDock(anchor, 'right', el, 'left');
+        chainOrder.push(el); hi++;
+      } else {
+        const anchor = chainOrder[0];
+        el = createBlock(tpl, parseFloat(anchor.style.left) - w, y);
+        commitDock(el, 'right', anchor, 'left');
+        chainOrder.unshift(el); lo--;
+      }
+      el.querySelector('.cblock-label').textContent = String(f.blocks[idx].label ?? tpl.label);
+    });
+    deselectAll();
+    updateEmptyHint();
+    refreshPaletteAvailability();
+  }
+
+  // Snapshot history: every user action that changes the flow calls
+  // recordHistory() afterwards; identical snapshots are ignored.
+  const HISTORY_LIMIT = 100;
+  let history = [JSON.stringify(serializeFlow())];
+  let historyIndex = 0;
+  const undoBtn = document.getElementById('undoBtn');
+  const redoBtn = document.getElementById('redoBtn');
+
+  function updateHistoryButtons(){
+    undoBtn.disabled = historyIndex <= 0;
+    redoBtn.disabled = historyIndex >= history.length - 1;
+  }
+
+  function recordHistory(){
+    const snap = JSON.stringify(serializeFlow());
+    if(snap === history[historyIndex]) return;
+    history = history.slice(0, historyIndex + 1);
+    history.push(snap);
+    if(history.length > HISTORY_LIMIT) history.shift();
+    historyIndex = history.length - 1;
+    updateHistoryButtons();
+  }
+
+  function undo(){
+    if(historyIndex <= 0) return;
+    historyIndex--;
+    loadFlow(JSON.parse(history[historyIndex]));
+    updateHistoryButtons();
+  }
+
+  function redo(){
+    if(historyIndex >= history.length - 1) return;
+    historyIndex++;
+    loadFlow(JSON.parse(history[historyIndex]));
+    updateHistoryButtons();
+  }
+
+  undoBtn.addEventListener('click', undo);
+  redoBtn.addEventListener('click', redo);
+
+  const toastEl = document.getElementById('toast');
+  let toastTimer = null;
+  function showToast(msg, isError){
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('error', !!isError);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), isError ? 5000 : 2500);
+  }
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    if(chainOrder.length === 0){ showToast('Nothing to export — the canvas is empty.'); return; }
+    const flow = serializeFlow();
+    flow.savedAt = new Date().toISOString();
+    const blob = new Blob([JSON.stringify(flow, null, 2)], { type:'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pattern-bench-flow.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    showToast('Exported ' + chainOrder.length + ' block' + (chainOrder.length === 1 ? '' : 's') + '.');
+  });
+
+  const importFile = document.getElementById('importFile');
+  document.getElementById('importBtn').addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', () => {
+    const file = importFile.files[0];
+    importFile.value = ''; // allow re-importing the same file
+    if(!file) return;
+    file.text().then(text => {
+      let flow;
+      try { flow = JSON.parse(text); } catch(err){ showToast('Import failed: file is not valid JSON.', true); return; }
+      const problem = validateFlow(flow);
+      if(problem){ showToast('Import failed: ' + problem, true); return; }
+      loadFlow(flow);
+      recordHistory(); // import is undoable
+      showToast('Imported ' + flow.blocks.length + ' block' + (flow.blocks.length === 1 ? '' : 's') + '.');
+    });
+  });
 
   function makeDraggable(el){
     let dragging = false;
@@ -1558,6 +1761,7 @@
       el.releasePointerCapture(e.pointerId);
       if(dragGroup) dragGroup.forEach(g => g.el.classList.remove('dragging'));
       dragGroup = null;
+      recordHistory(); // no-op if the flow didn't actually move
     });
 
     el.querySelector('.delete-x').addEventListener('click', (e) => {
@@ -1566,17 +1770,27 @@
     });
 
     const label = el.querySelector('.cblock-label');
-    label.addEventListener('dblclick', (e) => {
+    // Listen on the block, not the label: the drag handler's pointer capture
+    // retargets the double-click to the block, so a label listener never fired.
+    el.addEventListener('dblclick', (e) => {
+      const r = label.getBoundingClientRect();
+      if(e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
       e.stopPropagation();
       label.contentEditable = 'true';
       label.focus();
       document.getSelection().selectAllChildren(label);
     });
-    label.addEventListener('blur', () => { label.contentEditable = 'false'; });
+    label.addEventListener('blur', () => { label.contentEditable = 'false'; recordHistory(); });
     label.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); label.blur(); } });
   }
 
   document.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if(mod && !(document.activeElement && document.activeElement.isContentEditable)){
+      const k = e.key.toLowerCase();
+      if(k === 'z' && !e.shiftKey){ e.preventDefault(); undo(); return; }
+      if(k === 'y' || (k === 'z' && e.shiftKey)){ e.preventDefault(); redo(); return; }
+    }
     if((e.key === 'Delete' || e.key === 'Backspace') && selectedBlock){
       const active = document.activeElement;
       if(active && active.isContentEditable) return;
@@ -1594,6 +1808,10 @@
   applyTransform();
   updateEmptyHint();
   refreshPaletteAvailability();
+
+  // Test hook for headless checks (Playwright); not used by the UI.
+  window.__debug = { templatesById, attachToChain, removeChainBlock, recordHistory,
+    serializeFlow, validateFlow, loadFlow, undo, redo, chainOrder: () => chainOrder };
 })();
 </script>
 </body>

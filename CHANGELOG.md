@@ -132,3 +132,14 @@ one logical change each with a real diff behind them.
   icons showing standalone) from 50×52 to 62×52, for a more spacious,
   deliberate look even when only one icon is present.
 
+## v1.7 — Undo/redo and JSON export/import
+- Undo / Redo buttons and Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) over a snapshot
+  history (100 steps) covering add, delete, move, rename, clear and import.
+- Export the flow to `pattern-bench-flow.json`; Import validates format,
+  version, pattern ids, seam compatibility and build order before loading.
+- Reload replays the original build order so icon merges are identical
+  (verified pixel-for-pixel against the original canvas).
+- Fix: double-click to rename a block label never fired in v1.6 — the drag
+  handler's pointer capture retargeted the double-click to the block.
+- Added `tests/test_history_io.py` and a `window.__debug` test hook.
+- Header version label updated (was still "v0.3").

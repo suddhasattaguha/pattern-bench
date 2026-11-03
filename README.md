@@ -29,6 +29,11 @@ Single HTML file, zero dependencies, zero build step. Open
   connectors are modeled as genuinely internal/shared, so their boundary
   extends into the neighboring block to fully enclose the icon once merged.
 - Dragging any block moves the whole assembled flow together.
+- **Undo / Redo** (toolbar, or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z) covers every
+  flow change: add, delete, move, rename, clear and import.
+- **Export / Import** saves the flow as a small JSON file and loads it back
+  (see *Flow file format* below). Imports are validated: unknown patterns or
+  blocks that don't fit together are rejected with a message.
 - A second palette, **Versioned Artifacts**, is scaffolded (empty, axes
   marked "TBD") — this is where the actual versioning-impact evaluation
   workflow will live once we design it.
@@ -89,6 +94,35 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
   palette greying; `attachToChain()` docks a dropped block onto the correct
   end regardless of where it's dropped.
 
+## Flow file format (v1)
+
+```json
+{
+  "format": "pattern-bench-flow",
+  "version": 1,
+  "origin": { "x": 150, "y": 260 },
+  "blocks": [
+    { "pattern": "api-to-process",     "label": "Order API" },
+    { "pattern": "process-to-publish", "label": "Process-to-Publish" }
+  ],
+  "buildOrder": [0, 1],
+  "savedAt": "2026-11-03T21:30:00.000Z"
+}
+```
+
+- `blocks` are in left-to-right flow order; `pattern` is a template id.
+- `origin` is the leftmost block's position; every other position follows
+  from docking.
+- `buildOrder` (optional) is the order blocks were added, as indices into
+  `blocks`. It's replayed on load so merged seam icons come out exactly as
+  they were. If omitted, blocks are added left to right.
+
+## Tests
+
+`tests/test_history_io.py` (Python Playwright) builds a flow and checks
+undo/redo, drag, rename, delete, export → clear → import (pixel-identical),
+and rejection of bad files: `python3 tests/test_history_io.py`.
+
 ## Known scope / next steps
 
 - **Versioned Artifacts palette** is an empty shell (`versionGrid` in the
@@ -96,9 +130,8 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
   importantly — the interaction model for how a versioned-artifact block
   actually attaches to (replaces? sits alongside for comparison? annotates?)
   a block already in the base flow.
-- **No persistence** yet. The canvas resets on reload. Worth considering a
-  simple export/import of `chainOrder` state to JSON, or `window.storage`
-  if this ends up hosted as a Claude artifact.
+- **Persistence is file-based** (Export / Import). Nothing is saved
+  automatically; the canvas still resets on reload.
 - **Deletion is end-only** by design: removing a block from the middle of
   the chain would split one flow into two, which the tool intentionally
   doesn't support, so it prompts to reset the whole flow instead.
