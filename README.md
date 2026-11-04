@@ -34,9 +34,22 @@ Single HTML file, zero dependencies, zero build step. Open
 - **Export / Import** saves the flow as a small JSON file and loads it back
   (see *Flow file format* below). Imports are validated: unknown patterns or
   blocks that don't fit together are rejected with a message.
-- A second palette, **Versioned Artifacts**, is scaffolded (empty, axes
-  marked "TBD") — this is where the actual versioning-impact evaluation
-  workflow will live once we design it.
+- A second palette, **Versioned Artifacts**, is a 2×2 grid: rows are
+  Entry-Route / Exit-Route, columns are Internal / process change and
+  External / contract change. It currently holds four versioned blocks for
+  API-to-Process (two per Entry quadrant); Exit quadrants are still empty.
+- **Versioned copy.** Dropping a versioned block onto its base block splits
+  the canvas: base flow on top, a versioned copy in the bottom half,
+  block-for-block aligned. The copy is linked, not cloned — it's re-derived
+  from the base flow plus the applied versions, so renaming, moving or
+  deleting a base block is mirrored in the copy (deleting a base block also
+  drops its version). Select a versioned block in the copy and press
+  Delete (or ×) to remove that version; with no versions left the split
+  closes.
+- **Version roles** inside a versioned block: solid violet halo + filled
+  `v2` badge = the object that actually changed; dashed violet halo +
+  outlined `v2` badge = versioned as a side-effect; faded icon + dotted link
+  = retired v1 link. A legend sits in the copy pane.
 
 ## Current base patterns
 
@@ -106,6 +119,7 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
     { "pattern": "process-to-publish", "label": "Process-to-Publish" }
   ],
   "buildOrder": [0, 1],
+  "versions": [ { "block": 0, "variant": "a2p-process-switch" } ],
   "savedAt": "2026-11-03T21:30:00.000Z"
 }
 ```
@@ -116,20 +130,23 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
 - `buildOrder` (optional) is the order blocks were added, as indices into
   `blocks`. It's replayed on load so merged seam icons come out exactly as
   they were. If omitted, blocks are added left to right.
+- `versions` (optional) lists the versioned blocks applied in the copy:
+  `block` is an index into `blocks`, `variant` must belong to that block's
+  pattern.
 
 ## Tests
 
 `tests/test_history_io.py` (Python Playwright) builds a flow and checks
 undo/redo, drag, rename, delete, export → clear → import (pixel-identical),
 and rejection of bad files: `python3 tests/test_history_io.py`.
+`tests/test_versioning.py` covers the versioned palette and copy (create,
+replace, mirror on rename/move/delete, undo, export/import, in-app confirm):
+`python3 tests/test_versioning.py`.
 
 ## Known scope / next steps
 
-- **Versioned Artifacts palette** is an empty shell (`versionGrid` in the
-  HTML). Still to design: its axes, its block set, and — most
-  importantly — the interaction model for how a versioned-artifact block
-  actually attaches to (replaces? sits alongside for comparison? annotates?)
-  a block already in the base flow.
+- **Versioned blocks** exist only for API-to-Process so far; the other
+  base blocks' versions are still to be defined. One versioned copy only.
 - **Persistence is file-based** (Export / Import). Nothing is saved
   automatically; the canvas still resets on reload.
 - **Deletion is end-only** by design: removing a block from the middle of

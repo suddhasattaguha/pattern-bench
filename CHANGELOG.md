@@ -143,3 +143,20 @@ one logical change each with a real diff behind them.
   handler's pointer capture retargeted the double-click to the block.
 - Added `tests/test_history_io.py` and a `window.__debug` test hook.
 - Header version label updated (was still "v0.3").
+
+## v1.8 — Versioned Artifacts palette and versioned copy
+- Versioned Artifacts palette is now a 2×2 grid: Entry / Exit-Route ×
+  Internal (process) / External (contract) change.
+- Four versioned blocks for API-to-Process: New API v2 · own Process v2,
+  New API v2 · shared Process (contract); New Process v2 · own API v2,
+  New Process v2 · same API (process).
+- Dropping a versioned block splits the canvas: base on top, linked
+  versioned copy below, aligned block-for-block. The copy mirrors base
+  renames, moves and deletions; versions can be replaced or removed.
+- Role styling: changed (solid violet), side-effect (dashed violet),
+  retired v1 link (dotted, faded); legend in the copy pane.
+- Versions are included in undo/redo and in export/import (`versions`).
+- Fix: Clear canvas did nothing in viewers that block the browser
+  confirm() dialog. Replaced with an in-app confirmation (also used for
+  the middle-block delete prompt).
+- Added `tests/test_versioning.py` (30 checks).

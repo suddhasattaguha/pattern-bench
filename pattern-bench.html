@@ -23,6 +23,7 @@
     --block-bg-hover:#1B3C5C;
     --block-border:#2E5478;
     --danger:#D9614B;
+    --accent-version:#B48CFF;
     --font-mono:'JetBrains Mono', ui-monospace, monospace;
     --font-ui:'Inter', system-ui, sans-serif;
   }
@@ -42,6 +43,7 @@
     --block-bg-hover:#E4EBF2;
     --block-border:#BCCBDA;
     --danger:#C24732;
+    --accent-version:#7A4FD6;
   }
   *{box-sizing:border-box;}
   html,body{
@@ -337,6 +339,47 @@
   }
   .cblock.selected .delete-x{ display:block; }
 
+  /* ---------- VERSIONED COPY (split canvas) ---------- */
+  .version-pane{
+    display:none; position:absolute; left:0; right:0; top:50%; bottom:0;
+    overflow:hidden; background:var(--ink); border-top:2px solid var(--accent-version);
+    z-index:12; cursor:grab;
+  }
+  .canvas-wrap.split .version-pane{ display:block; }
+  .pane-tag{
+    position:absolute; top:8px; left:12px; z-index:13; pointer-events:none;
+    font-family:var(--font-mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-muted); background:var(--panel); border:1px solid var(--panel-border);
+    border-radius:3px; padding:3px 7px;
+  }
+  #baseTag{ display:none; }
+  .canvas-wrap.split #baseTag{ display:block; }
+  .version-pane .pane-tag{ color:var(--accent-version); border-color:var(--accent-version); }
+  .version-legend{
+    position:absolute; top:8px; right:12px; z-index:13; pointer-events:none;
+    display:flex; gap:14px; align-items:center;
+    font-family:var(--font-mono); font-size:10px; color:var(--text-muted);
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:3px; padding:4px 9px;
+  }
+  .legend-item{ display:flex; align-items:center; gap:5px; }
+  .cblock.copy-block{ pointer-events:none; cursor:default; opacity:0.4; }
+  .cblock.copy-block.versioned{ pointer-events:auto; cursor:pointer; opacity:1; z-index:25; }
+  .cblock.copy-block.versioned .cblock-shell{ stroke:var(--accent-version); }
+  .cblock.copy-block.versioned.selected .cblock-shell{ stroke:var(--accent-amber); }
+  .cblock.copy-block.versioned .cblock-label{ pointer-events:none; }
+  .pb-sub{ font-family:var(--font-mono); font-size:8.5px; text-align:center; color:var(--text-faint); margin-top:-3px; }
+  .palette-block.version-card:hover{ border-color:var(--accent-version); }
+
+  /* in-app confirmation (browser confirm() is blocked in sandboxed viewers) */
+  .confirm-box{
+    position:absolute; top:16px; left:50%; transform:translateX(-50%); z-index:40;
+    display:none; align-items:center; gap:10px;
+    background:var(--panel); border:1px solid var(--danger); border-radius:6px; padding:10px 12px 10px 14px;
+    font-family:var(--font-mono); font-size:12px; color:var(--text-primary);
+    box-shadow:0 6px 20px rgba(0,0,0,0.35);
+  }
+  .confirm-box.show{ display:flex; }
+
   ::-webkit-scrollbar{ width:10px; height:10px; }
   ::-webkit-scrollbar-track{ background:var(--panel); }
   ::-webkit-scrollbar-thumb{ background:var(--panel-border); border-radius:5px; }
@@ -350,7 +393,7 @@
     <div class="brand">
       <span class="dot"></span>
       PATTERN BENCH
-      <span class="sub">architecture canvas — v1.7</span>
+      <span class="sub">architecture canvas — v1.8</span>
     </div>
     <div class="toolbar">
       <button class="btn" id="themeToggle" title="Toggle dark / light mode">🌙 Dark</button>
@@ -383,14 +426,22 @@
       <button class="palette-tab" id="tabVersioned" data-tab="versioned">Versioned Artifacts</button>
     </div>
     <div class="quadrant-grid two-col" id="quadrantGrid"></div>
-    <div class="quadrant-grid" id="versionGrid" style="display:none;">
-      <span class="axis-label axis-top">Axes to be defined together</span>
-      <span class="axis-label axis-left">Axes to be defined together</span>
-    </div>
+    <div class="quadrant-grid" id="versionGrid" style="display:none;"></div>
   </aside>
 
   <main class="canvas-wrap" id="canvasWrap">
     <div class="world" id="world"></div>
+    <div class="pane-tag" id="baseTag">Base flow</div>
+    <div class="version-pane" id="versionPane">
+      <div class="world" id="vworld"></div>
+      <div class="pane-tag">Versioned copy</div>
+      <div class="version-legend">
+        <span class="legend-item"><svg width="16" height="11"><rect x="0.5" y="0.5" width="15" height="10" rx="3" fill="var(--accent-version)"/><text x="8" y="8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6.5" font-weight="700" fill="var(--ink)">v2</text></svg>Changed</span>
+        <span class="legend-item"><svg width="16" height="11"><rect x="0.5" y="0.5" width="15" height="10" rx="3" fill="none" stroke="var(--accent-version)" stroke-dasharray="2,1.5"/><text x="8" y="8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6.5" font-weight="700" fill="var(--accent-version)">v2</text></svg>Side-effect</span>
+        <span class="legend-item"><svg width="22" height="11"><line x1="1" y1="5.5" x2="21" y2="5.5" stroke="var(--text-muted)" stroke-width="1.4" stroke-dasharray="2,3"/></svg>Retired link</span>
+      </div>
+    </div>
+    <div class="confirm-box" id="confirmBox"><span id="confirmMsg"></span><button class="btn danger" id="confirmOk">OK</button><button class="btn" id="confirmCancel">Cancel</button></div>
     <div class="empty-hint" id="staticHint">Drag any pattern from the library to start a flow. From there, only patterns that actually fit the open ends stay available — drop one anywhere and it docks into place automatically, upstream or downstream. Drag any block to move the whole flow. Double-click a label to rename, press <b>Delete</b> to remove an end block.</div>
     <div class="toast" id="toast"></div>
     <div class="coord-readout" id="coordReadout">x: <span id="coordX">0</span>&nbsp; y: <span id="coordY">0</span>&nbsp; zoom: <span id="coordZoom">100%</span></div>
@@ -416,6 +467,10 @@
   // holds the blocks in left-to-right sequence; the palette is filtered
   // against whatever the two open ends of that sequence currently require.
   let chainOrder = [];
+  // Versioned copy: base block data-id -> versioned-block variant id. The copy
+  // itself is never stored — it's re-derived from the base flow + these
+  // overrides, so base edits flow straight through and the link can't break.
+  let versionOverrides = {};
   const CORNER_R = 10;
   const TAB_R = 12;
   const ICON_HALF = 15; // fallback half-size if an icon doesn't specify its own data-half-x/y
@@ -1037,6 +1092,140 @@
   }
 
   // ---------------------------------------------------------------
+  // Versioned blocks
+  // Each variant belongs to one base pattern and keeps that pattern's seams.
+  // Node roles drive the styling:
+  //   primary   — the object whose version actually changed (solid violet)
+  //   side      — versioned only as a side-effect of that change (dashed violet)
+  //   unchanged — stays on v1 (normal colours)
+  //   retired   — v1 object/link being phased out (faded, dotted link)
+  // ---------------------------------------------------------------
+  const VERSION_VARIANTS = [
+    { id:'a2p-contract-parallel', base:'api-to-process', route:'entry', change:'contract',
+      label:'New API v2 · own Process v2',
+      purpose:'Breaking API contract / façade change: API v2 is added next to API v1, and each API gets its own backend process.',
+      nodes:[ {k:'a1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'side'} ],
+      links:[ ['a1','p1','solid'], ['a2','p2','solid'] ] },
+    { id:'a2p-contract-shared', base:'api-to-process', route:'entry', change:'contract',
+      label:'New API v2 · shared Process',
+      purpose:'Breaking API contract / façade change: API v2 is added and the backend process stays unchanged. API v1 moves over to v2 — its link is retired.',
+      nodes:[ {k:'a1', type:'api', lane:'top', ver:'v1', role:'retired'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'},
+              {k:'p',  type:'process', lane:'mid', ver:'v1', role:'unchanged'} ],
+      links:[ ['a1','p','dotted'], ['a2','p','solid'] ] },
+    { id:'a2p-process-parallel', base:'api-to-process', route:'entry', change:'process',
+      label:'New Process v2 · own API v2',
+      purpose:'Backend process change: Process v2 runs in parallel with v1, and the API is versioned too — each API version has its own process.',
+      nodes:[ {k:'a1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'side'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['a1','p1','solid'], ['a2','p2','solid'] ] },
+    { id:'a2p-process-switch', base:'api-to-process', route:'entry', change:'process',
+      label:'New Process v2 · same API',
+      purpose:'Backend process change: API v1 stays and switches to the new Process v2. The old link to Process v1 is retired.',
+      nodes:[ {k:'a',  type:'api', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'p1', type:'process', lane:'top', ver:'v1', role:'retired'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['a','p1','dotted'], ['a','p2','solid'] ] }
+  ];
+  const variantsById = {};
+  VERSION_VARIANTS.forEach(v => variantsById[v.id] = v);
+
+  // Versioned blocks are taller than base blocks (two lanes), centred on the
+  // same seam line so they still interlock with their neighbours.
+  const VH = 140;
+  const VCY = VH / 2;
+  const LANE_Y = { top: VCY - 24, mid: VCY, bot: VCY + 24 };
+  const VCOLOR = 'var(--accent-version)';
+  const ICON_S = 0.85;
+
+  function gearMarkup(color){
+    return `<circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
+      <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
+      <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>`;
+  }
+
+  function versionBadge(x, y, ver, role){
+    let fill = COLOR_BG, stroke = COLOR_MUTED, ink = COLOR_MUTED, dash = '';
+    if(role === 'primary'){ fill = VCOLOR; stroke = VCOLOR; ink = 'var(--ink)'; }
+    else if(role === 'side'){ stroke = VCOLOR; ink = VCOLOR; dash = ' stroke-dasharray="2,1.5"'; }
+    return `<rect x="${x}" y="${y}" width="15" height="10" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="1"${dash}></rect>
+      <text x="${x+7.5}" y="${y+7.4}" text-anchor="middle" font-family="${FONT_MONO}" font-size="6.5" font-weight="700" fill="${ink}">${ver}</text>`;
+  }
+
+  function versionHalo(x, y, w, h, role){
+    if(role === 'primary')
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${VCOLOR}" fill-opacity="0.16" stroke="${VCOLOR}" stroke-width="1.2"></rect>`;
+    if(role === 'side')
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="none" stroke="${VCOLOR}" stroke-width="1.2" stroke-dasharray="3,2"></rect>`;
+    return '';
+  }
+
+  function versionLink(x1, y1, x2, y2, style){
+    const dotted = style === 'dotted';
+    const color = dotted ? COLOR_MUTED : COLOR_TEAL;
+    const a = Math.atan2(y2 - y1, x2 - x1);
+    const bx = x2 - 7*Math.cos(a), by = y2 - 7*Math.sin(a);
+    const px = 4*Math.sin(a), py = -4*Math.cos(a);
+    return `<line x1="${x1}" y1="${y1}" x2="${bx}" y2="${by}" stroke="${color}" stroke-width="1.4" opacity="${dotted ? 0.9 : 0.7}"${dotted ? ' stroke-dasharray="2,3"' : ''}></line>
+      <polygon points="${x2},${y2} ${bx+px},${by+py} ${bx-px},${by-py}" fill="${color}" opacity="${dotted ? 0.7 : 0.85}"></polygon>`;
+  }
+
+  // hasRight: a neighbour is docked on the exit side — the process icons then
+  // straddle the seam exactly like a merged process icon in the base flow.
+  function versionDiagram(v, w, hasRight){
+    const tpl = templatesById[v.base];
+    const apiW = 44*ICON_S, apiH = 22*ICON_S, gearR = 15*ICON_S;
+    const procX = hasRight ? w : Math.round(w*0.68);
+    const pos = {};
+    v.nodes.forEach(n => {
+      const y = LANE_Y[n.lane];
+      pos[n.k] = n.type === 'api'
+        ? { cx: apiW/2, cy: y, left: 0, right: apiW, top: y - apiH/2, bottom: y + apiH/2 }
+        : { cx: procX, cy: y, left: procX - gearR, right: procX + gearR, top: y - gearR, bottom: y + gearR };
+    });
+    const nodeByK = {};
+    v.nodes.forEach(n => nodeByK[n.k] = n);
+
+    let out = assetBox(apiW/2, 19, (w + 15) - apiW/2, VH - 43, 'iPaaS');
+    out += `<text x="${w/2}" y="12.5" text-anchor="middle" font-family="${FONT_MONO}" font-size="7" fill="${VCOLOR}" letter-spacing="0.02em">${v.label}</text>`;
+    v.links.forEach(([from, to, style]) => {
+      const a = pos[from], b = pos[to];
+      out += versionLink(a.right + 3, a.cy, b.left - 3, b.cy, style);
+    });
+    v.nodes.forEach(n => {
+      const p = pos[n.k];
+      const highlighted = n.role === 'primary' || n.role === 'side';
+      const color = highlighted ? VCOLOR : (n.role === 'retired' ? COLOR_MUTED : tpl.color);
+      let g = `<g class="vnode" data-role="${n.role}" data-node="${n.k}"${n.role === 'retired' ? ' opacity="0.45"' : ''}>`;
+      g += versionHalo(p.left - 4, p.top - 4, (p.right - p.left) + 8, (p.bottom - p.top) + 8, n.role);
+      g += `<g transform="translate(${p.left},${p.top}) scale(${ICON_S})">` +
+           (n.type === 'api' ? apiIconMarkup(color) : gearMarkup(color)) + '</g>';
+      // API badge sits beside the icon (above its outgoing link), clear of the
+      // asset-box label; process badge sits at the gear's top-right.
+      g += n.type === 'api'
+        ? versionBadge(p.right + 4, p.cy - 13, n.ver, n.role)
+        : versionBadge(p.right - 3, p.top - 9, n.ver, n.role);
+      g += '</g>';
+      out += g;
+    });
+    return out;
+  }
+
+  function buildVersionSvg(v, w, hasRight){
+    return '<svg class="cblock-svg" width="' + w + '" height="' + VH + '" viewBox="0 0 ' + w + ' ' + VH + '">' +
+      '<path class="cblock-shell" d="' + puzzlePath(w, VH, CORNER_R, TAB_R) + '"></path>' +
+      versionDiagram(v, w, hasRight) +
+      '<circle class="port left" cx="0" cy="' + VCY + '" r="5"></circle>' +
+      '<circle class="port right" cx="' + w + '" cy="' + VCY + '" r="5"></circle>' +
+      '</svg>';
+  }
+
+  // ---------------------------------------------------------------
   // Palette
   // ---------------------------------------------------------------
   const paletteItemsByTemplateId = {};
@@ -1080,30 +1269,60 @@
   });
 
   // ---------------------------------------------------------------
-  // Versioned Artifacts palette — same quadrant shell, empty until we
-  // define its axes and populate it with versioned-artifact blocks.
+  // Versioned Artifacts palette — 2×2:
+  //   rows    = Entry-Route (top) / Exit-Route (bottom)
+  //   columns = Internal / process change (left) / External / contract change (right)
   // ---------------------------------------------------------------
   const versionGrid = document.getElementById('versionGrid');
-  for(let i = 1; i <= 4; i++){
+  const paletteItemsByVariantId = {};
+  const VERSION_QUADS = [
+    { route:'entry', change:'process',  title:'Entry · Internal / process change' },
+    { route:'entry', change:'contract', title:'Entry · External / contract change' },
+    { route:'exit',  change:'process',  title:'Exit · Internal / process change' },
+    { route:'exit',  change:'contract', title:'Exit · External / contract change' }
+  ];
+  VERSION_QUADS.forEach(q => {
     const div = document.createElement('div');
     div.className = 'quad';
     const titleEl = document.createElement('div');
     titleEl.className = 'quad-title';
-    titleEl.textContent = 'Quadrant ' + i + ' — axis TBD';
-    titleEl.style.color = 'var(--text-faint)';
+    titleEl.textContent = q.title;
+    titleEl.style.color = q.route === 'entry' ? 'var(--accent-teal)' : 'var(--accent-amber)';
     div.appendChild(titleEl);
-    const empty = document.createElement('div');
-    empty.className = 'quad-empty';
-    empty.textContent = 'No versioned artifacts defined yet';
-    div.appendChild(empty);
+    const items = VERSION_VARIANTS.filter(v => v.route === q.route && v.change === q.change);
+    if(items.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'quad-empty';
+      empty.textContent = 'No versioned blocks defined yet';
+      div.appendChild(empty);
+    }
+    items.forEach(v => {
+      const tpl = templatesById[v.base];
+      const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
+      const item = document.createElement('div');
+      item.className = 'palette-block version-card';
+      item.draggable = true;
+      item.title = v.purpose;
+      item.innerHTML = buildVersionSvg(v, w, false) +
+        '<div class="pb-label">' + v.label + '</div><div class="pb-sub">' + tpl.label + '</div>';
+      item.addEventListener('dragstart', (e) => {
+        if(item.classList.contains('unavailable')){ e.preventDefault(); return; }
+        e.dataTransfer.setData('application/json', JSON.stringify({ versionId: v.id }));
+        e.dataTransfer.effectAllowed = 'copy';
+        item.classList.add('dragging-source');
+      });
+      item.addEventListener('dragend', () => item.classList.remove('dragging-source'));
+      div.appendChild(item);
+      paletteItemsByVariantId[v.id] = item;
+    });
     versionGrid.appendChild(div);
-  }
+  });
 
   const paletteTabs = document.querySelectorAll('.palette-tab');
   const paletteHeadDesc = document.getElementById('paletteHeadDesc');
   const PALETTE_TAB_DESC = {
     base: 'Build one flow at a time. Only patterns that fit its open ends stay available here.',
-    versioned: 'Versioned artifact blocks will land here once we define their axes — for evaluating how a version change ripples upstream and downstream.'
+    versioned: 'Drop a versioned block onto its base block. A versioned copy of the flow opens below the base; the base stays editable and the copy follows it.'
   };
   paletteTabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1132,6 +1351,15 @@
         item.title = tpl.purpose || '';
       }
     });
+    VERSION_VARIANTS.forEach(v => {
+      const item = paletteItemsByVariantId[v.id];
+      if(!item) return;
+      const ok = chainOrder.some(b => b.dataset.tpl === v.base);
+      item.classList.toggle('unavailable', !ok);
+      item.draggable = ok;
+      item.title = ok ? v.purpose : 'Add a ' + templatesById[v.base].label + ' block to the base flow first';
+    });
+    renderCopy();
   }
 
   // ---------------------------------------------------------------
@@ -1139,6 +1367,9 @@
   // ---------------------------------------------------------------
   const canvasWrap = document.getElementById('canvasWrap');
   const world = document.getElementById('world');
+  const versionPane = document.getElementById('versionPane');
+  const vworld = document.getElementById('vworld');
+  let selectedCopy = null;
   const staticHint = document.getElementById('staticHint');
   const coordX = document.getElementById('coordX');
   const coordY = document.getElementById('coordY');
@@ -1152,6 +1383,7 @@
 
   function applyTransform(){
     world.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
+    vworld.style.transform = world.style.transform; // same view, so the copy lines up block-for-block
     zoomReadout.textContent = Math.round(zoom*100) + '%';
     coordZoom.textContent = Math.round(zoom*100) + '%';
     updateGrid();
@@ -1171,6 +1403,9 @@
       'linear-gradient(90deg, var(--grid-line-strong) 1px, transparent 1px)';
     canvasWrap.style.backgroundSize = fine+'px '+fine+'px, '+fine+'px '+fine+'px, '+strong+'px '+strong+'px, '+strong+'px '+strong+'px';
     canvasWrap.style.backgroundPosition = offX+'px '+offY+'px, '+offX+'px '+offY+'px, '+offXs+'px '+offYs+'px, '+offXs+'px '+offYs+'px';
+    versionPane.style.backgroundImage = canvasWrap.style.backgroundImage;
+    versionPane.style.backgroundSize = canvasWrap.style.backgroundSize;
+    versionPane.style.backgroundPosition = canvasWrap.style.backgroundPosition;
   }
 
   function clientToWorld(clientX, clientY){
@@ -1202,7 +1437,8 @@
   canvasWrap.addEventListener('wheel', (e) => {
     e.preventDefault();
     const factor = e.deltaY > 0 ? 0.92 : 1.08;
-    setZoomAtScreenPoint(zoom*factor, e.clientX, e.clientY);
+    const inPane = versionPane.contains(e.target);
+    setZoomAtScreenPoint(zoom*factor, e.clientX, e.clientY - (inPane ? versionPane.offsetTop : 0));
   }, { passive:false });
 
   const snapToggle = document.getElementById('snapToggle');
@@ -1221,11 +1457,29 @@
     themeToggle.textContent = isLight ? '☀️ Light' : '🌙 Dark';
   });
 
+  // In-app confirmation. The browser's confirm() is silently blocked in
+  // sandboxed viewers (it returns false), which made Clear canvas do nothing.
+  const confirmBox = document.getElementById('confirmBox');
+  const confirmMsg = document.getElementById('confirmMsg');
+  const confirmOk = document.getElementById('confirmOk');
+  let pendingConfirm = null;
+  function askConfirm(message, okLabel, onOk){
+    confirmMsg.textContent = message;
+    confirmOk.textContent = okLabel;
+    pendingConfirm = onOk;
+    confirmBox.classList.add('show');
+    confirmOk.focus();
+  }
+  function closeConfirm(){ confirmBox.classList.remove('show'); pendingConfirm = null; }
+  confirmOk.addEventListener('click', () => { const fn = pendingConfirm; closeConfirm(); if(fn) fn(); });
+  document.getElementById('confirmCancel').addEventListener('click', closeConfirm);
+
   document.getElementById('clearCanvas').addEventListener('click', () => {
     if(chainOrder.length === 0) return;
-    if(!confirm('Remove the current flow and start over?')) return;
-    resetChain();
-    recordHistory();
+    askConfirm('Remove the current flow' + (Object.keys(versionOverrides).length ? ' and its versioned copy' : '') + '?', 'Clear', () => {
+      resetChain();
+      recordHistory();
+    });
   });
 
   function gridSnap(v){ return snap ? Math.round(v/20)*20 : v; }
@@ -1237,7 +1491,9 @@
 
   function deselectAll(){
     world.querySelectorAll('.cblock.selected').forEach(b => b.classList.remove('selected'));
+    vworld.querySelectorAll('.cblock.selected').forEach(b => b.classList.remove('selected'));
     selectedBlock = null;
+    selectedCopy = null;
   }
 
   // ---------------------------------------------------------------
@@ -1246,7 +1502,7 @@
   let isPanning = false, panStartX, panStartY, panOrigX, panOrigY, movedDuringPan = false;
 
   canvasWrap.addEventListener('pointerdown', (e) => {
-    if(e.target !== canvasWrap && e.target !== world) return;
+    if(e.target !== canvasWrap && e.target !== world && e.target !== versionPane && e.target !== vworld) return;
     isPanning = true;
     movedDuringPan = false;
     panStartX = e.clientX; panStartY = e.clientY;
@@ -1282,6 +1538,7 @@
     const raw = e.dataTransfer.getData('application/json');
     if(!raw) return;
     const data = JSON.parse(raw);
+    if(data.versionId){ dropVersion(variantsById[data.versionId], e.clientX, e.clientY); return; }
     const tpl = templatesById[data.templateId];
     if(!tpl) return;
     if(chainOrder.length > 0 && !isTemplateCompatible(tpl)) return; // defensive; palette already blocks this
@@ -1518,9 +1775,10 @@
       chainOrder.pop();
       el.remove();
     } else {
-      if(!confirm('Removing a block from the middle of the flow would split it in two, which isn\'t supported here — this will clear the whole flow instead. Continue?')) return;
-      resetChain();
-      recordHistory();
+      askConfirm('A middle block can\'t be removed without splitting the flow. Clear the whole flow instead?', 'Clear flow', () => {
+        resetChain();
+        recordHistory();
+      });
       return;
     }
     if(selectedBlock === el) selectedBlock = null;
@@ -1532,9 +1790,127 @@
   function resetChain(){
     chainOrder.forEach(b => b.remove());
     chainOrder = [];
+    versionOverrides = {};
     selectedBlock = null;
     updateEmptyHint();
     refreshPaletteAvailability();
+  }
+
+  // ---------------------------------------------------------------
+  // Versioned copy (bottom half of the split canvas)
+  // ---------------------------------------------------------------
+  // Rebuilt from scratch from the base flow after every base change: unchanged
+  // blocks are clones of their base block (dimmed); a versioned block replaces
+  // its base block's clone in place, at the same x, and is the only thing in
+  // the copy you can select. Deleting a base block drops its version too.
+  function renderCopy(){
+    const ids = new Set(chainOrder.map(b => b.dataset.id));
+    Object.keys(versionOverrides).forEach(k => { if(!ids.has(k)) delete versionOverrides[k]; });
+    const active = Object.keys(versionOverrides).length > 0;
+    const wasActive = canvasWrap.classList.contains('split');
+    const keepSelected = selectedCopy ? selectedCopy.dataset.baseId : null;
+    canvasWrap.classList.toggle('split', active);
+    vworld.innerHTML = '';
+    selectedCopy = null;
+    if(!active) return;
+
+    chainOrder.forEach((b, i) => {
+      const vid = versionOverrides[b.dataset.id];
+      const hasLeft = i > 0, hasRight = i < chainOrder.length - 1;
+      let el;
+      if(vid){
+        const v = variantsById[vid];
+        const w = parseFloat(b.style.width);
+        el = document.createElement('div');
+        el.className = 'cblock copy-block versioned';
+        el.style.left = b.style.left;
+        el.style.top = (parseFloat(b.style.top) - (VH - BLOCK_H)/2) + 'px';
+        el.style.width = w + 'px';
+        el.style.height = VH + 'px';
+        el.dataset.variant = vid;
+        el.title = v.label + ' — ' + v.purpose;
+        el.innerHTML = buildVersionSvg(v, w, hasRight) +
+          '<div class="cblock-label"></div><div class="delete-x" title="Remove this version">\u00D7</div>';
+        el.querySelector('.cblock-label').textContent = b.querySelector('.cblock-label').textContent;
+        if(hasLeft) el.querySelector('.port.left').classList.add('merged');
+        if(hasRight) el.querySelector('.port.right').classList.add('merged');
+        el.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          if(e.target.classList.contains('delete-x')) return;
+          deselectAll();
+          el.classList.add('selected');
+          selectedCopy = el;
+        });
+        el.querySelector('.delete-x').addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeVersion(el.dataset.baseId);
+        });
+      } else {
+        el = b.cloneNode(true);
+        el.classList.remove('selected', 'dragging');
+        el.classList.add('copy-block');
+        el.removeAttribute('data-id');
+        el.removeAttribute('title');
+        // a versioned neighbour draws the shared seam icons itself
+        if(hasLeft && versionOverrides[chainOrder[i-1].dataset.id]){
+          const ic = el.querySelector('.icon-group[data-anchor="entry"]');
+          if(ic) ic.classList.add('icon-hidden');
+        }
+        if(hasRight && versionOverrides[chainOrder[i+1].dataset.id]){
+          const ic = el.querySelector('.icon-group[data-anchor="exit"]');
+          if(ic) ic.classList.add('icon-hidden');
+        }
+      }
+      el.dataset.baseId = b.dataset.id;
+      vworld.appendChild(el);
+      if(keepSelected && keepSelected === b.dataset.id && vid){ el.classList.add('selected'); selectedCopy = el; }
+    });
+    if(!wasActive) fitFlowIntoTopHalf();
+  }
+
+  // When the split first opens, centre the flow vertically in the top half,
+  // so the copy lands centred in the bottom half too.
+  function fitFlowIntoTopHalf(){
+    if(chainOrder.length === 0) return;
+    const half = canvasWrap.clientHeight / 2;
+    const top = Math.min(...chainOrder.map(b => parseFloat(b.style.top))) - (VH - BLOCK_H)/2;
+    panY = Math.max(36, (half - VH*zoom)/2 + 6) - top*zoom;
+    applyTransform();
+  }
+
+  function blockAtPoint(clientX, clientY){
+    const hit = (el) => { const r = el.getBoundingClientRect(); return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom; };
+    const inPane = canvasWrap.classList.contains('split') && hit(versionPane);
+    const pool = inPane ? [...vworld.children] : chainOrder;
+    const el = pool.find(hit);
+    if(!el) return null;
+    const id = inPane ? el.dataset.baseId : el.dataset.id;
+    return chainOrder.find(b => b.dataset.id === id) || null;
+  }
+
+  function dropVersion(v, clientX, clientY){
+    if(!v) return;
+    const baseLabel = templatesById[v.base].label;
+    let target = blockAtPoint(clientX, clientY);
+    if(target && target.dataset.tpl !== v.base) target = null;
+    if(!target){
+      const matches = chainOrder.filter(b => b.dataset.tpl === v.base);
+      if(matches.length === 0){ showToast('Add a ' + baseLabel + ' block to the base flow first.', true); return; }
+      if(matches.length > 1){ showToast('Drop it onto the ' + baseLabel + ' block you want to version.', true); return; }
+      target = matches[0];
+    }
+    const first = Object.keys(versionOverrides).length === 0;
+    versionOverrides[target.dataset.id] = v.id;
+    renderCopy();
+    recordHistory();
+    showToast(first ? 'Versioned copy created below the base flow.' : 'Version applied: ' + v.label + '.');
+  }
+
+  function removeVersion(baseId){
+    if(!versionOverrides[baseId]) return;
+    delete versionOverrides[baseId];
+    renderCopy();
+    recordHistory();
   }
 
   // ---------------------------------------------------------------
@@ -1560,7 +1936,10 @@
         pattern: b.dataset.tpl,
         label: b.querySelector('.cblock-label').textContent
       })),
-      buildOrder: byCreation
+      buildOrder: byCreation,
+      versions: chainOrder
+        .map((b, i) => versionOverrides[b.dataset.id] ? { block: i, variant: versionOverrides[b.dataset.id] } : null)
+        .filter(Boolean)
     };
   }
 
@@ -1592,6 +1971,19 @@
         if(order[k] === hi + 1) hi++;
         else if(order[k] === lo - 1) lo--;
         else return 'Flow file has an invalid build order.';
+      }
+    }
+    if(f.versions !== undefined){
+      if(!Array.isArray(f.versions)) return 'Flow file has an invalid version list.';
+      const seen = new Set();
+      for(const ver of f.versions){
+        if(!ver || !Number.isInteger(ver.block) || ver.block < 0 || ver.block >= f.blocks.length || seen.has(ver.block))
+          return 'Flow file has an invalid version entry.';
+        const v = variantsById[ver.variant];
+        if(!v) return 'Unknown versioned block: ' + ver.variant;
+        if(v.base !== f.blocks[ver.block].pattern)
+          return 'Versioned block "' + v.label + '" doesn\'t belong to block ' + (ver.block+1) + '.';
+        seen.add(ver.block);
       }
     }
     return null;
@@ -1626,6 +2018,7 @@
       }
       el.querySelector('.cblock-label').textContent = String(f.blocks[idx].label ?? tpl.label);
     });
+    (f.versions || []).forEach(ver => { versionOverrides[chainOrder[ver.block].dataset.id] = ver.variant; });
     deselectAll();
     updateEmptyHint();
     refreshPaletteAvailability();
@@ -1693,7 +2086,9 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    showToast('Exported ' + chainOrder.length + ' block' + (chainOrder.length === 1 ? '' : 's') + '.');
+    const nv = flow.versions.length;
+    showToast('Exported ' + chainOrder.length + ' block' + (chainOrder.length === 1 ? '' : 's') +
+      (nv ? ' + ' + nv + ' version' + (nv === 1 ? '' : 's') : '') + '.');
   });
 
   const importFile = document.getElementById('importFile');
@@ -1753,6 +2148,7 @@
       });
       coordX.textContent = Math.round(snappedLeft);
       coordY.textContent = Math.round(snappedTop);
+      if(canvasWrap.classList.contains('split')) renderCopy();
     });
 
     el.addEventListener('pointerup', (e) => {
@@ -1780,7 +2176,7 @@
       label.focus();
       document.getSelection().selectAllChildren(label);
     });
-    label.addEventListener('blur', () => { label.contentEditable = 'false'; recordHistory(); });
+    label.addEventListener('blur', () => { label.contentEditable = 'false'; renderCopy(); recordHistory(); });
     label.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); label.blur(); } });
   }
 
@@ -1790,6 +2186,12 @@
       const k = e.key.toLowerCase();
       if(k === 'z' && !e.shiftKey){ e.preventDefault(); undo(); return; }
       if(k === 'y' || (k === 'z' && e.shiftKey)){ e.preventDefault(); redo(); return; }
+    }
+    if(e.key === 'Escape' && confirmBox.classList.contains('show')){ closeConfirm(); return; }
+    if((e.key === 'Delete' || e.key === 'Backspace') && selectedCopy){
+      e.preventDefault();
+      removeVersion(selectedCopy.dataset.baseId);
+      return;
     }
     if((e.key === 'Delete' || e.key === 'Backspace') && selectedBlock){
       const active = document.activeElement;
@@ -1811,7 +2213,9 @@
 
   // Test hook for headless checks (Playwright); not used by the UI.
   window.__debug = { templatesById, attachToChain, removeChainBlock, recordHistory,
-    serializeFlow, validateFlow, loadFlow, undo, redo, chainOrder: () => chainOrder };
+    serializeFlow, validateFlow, loadFlow, undo, redo, chainOrder: () => chainOrder,
+    dropVersion: (vid, x, y) => dropVersion(variantsById[vid], x, y), removeVersion,
+    versionOverrides: () => versionOverrides, variantsById };
 })();
 </script>
 </body>

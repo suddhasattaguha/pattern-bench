@@ -58,7 +58,7 @@ with sync_playwright() as p:
     with pg.expect_download() as dl: pg.click('#exportBtn')
     dl.value.save_as(D+'flow.json'); f=json.load(open(D+'flow.json'))
     check('export file valid', f['format']=='pattern-bench-flow' and len(f['blocks'])==4 and f['blocks'][2]['label']=='Orders iFlow')
-    pg.click('#clearCanvas'); check('cleared', pg.evaluate("window.__debug.chainOrder().length")==0)
+    pg.click('#clearCanvas'); pg.click('#confirmOk'); check('cleared', pg.evaluate("window.__debug.chainOrder().length")==0)
     pg.set_input_files('#importFile', D+'flow.json'); pg.wait_for_timeout(300)
     pg.mouse.click(1300,700); pg.wait_for_timeout(2700); pg.screenshot(path=D+'C.png')
     check('import pixel-identical', same(D+'A2.png',D+'C.png'))
