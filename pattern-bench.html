@@ -23,7 +23,14 @@
     --block-bg-hover:#1B3C5C;
     --block-border:#2E5478;
     --danger:#D9614B;
-    --accent-version:#B48CFF;
+    --accent-version:#A78BFA;
+    --ver-fill:#272352; --ver-glyph:#C4B5FD; --ver-ink:#14102B; --vtile:#1A2550;
+    --tile:#152A42; --tile-rim:#27456A;
+    --flow-line:#5F7894; --flow-mark:#B6C6D8;
+    --grid-dot:rgba(94,149,219,0.30);
+    --ipaas:#3CC8B4; --ipaas-fill:#12403F; --ipaas-glyph:#7FE3D3; --ipaas-band:rgba(60,200,180,0.13); --ipaas-label:#3CC8B4;
+    --broker:#F0A94A; --broker-fill:#4A3618; --broker-glyph:#F8CE94; --broker-band:rgba(240,169,74,0.13); --broker-label:#F0A94A;
+    --ext:#93A4B8; --ext-fill:#22364D; --ext-glyph:#D5DEE9;
     --font-mono:'JetBrains Mono', ui-monospace, monospace;
     --font-ui:'Inter', system-ui, sans-serif;
   }
@@ -43,7 +50,14 @@
     --block-bg-hover:#E4EBF2;
     --block-border:#BCCBDA;
     --danger:#C24732;
-    --accent-version:#7A4FD6;
+    --accent-version:#6D4AD6;
+    --ver-fill:#EAE3FC; --ver-glyph:#5B3CC4; --ver-ink:#FFFFFF; --vtile:#F4F0FE;
+    --tile:#FFFFFF; --tile-rim:#C5D1DE;
+    --flow-line:#8A9BAE; --flow-mark:#4B5E73;
+    --grid-dot:rgba(47,90,143,0.24);
+    --ipaas:#0F8F7E; --ipaas-fill:#D8F3EF; --ipaas-glyph:#0B6F62; --ipaas-band:rgba(15,143,126,0.11); --ipaas-label:#0B6F62;
+    --broker:#B86E0B; --broker-fill:#FBEACF; --broker-glyph:#8A5207; --broker-band:rgba(184,110,11,0.11); --broker-label:#8A5207;
+    --ext:#64748B; --ext-fill:#E8EDF3; --ext-glyph:#334155;
   }
   *{box-sizing:border-box;}
   html,body{
@@ -58,7 +72,7 @@
   .app{
     display:grid;
     grid-template-rows:52px 1fr;
-    grid-template-columns:260px 1fr;
+    grid-template-columns:var(--palette-w, 260px) 1fr;
     grid-template-areas:
       "topbar topbar"
       "palette canvas";
@@ -132,7 +146,20 @@
     display:flex;
     flex-direction:column;
     overflow:hidden;
+    position:relative;
+    min-width:0;
   }
+  /* drag the library's right edge to make it wider or narrower */
+  .palette-resizer{
+    position:absolute; top:0; right:0; bottom:0; width:7px;
+    cursor:col-resize; z-index:20; touch-action:none;
+  }
+  .palette-resizer::after{
+    content:''; position:absolute; top:0; bottom:0; right:0; width:2px;
+    background:transparent; transition:background .12s;
+  }
+  .palette-resizer:hover::after, .palette-resizer.dragging::after{ background:var(--accent-teal); }
+  body.resizing-palette{ cursor:col-resize; user-select:none; }
   .palette-head{ padding:14px 14px 10px; border-bottom:1px solid var(--panel-border); }
   .palette-head h2{ margin:0 0 3px; font-size:13px; font-weight:600; letter-spacing:0.02em; }
   .palette-head p{ margin:0; font-size:11px; color:var(--text-muted); line-height:1.4; }
@@ -168,6 +195,11 @@
     overflow:hidden;
   }
   .quadrant-grid.two-col{ grid-template-rows:1fr; }
+  /* The versions grid scrolls as one sheet, so a quadrant is as tall as its cards. */
+  #versionGrid{ grid-template-rows:auto auto; align-content:start; overflow-y:auto; background:var(--panel); gap:0; }
+  #versionGrid .quad{ overflow:visible; border-bottom:1px solid var(--panel-border); }
+  #versionGrid .quad:nth-child(odd){ border-right:1px solid var(--panel-border); }
+  #versionGrid .quad-title{ position:static; }
   .axis-label{
     position:absolute;
     font-family:var(--font-mono);
@@ -196,7 +228,7 @@
     z-index:5;
     background:var(--panel);
     font-family:var(--font-mono);
-    font-size:9px;
+    font-size:9.5px;
     color:var(--text-faint);
     text-transform:uppercase;
     letter-spacing:0.06em;
@@ -222,8 +254,8 @@
     gap:5px;
     background:var(--panel);
     border:1px solid var(--block-border);
-    border-radius:6px;
-    padding:8px 8px 7px;
+    border-radius:10px;
+    padding:8px 8px 8px;
     cursor:grab;
     user-select:none;
     transition:border-color .12s, background .12s, transform .08s;
@@ -237,10 +269,12 @@
     cursor:not-allowed;
   }
   .palette-block.unavailable:hover{ border-color:var(--block-border); background:var(--panel); }
-  .palette-block svg{ width:100%; height:auto; display:block; }
+  .palette-block svg{ width:100%; height:auto; display:block; overflow:visible; }
   .pb-label{
-    font-family:var(--font-mono);
-    font-size:10px;
+    font-family:var(--font-ui);
+    font-size:11.5px;
+    font-weight:600;
+    line-height:1.3;
     text-align:center;
     color:var(--text-primary);
   }
@@ -294,29 +328,29 @@
     touch-action:none;
     z-index:10;
   }
-  /* Whichever block "keeps" a merged icon can have that icon (and its
-     boundary) physically poke a few pixels into the neighboring block's own
-     rendered area, since the icon sits right at the shared seam. Both
-     blocks default to the same z-index, so whichever was created later
-     would otherwise paint on top and clip it. Boosting the keeper above the
-     baseline layer (but still below active drag/selection) fixes that. */
-  .cblock.z-boost{ z-index:20; }
   .cblock.selected{ z-index:11; }
   .cblock.dragging{ z-index:50; opacity:0.94; }
   .cblock svg.cblock-svg{ display:block; overflow:visible; }
-  .cblock-shell{ fill:var(--block-bg); stroke:var(--block-border); stroke-width:1.5; transition:stroke .12s, filter .12s; }
-  .cblock:hover .cblock-shell{ stroke:var(--accent-teal); }
-  .cblock.selected .cblock-shell{
-    stroke:var(--accent-amber);
-    filter:drop-shadow(0 0 4px rgba(232,163,61,0.55));
-  }
+
+  /* Tile: an arrow-shaped piece (notch on the entry side, point on the exit
+     side) so blocks nest into each other and show the flow direction. Drawn
+     as two stacked paths — a slightly fatter "rim" under the "face" — which
+     gives rounded corners and an outline that can change colour. */
+  .tile-rim{ fill:var(--tile-rim); stroke:var(--tile-rim); stroke-width:9; stroke-linejoin:round; transition:stroke .12s, fill .12s; }
+  .tile-face{ fill:var(--tile); stroke:var(--tile); stroke-width:6; stroke-linejoin:round; }
+  .cblock:hover .tile-rim{ fill:var(--accent-teal); stroke:var(--accent-teal); }
+  .cblock.selected .tile-rim{ fill:var(--accent-amber); stroke:var(--accent-amber); stroke-width:10.5; }
+  .versioned .tile-rim{ fill:var(--accent-version); stroke:var(--accent-version); stroke-width:10.5; }
+  .versioned .tile-face{ fill:var(--vtile); stroke:var(--vtile); }
+  .cblock.versioned.selected .tile-rim{ fill:var(--accent-amber); stroke:var(--accent-amber); }
+
   .cblock-label{
     position:absolute;
-    left:0; right:0; bottom:9px;
+    left:10px; right:-10px; bottom:11px;
     text-align:center;
-    font-family:var(--font-mono);
-    font-size:10.5px;
-    font-weight:500;
+    font-family:var(--font-ui);
+    font-size:13px;
+    font-weight:600;
     color:var(--text-primary);
     outline:none;
     pointer-events:auto;
@@ -324,11 +358,42 @@
   }
   .cblock-label[contenteditable="true"]{ cursor:text; border-bottom:1px dashed var(--accent-amber); }
 
-  .icon-group{ transition:transform .18s ease, opacity .18s ease; }
-  .icon-group.icon-hidden{ opacity:0; }
-  circle.port{ fill:var(--ink); stroke:var(--accent-teal); stroke-width:1.6; transition:stroke .12s, fill .12s, opacity .15s; }
-  circle.port.snap-target{ stroke:var(--accent-amber); }
-  circle.port.merged{ opacity:0; }
+  /* Flow layer: one SVG per pane drawn over the tiles. It carries everything
+     that belongs to the flow rather than to a single block — the line, the
+     connector symbols on the seams, and the platform bands. */
+  .flow-layer{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; z-index:60; }
+  .band.own-ipaas{ fill:var(--ipaas-band); }
+  .band.own-broker{ fill:var(--broker-band); }
+  .band-label{ font-family:var(--font-ui); font-size:10px; font-weight:700; letter-spacing:0.1em; }
+  .band-label.own-ipaas{ fill:var(--ipaas-label); }
+  .band-label.own-broker{ fill:var(--broker-label); }
+  .link{ stroke:var(--flow-line); stroke-width:3; fill:none; stroke-linecap:round; }
+  .link.retired{ stroke:var(--text-muted); stroke-dasharray:1 8; }
+  .link-mark{ stroke:var(--flow-mark); stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+  .dim{ opacity:0.5; }
+
+  /* Connector symbols. Shape = connector type; colour = owning platform. */
+  .node.own-ipaas{ --n-stroke:var(--ipaas); --n-fill:var(--ipaas-fill); --n-glyph:var(--ipaas-glyph); }
+  .node.own-broker{ --n-stroke:var(--broker); --n-fill:var(--broker-fill); --n-glyph:var(--broker-glyph); }
+  .node.own-external{ --n-stroke:var(--ext); --n-fill:var(--ext-fill); --n-glyph:var(--ext-glyph); }
+  /* Versioning roles override the platform colour — violet means versioning, nothing else. */
+  .node.role-primary{ --n-stroke:var(--accent-version); --n-fill:var(--accent-version); --n-glyph:var(--ver-ink); }
+  .node.role-side{ --n-stroke:var(--accent-version); --n-fill:var(--ver-fill); --n-glyph:var(--ver-glyph); }
+  .node.role-side .n-shape{ stroke-dasharray:5 4; }
+  .node.role-retired{ --n-stroke:var(--text-muted); --n-fill:var(--vtile); --n-glyph:var(--text-muted); }
+  .node.role-retired .n-shape{ stroke-dasharray:2 4; }
+  .n-shape{ fill:var(--n-fill); stroke:var(--n-stroke); stroke-width:2; stroke-linejoin:round; }
+  .n-line{ fill:none; stroke:var(--n-glyph); stroke-linecap:round; }
+  .n-dot{ fill:var(--n-glyph); }
+  .n-text{ fill:var(--n-glyph); font-family:var(--font-ui); font-size:12px; font-weight:700; }
+  .vbadge rect{ fill:var(--tile); stroke:var(--tile-rim); stroke-width:1; }
+  .vbadge text{ fill:var(--text-primary); font-family:var(--font-mono); font-size:11px; font-weight:700; }
+  .vbadge.role-primary rect{ fill:var(--accent-version); stroke:var(--accent-version); }
+  .vbadge.role-primary text{ fill:var(--ver-ink); }
+  .vbadge.role-side rect{ fill:var(--vtile); stroke:var(--accent-version); stroke-dasharray:3 2; }
+  .vbadge.role-side text{ fill:var(--ver-glyph); }
+  .vbadge.role-retired text{ fill:var(--text-muted); }
+  .vcaption-text{ fill:var(--ver-glyph); font-family:var(--font-ui); font-size:11px; font-weight:600; }
 
   .delete-x{
     position:absolute; top:-8px; right:-8px;
@@ -342,7 +407,7 @@
   /* ---------- VERSIONED COPY (split canvas) ---------- */
   .version-pane{
     display:none; position:absolute; left:0; right:0; top:50%; bottom:0;
-    overflow:hidden; background:var(--ink); border-top:2px solid var(--accent-version);
+    overflow:hidden; background:var(--ink); border-top:1px solid var(--panel-border); box-shadow:0 -1px 0 var(--accent-version);
     z-index:12; cursor:grab;
   }
   .canvas-wrap.split .version-pane{ display:block; }
@@ -358,16 +423,20 @@
   .version-legend{
     position:absolute; top:8px; right:12px; z-index:13; pointer-events:none;
     display:flex; gap:14px; align-items:center;
-    font-family:var(--font-mono); font-size:10px; color:var(--text-muted);
-    background:var(--panel); border:1px solid var(--panel-border); border-radius:3px; padding:4px 9px;
+    font-family:var(--font-ui); font-size:11.5px; color:var(--text-primary);
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:6px; padding:5px 10px;
   }
   .legend-item{ display:flex; align-items:center; gap:5px; }
-  .cblock.copy-block{ pointer-events:none; cursor:default; opacity:0.4; }
+  .cblock.copy-block{ pointer-events:none; cursor:default; opacity:0.5; }
   .cblock.copy-block.versioned{ pointer-events:auto; cursor:pointer; opacity:1; z-index:25; }
-  .cblock.copy-block.versioned .cblock-shell{ stroke:var(--accent-version); }
-  .cblock.copy-block.versioned.selected .cblock-shell{ stroke:var(--accent-amber); }
   .cblock.copy-block.versioned .cblock-label{ pointer-events:none; }
-  .pb-sub{ font-family:var(--font-mono); font-size:8.5px; text-align:center; color:var(--text-faint); margin-top:-3px; }
+  .vcaption{
+    position:absolute; left:24px; top:11px; white-space:nowrap; pointer-events:none;
+    font-family:var(--font-ui); font-size:11px; font-weight:600; color:var(--ver-glyph);
+  }
+  .pane-tag.active{ color:var(--text-primary); border-color:var(--text-muted); }
+  .version-pane .pane-tag.active{ color:var(--accent-version); box-shadow:0 0 0 1px var(--accent-version); }
+  .pb-sub{ font-family:var(--font-ui); font-size:10.5px; text-align:center; color:var(--text-muted); margin-top:-2px; }
   .palette-block.version-card:hover{ border-color:var(--accent-version); }
 
   /* in-app confirmation (browser confirm() is blocked in sandboxed viewers) */
@@ -393,7 +462,7 @@
     <div class="brand">
       <span class="dot"></span>
       PATTERN BENCH
-      <span class="sub">architecture canvas — v1.8</span>
+      <span class="sub">architecture canvas — v1.9</span>
     </div>
     <div class="toolbar">
       <button class="btn" id="themeToggle" title="Toggle dark / light mode">🌙 Dark</button>
@@ -427,18 +496,19 @@
     </div>
     <div class="quadrant-grid two-col" id="quadrantGrid"></div>
     <div class="quadrant-grid" id="versionGrid" style="display:none;"></div>
+    <div class="palette-resizer" id="paletteResizer" title="Drag to resize the library. Double-click to reset."></div>
   </aside>
 
   <main class="canvas-wrap" id="canvasWrap">
     <div class="world" id="world"></div>
-    <div class="pane-tag" id="baseTag">Base flow</div>
+    <div class="pane-tag active" id="baseTag">Base flow</div>
     <div class="version-pane" id="versionPane">
       <div class="world" id="vworld"></div>
-      <div class="pane-tag">Versioned copy</div>
+      <div class="pane-tag" id="copyTag">Versioned copy</div>
       <div class="version-legend">
-        <span class="legend-item"><svg width="16" height="11"><rect x="0.5" y="0.5" width="15" height="10" rx="3" fill="var(--accent-version)"/><text x="8" y="8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6.5" font-weight="700" fill="var(--ink)">v2</text></svg>Changed</span>
-        <span class="legend-item"><svg width="16" height="11"><rect x="0.5" y="0.5" width="15" height="10" rx="3" fill="none" stroke="var(--accent-version)" stroke-dasharray="2,1.5"/><text x="8" y="8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6.5" font-weight="700" fill="var(--accent-version)">v2</text></svg>Side-effect</span>
-        <span class="legend-item"><svg width="22" height="11"><line x1="1" y1="5.5" x2="21" y2="5.5" stroke="var(--text-muted)" stroke-width="1.4" stroke-dasharray="2,3"/></svg>Retired link</span>
+        <span class="legend-item"><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--accent-version)"/></svg>Changed</span>
+        <span class="legend-item"><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--accent-version)" stroke-width="1.6" stroke-dasharray="3 2"/></svg>Side-effect</span>
+        <span class="legend-item"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--text-muted)" stroke-width="2.5" stroke-dasharray="1 6" stroke-linecap="round"/></svg>Retired</span>
       </div>
     </div>
     <div class="confirm-box" id="confirmBox"><span id="confirmMsg"></span><button class="btn danger" id="confirmOk">OK</button><button class="btn" id="confirmCancel">Cancel</button></div>
@@ -451,10 +521,6 @@
 
 <script>
 (function(){
-  const COLOR_TEAL = 'var(--accent-teal)';
-  const COLOR_BG = 'var(--block-bg)';
-  const COLOR_MUTED = 'var(--text-muted)';
-  const FONT_MONO = "'JetBrains Mono', monospace";
 
   // ---------------------------------------------------------------
   // Geometry constants — every block shares the same height so
@@ -462,7 +528,7 @@
   // two blocks can interlock.
   // ---------------------------------------------------------------
   const SIZE_WIDTH = { small:150, medium:210, wide:280 };
-  const BLOCK_H = 100;
+  const BLOCK_H = 120;
   // The canvas builds exactly one end-to-end pattern at a time. chainOrder
   // holds the blocks in left-to-right sequence; the palette is filtered
   // against whatever the two open ends of that sequence currently require.
@@ -471,467 +537,249 @@
   // itself is never stored — it's re-derived from the base flow + these
   // overrides, so base edits flow straight through and the link can't break.
   let versionOverrides = {};
-  const CORNER_R = 10;
-  const TAB_R = 12;
-  const ICON_HALF = 15; // fallback half-size if an icon doesn't specify its own data-half-x/y
+  const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
+  const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
+  const LANE = 34;     // vertical offset of the two lanes inside a versioned block
+  const VH = 220;      // height of a versioned tile (base tiles are BLOCK_H)
+  const BAND_R = 32;   // half-height of a platform band
+  const LANE_DY = { top:-LANE, mid:0, bot:LANE };
 
-  // Asset-boundary box: fill + full dashed border by default (this is what
-  // Asset-boundary box: a permanently complete, fully-bordered rectangle.
-  // It never opens up or partially hides — whichever block "owns" a shared
-  // icon just keeps its own box exactly as-is, merged or not, and the
-  // non-owner's box (if any) fades away entirely together with its icon.
-  // That's what guarantees every box always reads as one solid rectangle,
-  // never half-open.
-  function assetBox(x, y, w, h, label){
-    const labelMarkup = label
-      ? `<text x="${x+6}" y="${y+9.5}" font-family="${FONT_MONO}" font-size="6.5" letter-spacing="0.04em" fill="${COLOR_MUTED}" opacity="0.85">${label}</text>`
-      : '';
-    // shape-rendering="crispEdges" matters here: a plain 1px stroke centered
-    // on an integer coordinate straddles two pixel rows at ~50% coverage
-    // each, so it always partially blends with whatever renders underneath
-    // — regardless of z-index — once a box overshoots into a neighboring
-    // block. crispEdges snaps it to a single full-opacity pixel row instead.
-    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(232,237,242,0.035)"></rect>
-      <line x1="${x}" y1="${y}" x2="${x+w}" y2="${y}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
-      <line x1="${x}" y1="${y+h}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
-      <line x1="${x}" y1="${y}" x2="${x}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
-      <line x1="${x+w}" y1="${y}" x2="${x+w}" y2="${y+h}" stroke="${COLOR_MUTED}" stroke-width="1" stroke-dasharray="4,3" opacity="0.85" shape-rendering="crispEdges"></line>
-      ${labelMarkup}`;
+  // Who owns a connector. Colour follows the owner; the label names the band.
+  const OWNERS = {
+    ipaas:    { label:'iPaaS',          cls:'own-ipaas' },
+    broker:   { label:'Message Broker', cls:'own-broker' },
+    broker2:  { label:'Message Broker', cls:'own-broker' },  // a second, separate broker
+    external: { label:'',               cls:'own-external' }
+  };
+
+  // Connector symbols: half-width, and whether the symbol sits ON its
+  // platform's edge (API, file — a contract boundary) or inside it.
+  const SYMBOLS = {
+    api:     { half:26, edge:true },
+    file:    { half:24, edge:true },
+    process: { half:22, edge:false },
+    topic:   { half:20, edge:false },
+    queue:   { half:34, edge:false }
+  };
+
+  // All symbols are drawn centred on (0,0); colours come from CSS classes.
+  function symbolMarkup(type){
+    switch(type){
+      case 'api':      // home plate, tapered on the entry (left) side
+        return '<path class="n-shape" d="M26 -16H-11L-26 0L-11 16H26Z"></path>' +
+               '<text class="n-text" x="6" y="4.5" text-anchor="middle">API</text>';
+      case 'process':  // a cog inside a hexagon
+        return '<path class="n-shape" d="M-11 -20H11L22 0L11 20H-11L-22 0Z"></path>' +
+               '<circle class="n-line" r="9.2" stroke-width="3.4" stroke-dasharray="3.6 3.63"></circle>' +
+               '<circle class="n-line" r="6" stroke-width="3.2"></circle>';
+      case 'topic':    // one publisher fanning out to many subscribers
+        return '<rect class="n-shape" x="-20" y="-20" width="40" height="40" rx="10"></rect>' +
+               '<path class="n-line" stroke-width="2" d="M-9 0 9 -11M-9 0H9M-9 0 9 11"></path>' +
+               '<circle class="n-dot" cx="-9" cy="0" r="4"></circle><circle class="n-dot" cx="9" cy="-11" r="3"></circle>' +
+               '<circle class="n-dot" cx="9" cy="0" r="3"></circle><circle class="n-dot" cx="9" cy="11" r="3"></circle>';
+      case 'queue':    // a pipe with messages waiting inside
+        return '<path class="n-shape" d="M25 -14H-22C-29 -14 -34 -8 -34 0s5 14 12 14H25Z"></path>' +
+               '<ellipse class="n-shape" cx="25" cy="0" rx="7" ry="14"></ellipse>' +
+               '<rect class="n-dot" x="-23" y="-7" width="9" height="14" rx="2.5"></rect>' +
+               '<rect class="n-dot" x="-10" y="-7" width="9" height="14" rx="2.5"></rect>' +
+               '<rect class="n-dot" x="3" y="-7" width="9" height="14" rx="2.5"></rect>';
+      case 'file':     // a folder with a file in it
+        return '<rect class="n-shape" x="-9" y="-19" width="22" height="26" rx="3"></rect>' +
+               '<path class="n-line" stroke-width="2" d="M-4 -12h12M-4 -7h12"></path>' +
+               '<path class="n-shape" d="M-22 -6a4 4 0 0 1 4-4h10l5 6h21a4 4 0 0 1 4 4v15a4 4 0 0 1-4 4H-18a4 4 0 0 1-4-4Z"></path>';
+    }
+    return '';
   }
 
-  // A tiny caption naming an icon's role (e.g. "Process Flow", "Topic"),
-  // nested inside that icon's own <g> so it travels, hides and reappears
-  // together with it — same reasoning as arrowMarker below.
-  function iconCaption(text, cx, y){
-    return `<text x="${cx}" y="${y}" text-anchor="middle" font-family="${FONT_MONO}" font-size="6" letter-spacing="0.03em" fill="${COLOR_MUTED}" opacity="0.8">${text}</text>`;
+  // What each pattern contains, left to right: an entry connector, optional
+  // connectors in the middle (at = fraction of the block's width), and an
+  // exit connector. Two docked blocks share the connector on their seam;
+  // "strong" marks the side whose platform keeps ownership of it.
+  const NODE_SPECS = {
+    'api-to-process':     { entry:{type:'api', owner:'ipaas', strong:true},     mid:[], exit:{type:'process', owner:'ipaas', strong:true} },
+    'process-to-publish': { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'topic', owner:'broker'} },
+    'consume-to-process': { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.40}], exit:{type:'process', owner:'ipaas', strong:true} },
+    'process-to-api':     { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'api', owner:'external'} },
+    'file-to-process':    { entry:{type:'file', owner:'ipaas', strong:true},    mid:[], exit:{type:'process', owner:'ipaas', strong:true} },
+    'process-to-file':    { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'file', owner:'external'} },
+    'consume-to-api':     { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.50}], exit:{type:'api', owner:'external'} },
+    'consume-to-publish': { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.50}], exit:{type:'topic', owner:'broker2'} },
+    'api-to-publish':     { entry:{type:'api', owner:'external', strong:true},  mid:[], exit:{type:'topic', owner:'broker'} }
+  };
+
+  function tilePath(w, h){
+    const m = h/2;
+    return 'M4 4H' + (w-10) + 'L' + (w+TILE_D-13) + ' ' + m + 'L' + (w-10) + ' ' + (h-4) + 'H4L' + (TILE_D+2) + ' ' + m + 'Z';
+  }
+  function tileMarkup(w, h){
+    const d = tilePath(w, h);
+    return '<path class="tile-rim" d="' + d + '"></path><path class="tile-face" d="' + d + '"></path>';
+  }
+  function tileSvg(w, h){
+    return '<svg class="cblock-svg" width="' + (w+TILE_D) + '" height="' + h + '" viewBox="0 0 ' + (w+TILE_D) + ' ' + h + '">' + tileMarkup(w, h) + '</svg>';
   }
 
-  // A small teal arrowhead marking the message flow stepping into an icon.
-  // Meant to be nested inside that icon's own <g> so it travels, hides and
-  // reappears together with it (including when the icon slides to a seam).
-  function arrowMarker(x, y){
-    return `<polygon points="${x},${y-4} ${x+7},${y} ${x},${y+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>`;
+  // Turns a row of blocks into what the flow layer draws.
+  //   blocks: [{ left, top, w, tpl, variant }]  (variant = versioned-block id or null)
+  //   dimUnversioned: in the versioned copy, everything that isn't part of a
+  //   versioned block is drawn dimmed.
+  function buildFlowModel(blocks, dimUnversioned){
+    const sets = [];      // connector positions along the flow; a versioned block can put two lanes at one position
+    const links = [];
+    blocks.forEach((b, i) => {
+      const spec = NODE_SPECS[b.tpl];
+      const v = b.variant ? variantsById[b.variant] : null;
+      const cy = b.top + BLOCK_H/2;
+      const laneNodes = (end) => v.nodes.filter(n => n.type === end.type)
+        .map(n => ({ type:end.type, owner:end.owner, dy:LANE_DY[n.lane], role:n.role, ver:n.ver, key:n.k }));
+      let entry;
+      if(i === 0){
+        entry = { x:b.left + SEAM_X, cy, nodes:[{ type:spec.entry.type, owner:spec.entry.owner, dy:0 }], strong:!!spec.entry.strong, vblock:null };
+        sets.push(entry);
+      } else {
+        entry = sets[sets.length - 1];   // the seam shared with the upstream block
+        if(entry.vblock === null && (spec.entry.strong || !entry.strong)) entry.nodes[0].owner = spec.entry.owner;
+      }
+      if(v && entry.vblock === null){ entry.nodes = laneNodes(spec.entry); entry.vblock = i; }
+      const segs = [];
+      let last = entry;
+      spec.mid.forEach(m => {
+        const st = { x:b.left + SEAM_X + m.at*b.w, cy, nodes:[{ type:m.type, owner:m.owner, dy:0 }], strong:true, vblock: v ? i : null };
+        sets.push(st); segs.push([last, st]); last = st;
+      });
+      const exit = { x:b.left + b.w + SEAM_X, cy,
+        nodes: v ? laneNodes(spec.exit) : [{ type:spec.exit.type, owner:spec.exit.owner, dy:0 }],
+        strong:!!spec.exit.strong, vblock: v ? i : null };
+      sets.push(exit); segs.push([last, exit]);
+
+      const dim = dimUnversioned && !v;
+      if(v && segs.length === 1){
+        // a versioned block says exactly which lane connects to which
+        const at = (k) => {
+          for(const st of segs[0]){ const n = st.nodes.find(n => n.key === k); if(n) return { x:st.x, y:st.cy + n.dy }; }
+          return null;
+        };
+        v.links.forEach(([from, to, style]) => {
+          const a = at(from), z = at(to);
+          if(a && z) links.push({ x1:a.x, y1:a.y, x2:z.x, y2:z.y, retired: style === 'dotted', dim:false });
+        });
+      } else {
+        segs.forEach(([A, B]) => A.nodes.forEach(a => B.nodes.forEach(z => links.push({
+          x1:A.x, y1:A.cy + a.dy, x2:B.x, y2:B.cy + z.dy,
+          retired: a.role === 'retired' || z.role === 'retired', dim
+        }))));
+      }
+    });
+
+    // Platform bands: consecutive connectors with the same owner share one band.
+    // A versioned block keeps a band of its own.
+    const bands = [];
+    const bandKey = (st) => { const o = st.nodes[0].owner; return o === 'external' ? null : o + '|' + (st.vblock === null ? '' : st.vblock); };
+    let run = [];
+    const flush = () => {
+      if(run.length){
+        const first = run[0], last = run[run.length - 1];
+        const fs = SYMBOLS[first.nodes[0].type], ls = SYMBOLS[last.nodes[0].type];
+        if(!(run.length === 1 && fs.edge)){
+          const dys = run.flatMap(st => st.nodes.map(n => n.dy));
+          bands.push({
+            x1: first.x - (fs.edge ? 0 : fs.half + 12), x2: last.x + (ls.edge ? 0 : ls.half + 12),
+            y1: first.cy + Math.min(...dys) - BAND_R, y2: first.cy + Math.max(...dys) + BAND_R,
+            squareLeft: fs.edge, squareRight: ls.edge,
+            atStart: first === sets[0], atEnd: last === sets[sets.length - 1],
+            owner: first.nodes[0].owner, dim: dimUnversioned && first.vblock === null
+          });
+        }
+      }
+      run = [];
+    };
+    sets.forEach(st => {
+      const k = bandKey(st);
+      if(run.length && bandKey(run[0]) !== k) flush();
+      if(k !== null) run.push(st); else flush();
+    });
+    flush();
+
+    const nodes = [];
+    sets.forEach(st => st.nodes.forEach(n => nodes.push({
+      x:st.x, y:st.cy + n.dy, type:n.type, owner:n.owner, role:n.role || null, ver:n.ver || null,
+      dim: dimUnversioned && st.vblock === null
+    })));
+    return { bands, links, nodes };
   }
 
-  // Shared "API" icon: a home-plate shape — tapered, angular point on the
-  // entry side (message flowing in), flat edge on the exit side. Used for
-  // every API touchpoint, inbound or outbound, so the visual language for
-  // "this is an external contract boundary" stays consistent everywhere.
-  function apiIconMarkup(color){
-    return `<path d="M10,0 L44,0 L44,22 L10,22 L0,11 Z" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></path>
-      <text x="28" y="14.5" text-anchor="middle" font-family="${FONT_MONO}" font-size="8" fill="${color}" font-weight="700">API</text>`;
+  function flowMarkup(model){
+    let out = '';
+    model.bands.forEach(b => {
+      const r = BAND_R, w = b.x2 - b.x1, h = b.y2 - b.y1;
+      const rl = b.squareLeft ? 0 : r, rr = b.squareRight ? 0 : r;
+      const d = 'M' + (b.x1+rl) + ' ' + b.y1 + 'H' + (b.x2-rr) +
+        (rr ? 'a' + rr + ' ' + rr + ' 0 0 1 ' + rr + ' ' + rr + 'V' + (b.y2-rr) + 'a' + rr + ' ' + rr + ' 0 0 1 ' + (-rr) + ' ' + rr : 'V' + b.y2) +
+        'H' + (b.x1+rl) +
+        (rl ? 'a' + rl + ' ' + rl + ' 0 0 1 ' + (-rl) + ' ' + (-rl) + 'V' + (b.y1+rl) + 'a' + rl + ' ' + rl + ' 0 0 1 ' + rl + ' ' + (-rl) : 'V' + b.y1) + 'Z';
+      const cls = OWNERS[b.owner].cls + (b.dim ? ' dim' : '');
+      out += '<path class="band ' + cls + '" d="' + d + '"></path>';
+      const label = OWNERS[b.owner].label.toUpperCase();
+      if(label){
+        const narrow = w < label.length*7.5 + 44;
+        // a label wider than its band grows inwards at either end of the flow, so it never runs off the last block
+        const nx = b.atEnd && !b.atStart ? b.x2 - 6 : (b.atStart && !b.atEnd ? b.x1 + 6 : b.x1 + w/2);
+        const anchor = b.atEnd && !b.atStart ? 'end' : (b.atStart && !b.atEnd ? 'start' : 'middle');
+        out += narrow
+          ? '<text class="band-label ' + cls + '" x="' + nx + '" y="' + (b.y1 - 6) + '" text-anchor="' + anchor + '">' + label + '</text>'
+          : '<text class="band-label ' + cls + '" x="' + (b.x1 + (b.squareLeft ? 38 : 20)) + '" y="' + (b.y1 - 6) + '">' + label + '</text>';
+      }
+    });
+    model.links.forEach(l => {
+      const cls = 'link' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '');
+      if(l.y1 === l.y2){
+        out += '<line class="' + cls + '" x1="' + l.x1 + '" y1="' + l.y1 + '" x2="' + l.x2 + '" y2="' + l.y2 + '"></line>';
+        if(!l.retired && l.x2 - l.x1 >= 120){
+          const mx = (l.x1 + l.x2)/2;
+          out += '<path class="link-mark' + (l.dim ? ' dim' : '') + '" d="M' + (mx-2.5) + ' ' + (l.y1-4.5) + 'L' + (mx+2.5) + ' ' + l.y1 + 'L' + (mx-2.5) + ' ' + (l.y1+4.5) + '"></path>';
+        }
+      } else {
+        const mx = (l.x1 + l.x2)/2;
+        out += '<path class="' + cls + '" d="M' + l.x1 + ' ' + l.y1 + 'C' + mx + ' ' + l.y1 + ' ' + mx + ' ' + l.y2 + ' ' + l.x2 + ' ' + l.y2 + '"></path>';
+      }
+    });
+    model.nodes.forEach(n => {
+      const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '');
+      out += '<g class="node ' + cls + '" data-type="' + n.type + '"' + (n.role ? ' data-role="' + n.role + '"' : '') +
+        ' transform="translate(' + n.x + ',' + n.y + ')">' + symbolMarkup(n.type) + '</g>';
+      if(n.ver){
+        const bx = n.x + (n.type === 'api' ? 32 : SYMBOLS[n.type].half + 6), by = n.y - (n.type === 'api' ? 25 : 29);
+        out += '<g class="vbadge role-' + n.role + '"><rect x="' + bx + '" y="' + by + '" width="24" height="18" rx="6"></rect>' +
+          '<text x="' + (bx+12) + '" y="' + (by+13) + '" text-anchor="middle">' + n.ver + '</text></g>';
+      }
+    });
+    return out;
   }
 
-  // A file/document icon — same family as the API home-plate (an external
-  // contract touchpoint that always sits at the edge of its asset, never
-  // buried inside it): a folded-corner document, local box 0-36 x 0-24.
-  function fileIconMarkup(color){
-    return `<path d="M2,8 L13,8 L16,11 L34,11 L34,22 L2,22 Z" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.5"></path>
-      <path d="M10,1 L20,1 L23,4 L23,13 L10,13 Z" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.3"></path>
-      <path d="M20,1 L20,4 L23,4 Z" fill="none" stroke="${color}" stroke-width="1.05"></path>
-      <line x1="12.5" y1="7" x2="20.5" y2="7" stroke="${color}" stroke-width="0.9" opacity="0.7"></line>
-      <line x1="12.5" y1="9.5" x2="20.5" y2="9.5" stroke="${color}" stroke-width="0.9" opacity="0.7"></line>`;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function renderFlowLayer(worldEl, model){
+    let layer = worldEl.querySelector(':scope > svg.flow-layer');
+    if(!layer){
+      layer = document.createElementNS(SVG_NS, 'svg');
+      layer.setAttribute('class', 'flow-layer');
+      layer.setAttribute('width', '1');
+      layer.setAttribute('height', '1');
+      worldEl.appendChild(layer);
+    }
+    layer.innerHTML = flowMarkup(model);
   }
 
-  // Puzzle silhouette: rounded rect with a convex tab on the right
-  // edge (exit) and a concave notch on the left edge (entry).
-  function puzzlePath(w, h, cr, r){
-    const cy = h/2;
-    return [
-      `M ${cr},0`,
-      `H ${w-cr}`,
-      `A ${cr},${cr} 0 0 1 ${w},${cr}`,
-      `V ${cy-r}`,
-      `A ${r},${r} 0 0 1 ${w},${cy+r}`,
-      `V ${h-cr}`,
-      `A ${cr},${cr} 0 0 1 ${w-cr},${h}`,
-      `H ${cr}`,
-      `A ${cr},${cr} 0 0 1 0,${h-cr}`,
-      `V ${cy+r}`,
-      `A ${r},${r} 0 0 0 0,${cy-r}`,
-      `V ${cr}`,
-      `A ${cr},${cr} 0 0 1 ${cr},0`,
-      'Z'
-    ].join(' ');
+  // Standalone pictures of a single block, for the library cards.
+  function blockPreviewSvg(tpl){
+    const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
+    const model = buildFlowModel([{ left:0, top:0, w, tpl:tpl.id, variant:null }], false);
+    return '<svg viewBox="-16 -3 ' + (w+62) + ' ' + (BLOCK_H+6) + '">' + tileMarkup(w, BLOCK_H) + flowMarkup(model) + '</svg>';
   }
-
-  // ---------------------------------------------------------------
-  // Block diagram: API-to-Process
-  // Entry (left) -> API gateway icon -> processing icon -> Exit (right)
-  // ---------------------------------------------------------------
-  function apiToProcessDiagram(w, h, color){
-    const cy = h/2;
-    const procCx = w * 0.68;
-    // The API gateway sits fully inside the lego-block's own puzzle-piece
-    // shell — that outer shape is the physical block boundary and the icon
-    // never crosses it. What DOES sit on an edge is the icon relative to the
-    // dashed asset-context box: the box's edge runs straight through the
-    // icon's center, so half of it reads as "inside this asset" and half as
-    // the connector nub leading out to the block's own physical edge.
-    const gatewayT = `translate(0, ${cy-11})`;
-    const gearT = `translate(${procCx-15}, ${cy-15})`;
-    const boundY = cy - 26;
-    const boundH = 52;
-    const assetLeftX = 22; // the gateway icon's own local half-width — its center (API sits AT the edge)
-    const assetRightX = w + 15; // process icon's half-width past the true edge — box fully ENCLOSES it
-    return `
-      ${assetBox(assetLeftX, boundY, assetRightX-assetLeftX, boundH, 'iPaaS')}
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="api" data-boundary="true" data-fixed="true" data-half-x="22" data-half-y="11" data-default-transform="${gatewayT}" transform="${gatewayT}">
-        ${apiIconMarkup(color)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="process" data-boundary="true" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${arrowMarker(-9, 15)}
-        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
-        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
-        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
-        ${iconCaption('Process Flow', 15, 37)}
-      </g>
-      <polygon points="10,${cy-4} 17,${cy} 10,${cy+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: Process-to-Publish
-  // Entry (left) -> processing icon -> topic icon -> Exit (right)
-  // ---------------------------------------------------------------
-  function processToPublishDiagram(w, h, color){
-    const cy = h/2;
-    const procCx = w * 0.30;
-    const topicCx = w * 0.70;
-    const gearT = `translate(${procCx-15}, ${cy-15})`;
-    const topicT = `translate(${topicCx-17}, ${cy-15})`;
-    return `
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${assetBox(-16, -11, 62, 52, 'iPaaS')}
-        ${arrowMarker(-9, 15)}
-        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
-        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
-        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
-        ${iconCaption('Process Flow', 15, 37)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="topic" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
-        ${assetBox(-16, -11, 62, 52, 'Message Broker')}
-        ${arrowMarker(-9, 15)}
-        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
-        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
-        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
-        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
-        ${iconCaption('Topic', 17, 34)}
-      </g>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: Consume-to-Process
-  // Entry (docks to a topic) -> topic (merges with upstream) -> queue
-  // [asset boundary: broker] -> processing step [asset boundary: new
-  // independent platform] -> Exit
-  // ---------------------------------------------------------------
-  function consumeToProcessDiagram(w, h, color){
-    const cy = h/2;
-    const topicCx = w * 0.14;
-    const queueCx = w * 0.36;
-    const procCx = w * 0.80;
-    const topicT = `translate(${topicCx-17}, ${cy-15})`;
-    const queueT = `translate(${queueCx-25}, ${cy-7})`;
-    const procT = `translate(${procCx-15}, ${cy-15})`;
-
-    // b1 (broker: topic+queue) and b2 (independent processing platform) are
-    // both permanently complete boxes — they never open up on any side,
-    // merged or not. Unlike an API (which sits AT its box's edge), a
-    // process/topic icon should read as fully enclosed by its asset, so
-    // each box overshoots past the block's own true edge by that icon's
-    // half-width, wrapping all the way around it once it's docked and
-    // straddling the seam.
-    const b1x = -17; // topic icon's half-width past the true edge — box fully ENCLOSES it
-    const b1w = (queueCx + 30) - b1x;
-    const b2x = procCx - 24;
-    const b2w = (w + 15) - b2x; // process icon's half-width past the true edge
-    const bandY = cy - 26;
-    const bandH = 52;
-    const transitionX = (b1x + b1w + b2x) / 2;
-
-    return `
-      ${assetBox(b1x, bandY, b1w, bandH, 'Message Broker')}
-      ${assetBox(b2x, bandY, b2w, bandH, 'iPaaS')}
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <line x1="${transitionX}" y1="${bandY-4}" x2="${transitionX}" y2="${bandY+bandH+4}" stroke="${COLOR_TEAL}" stroke-width="1" stroke-dasharray="2,3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="topic" data-boundary="true" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
-        ${arrowMarker(-9, 15)}
-        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
-        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
-        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
-        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
-        ${iconCaption('Topic', 17, 34)}
-      </g>
-      <g class="icon-group" data-anchor="free" data-type="queue" transform="${queueT}">
-        ${arrowMarker(-9, 7)}
-        <rect x="4" y="0" width="42" height="14" rx="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.5"></rect>
-        <ellipse cx="4" cy="7" rx="2.6" ry="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.3"></ellipse>
-        <line x1="13" y1="2.5" x2="13" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="22" y1="2.5" x2="22" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="31" y1="2.5" x2="31" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="40" y1="2.5" x2="40" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        ${iconCaption('Queue', 23, 24)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="process" data-boundary="true" data-half-x="15" data-half-y="15" data-default-transform="${procT}" transform="${procT}">
-        ${arrowMarker(-9, 15)}
-        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
-        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
-        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
-        ${iconCaption('Process Flow', 15, 37)}
-      </g>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: Process-to-API
-  // Entry (processing, merges with upstream owner) -> posts to an
-  // external target API -> Exit. The API icon is the same generic,
-  // mergeable "api" type as API-to-Process's gateway, and gets its own
-  // asset-boundary box too — it belongs to some platform/asset (external
-  // application or another hybrid-middleware asset), that's all that
-  // matters, not which.
-  // ---------------------------------------------------------------
-  function processToApiDiagram(w, h, color){
-    const cy = h/2;
-    const procCx = w * 0.30;
-    // The target API sits fully inside the lego-block's own shell — that
-    // outer puzzle-piece shape is the physical block boundary, and the icon
-    // never crosses it. Its dashed asset-context box (nested with it) starts
-    // right at the icon — an API always marks the entry point into whatever
-    // asset it belongs to, so it sits on the box's LEFT edge, with the asset
-    // itself extending outward from there (matching API-to-Process's
-    // gateway, which follows the same left-edge convention). Since
-    // API-to-Process's gateway is the "owner" of any api-type merge, this
-    // icon simply fades away entirely when docked; nothing here needs to
-    // slide or continue past the boundary, so no continuation stub is
-    // needed on this side.
-    const apiT = `translate(${w-44}, ${cy-11})`;
-    const gearT = `translate(${procCx-15}, ${cy-15})`;
-    return `
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${assetBox(-16, -11, 62, 52, 'iPaaS')}
-        ${arrowMarker(-9, 15)}
-        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
-        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
-        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
-        ${iconCaption('Process Flow', 15, 37)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="api" data-fixed="true" data-half-x="22" data-half-y="11" data-default-transform="${apiT}" transform="${apiT}">
-        ${assetBox(22, -15, 40, 52)}
-        ${arrowMarker(-9, 11)}
-        ${apiIconMarkup(color)}
-      </g>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: File-to-Process
-  // A file dropped at (or polled from) an external location triggers
-  // processing. Same edge-anchored family as API-to-Process's gateway: the
-  // file icon sits fully inside the shell, flush against the entry edge,
-  // and the asset boundary starts right at its center.
-  // ---------------------------------------------------------------
-  function fileToProcessDiagram(w, h, color){
-    const cy = h/2;
-    const procCx = w * 0.68;
-    const fileT = `translate(0, ${cy-12})`;
-    const gearT = `translate(${procCx-15}, ${cy-15})`;
-    const boundY = cy - 26;
-    const boundH = 52;
-    const assetLeftX = 18; // the file icon's own local half-width — its center
-    const assetRightX = w + 15; // process icon's half-width past the true edge — box fully ENCLOSES it
-    return `
-      ${assetBox(assetLeftX, boundY, assetRightX-assetLeftX, boundH, 'iPaaS')}
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="file" data-boundary="true" data-fixed="true" data-half-x="18" data-half-y="12" data-default-transform="${fileT}" transform="${fileT}">
-        ${fileIconMarkup(color)}
-        ${iconCaption('SFTP', 18, 30)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="process" data-boundary="true" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${arrowMarker(-9, 15)}
-        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
-        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
-        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
-        ${iconCaption('Process Flow', 15, 37)}
-      </g>
-      <polygon points="10,${cy-4} 17,${cy} 10,${cy+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: Process-to-File
-  // A processing step writes its output to a file delivered to an external
-  // location. Mirror of Process-to-API, same edge-anchored file icon.
-  // ---------------------------------------------------------------
-  function processToFileDiagram(w, h, color){
-    const cy = h/2;
-    const procCx = w * 0.30;
-    const fileT = `translate(${w-36}, ${cy-12})`;
-    const gearT = `translate(${procCx-15}, ${cy-15})`;
-    return `
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="process" data-half-x="15" data-half-y="15" data-default-transform="${gearT}" transform="${gearT}">
-        ${assetBox(-16, -11, 62, 52, 'iPaaS')}
-        ${arrowMarker(-9, 15)}
-        <circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
-        <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
-        <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>
-        ${iconCaption('Process Flow', 15, 37)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="file" data-fixed="true" data-half-x="18" data-half-y="12" data-default-transform="${fileT}" transform="${fileT}">
-        ${assetBox(18, -14, 20, 52)}
-        ${arrowMarker(-9, 12)}
-        ${fileIconMarkup(color)}
-        ${iconCaption('SFTP', 18, 30)}
-      </g>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: Consume-to-API
-  // A subscription on the broker consumes from an upstream topic and
-  // posts the result straight to an external API — no separate processing
-  // step called out. Broker side mirrors Consume-to-Process; API side
-  // mirrors Process-to-API's target icon.
-  // ---------------------------------------------------------------
-  function consumeToApiDiagram(w, h, color){
-    const cy = h/2;
-    const topicCx = w * 0.14;
-    const queueCx = w * 0.36;
-    const topicT = `translate(${topicCx-17}, ${cy-15})`;
-    const queueT = `translate(${queueCx-25}, ${cy-7})`;
-    const apiT = `translate(${w-44}, ${cy-11})`;
-    const b1x = 0;
-    const b1w = queueCx + 30;
-    const bandY = cy - 26;
-    const bandH = 52;
-    return `
-      ${assetBox(b1x, bandY, b1w, bandH, 'Message Broker')}
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="topic" data-boundary="true" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
-        ${arrowMarker(-9, 15)}
-        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
-        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
-        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
-        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
-        ${iconCaption('Topic', 17, 34)}
-      </g>
-      <g class="icon-group" data-anchor="free" data-type="queue" transform="${queueT}">
-        ${arrowMarker(-9, 7)}
-        <rect x="4" y="0" width="42" height="14" rx="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.5"></rect>
-        <ellipse cx="4" cy="7" rx="2.6" ry="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.3"></ellipse>
-        <line x1="13" y1="2.5" x2="13" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="22" y1="2.5" x2="22" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="31" y1="2.5" x2="31" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="40" y1="2.5" x2="40" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        ${iconCaption('Queue', 23, 24)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="api" data-fixed="true" data-half-x="22" data-half-y="11" data-default-transform="${apiT}" transform="${apiT}">
-        ${assetBox(22, -15, 40, 52)}
-        ${arrowMarker(-9, 11)}
-        ${apiIconMarkup(color)}
-      </g>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: Consume-to-Publish
-  // A topic-to-topic bridge/relay: consume from an upstream topic, publish
-  // straight to a downstream topic — no separate processing step shown.
-  // ---------------------------------------------------------------
-  function consumeToPublishDiagram(w, h, color){
-    const cy = h/2;
-    const topicInCx = w * 0.14;
-    const queueCx = w * 0.36;
-    const topicOutCx = w * 0.75;
-    const topicInT = `translate(${topicInCx-17}, ${cy-15})`;
-    const queueT = `translate(${queueCx-25}, ${cy-7})`;
-    const topicOutT = `translate(${topicOutCx-17}, ${cy-15})`;
-    const b1x = 0;
-    const b1w = queueCx + 30;
-    const bandY = cy - 26;
-    const bandH = 52;
-    return `
-      ${assetBox(b1x, bandY, b1w, bandH, 'Message Broker')}
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="topic" data-boundary="true" data-half-x="17" data-half-y="15" data-default-transform="${topicInT}" transform="${topicInT}">
-        ${arrowMarker(-9, 15)}
-        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
-        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
-        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
-        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
-        ${iconCaption('Topic', 17, 34)}
-      </g>
-      <g class="icon-group" data-anchor="free" data-type="queue" transform="${queueT}">
-        ${arrowMarker(-9, 7)}
-        <rect x="4" y="0" width="42" height="14" rx="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.5"></rect>
-        <ellipse cx="4" cy="7" rx="2.6" ry="7" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.3"></ellipse>
-        <line x1="13" y1="2.5" x2="13" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="22" y1="2.5" x2="22" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="31" y1="2.5" x2="31" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        <line x1="40" y1="2.5" x2="40" y2="11.5" stroke="${color}" stroke-width="1" opacity="0.65"></line>
-        ${iconCaption('Queue', 23, 24)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="topic" data-half-x="17" data-half-y="15" data-default-transform="${topicOutT}" transform="${topicOutT}">
-        ${assetBox(-16, -11, 62, 52, 'Message Broker')}
-        ${arrowMarker(-9, 15)}
-        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
-        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
-        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
-        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
-        ${iconCaption('Topic', 17, 34)}
-      </g>
-    `;
-  }
-
-  // ---------------------------------------------------------------
-  // Block diagram: API-to-Publish
-  // An inbound API call directly triggers publishing an event to the
-  // broker — no separate processing step shown.
-  // ---------------------------------------------------------------
-  function apiToPublishDiagram(w, h, color){
-    const cy = h/2;
-    const topicCx = w * 0.68;
-    const gatewayT = `translate(0, ${cy-11})`;
-    const topicT = `translate(${topicCx-17}, ${cy-15})`;
-    const boundY = cy - 26;
-    const boundH = 52;
-    const assetLeftX = 22;
-    const assetRightX = Math.round(w * 0.4);
-    return `
-      ${assetBox(assetLeftX, boundY, assetRightX-assetLeftX, boundH)}
-      <line x1="6" y1="${cy}" x2="${w-6}" y2="${cy}" stroke="${COLOR_TEAL}" stroke-width="1.3" opacity="0.45"></line>
-      <g class="icon-group" data-anchor="entry" data-type="api" data-boundary="true" data-fixed="true" data-half-x="22" data-half-y="11" data-default-transform="${gatewayT}" transform="${gatewayT}">
-        ${apiIconMarkup(color)}
-      </g>
-      <g class="icon-group" data-anchor="exit" data-type="topic" data-half-x="17" data-half-y="15" data-default-transform="${topicT}" transform="${topicT}">
-        ${assetBox(-16, -11, 62, 52, 'Message Broker')}
-        ${arrowMarker(-9, 15)}
-        <rect x="0" y="4" width="34" height="22" rx="5" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></rect>
-        <line x1="6" y1="11" x2="28" y2="11" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="16" x2="28" y2="16" stroke="${color}" stroke-width="1.3"></line>
-        <line x1="6" y1="21" x2="28" y2="21" stroke="${color}" stroke-width="1.3"></line>
-        <path d="M30,1 Q35,3 35,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round"></path>
-        <path d="M32,-3 Q39,0 39,8" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.55"></path>
-        ${iconCaption('Topic', 17, 34)}
-      </g>
-      <polygon points="10,${cy-4} 17,${cy} 10,${cy+4}" fill="${COLOR_TEAL}" opacity="0.85"></polygon>
-    `;
+  function versionPreviewSvg(v){
+    const tpl = templatesById[v.base];
+    const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
+    const model = buildFlowModel([{ left:0, top:(VH-BLOCK_H)/2, w, tpl:tpl.id, variant:v.id }], false);
+    return '<svg viewBox="-16 -3 ' + (w+72) + ' ' + (VH+6) + '"><g class="versioned">' + tileMarkup(w, VH) + '</g>' + flowMarkup(model) + '</svg>';
   }
 
   // ---------------------------------------------------------------
@@ -947,7 +795,6 @@
       color:'#4FB6AC',
       entryType:'api',
       exitType:'process',
-      diagram: apiToProcessDiagram
     },
     {
       id:'process-to-publish',
@@ -958,7 +805,6 @@
       color:'#D9614B',
       entryType:'process',
       exitType:'topic',
-      diagram: processToPublishDiagram
     },
     {
       id:'consume-to-process',
@@ -969,7 +815,6 @@
       color:'#7C93AC',
       entryType:'topic',
       exitType:'process',
-      diagram: consumeToProcessDiagram
     },
     {
       id:'process-to-api',
@@ -980,7 +825,6 @@
       color:'#E8A33D',
       entryType:'process',
       exitType:'api',
-      diagram: processToApiDiagram
     },
     {
       id:'file-to-process',
@@ -991,7 +835,6 @@
       color:'#4FB6AC',
       entryType:'file',
       exitType:'process',
-      diagram: fileToProcessDiagram
     },
     {
       id:'process-to-file',
@@ -1002,7 +845,6 @@
       color:'#E8A33D',
       entryType:'process',
       exitType:'file',
-      diagram: processToFileDiagram
     },
     {
       id:'consume-to-api',
@@ -1013,7 +855,6 @@
       color:'#7C93AC',
       entryType:'topic',
       exitType:'api',
-      diagram: consumeToApiDiagram
     },
     {
       id:'consume-to-publish',
@@ -1024,7 +865,6 @@
       color:'#D9614B',
       entryType:'topic',
       exitType:'topic',
-      diagram: consumeToPublishDiagram
     },
     {
       id:'api-to-publish',
@@ -1035,7 +875,6 @@
       color:'#4FB6AC',
       entryType:'api',
       exitType:'topic',
-      diagram: apiToPublishDiagram
     }
   ];
   const templatesById = {};
@@ -1046,8 +885,8 @@
   // and to which open end (upstream/entry or downstream/exit)
   // ---------------------------------------------------------------
   function getIconType(blockEl, anchor){
-    const icon = blockEl.querySelector('.icon-group[data-anchor="' + anchor + '"]');
-    return icon ? icon.dataset.type : null;
+    const tpl = templatesById[blockEl.dataset.tpl];
+    return tpl ? (anchor === 'entry' ? tpl.entryType : tpl.exitType) : null;
   }
 
   function getChainOpenRequirements(){
@@ -1079,16 +918,7 @@
 
   function buildBlockMarkup(tpl){
     const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
-    const shell = puzzlePath(w, BLOCK_H, CORNER_R, TAB_R);
-    const diagram = tpl.diagram ? tpl.diagram(w, BLOCK_H, tpl.color) : '';
-    const svg =
-      '<svg class="cblock-svg" width="' + w + '" height="' + BLOCK_H + '" viewBox="0 0 ' + w + ' ' + BLOCK_H + '">' +
-        '<path class="cblock-shell" d="' + shell + '"></path>' +
-        diagram +
-        '<circle class="port left" cx="0" cy="' + (BLOCK_H/2) + '" r="5"></circle>' +
-        '<circle class="port right" cx="' + w + '" cy="' + (BLOCK_H/2) + '" r="5"></circle>' +
-      '</svg>';
-    return { svg:svg, width:w, height:BLOCK_H };
+    return { svg: tileSvg(w, BLOCK_H), width:w, height:BLOCK_H };
   }
 
   // ---------------------------------------------------------------
@@ -1135,96 +965,6 @@
   const variantsById = {};
   VERSION_VARIANTS.forEach(v => variantsById[v.id] = v);
 
-  // Versioned blocks are taller than base blocks (two lanes), centred on the
-  // same seam line so they still interlock with their neighbours.
-  const VH = 140;
-  const VCY = VH / 2;
-  const LANE_Y = { top: VCY - 24, mid: VCY, bot: VCY + 24 };
-  const VCOLOR = 'var(--accent-version)';
-  const ICON_S = 0.85;
-
-  function gearMarkup(color){
-    return `<circle cx="15" cy="15" r="14" fill="${COLOR_BG}" stroke="${color}" stroke-width="1.6"></circle>
-      <path d="M15,5 L15,9 M15,21 L15,25 M5,15 L9,15 M21,15 L25,15 M8,8 L10.8,10.8 M19.2,19.2 L22,22 M22,8 L19.2,10.8 M10.8,19.2 L8,22" stroke="${color}" stroke-width="1.3" stroke-linecap="round"></path>
-      <circle cx="15" cy="15" r="4.2" fill="none" stroke="${color}" stroke-width="1.3"></circle>`;
-  }
-
-  function versionBadge(x, y, ver, role){
-    let fill = COLOR_BG, stroke = COLOR_MUTED, ink = COLOR_MUTED, dash = '';
-    if(role === 'primary'){ fill = VCOLOR; stroke = VCOLOR; ink = 'var(--ink)'; }
-    else if(role === 'side'){ stroke = VCOLOR; ink = VCOLOR; dash = ' stroke-dasharray="2,1.5"'; }
-    return `<rect x="${x}" y="${y}" width="15" height="10" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="1"${dash}></rect>
-      <text x="${x+7.5}" y="${y+7.4}" text-anchor="middle" font-family="${FONT_MONO}" font-size="6.5" font-weight="700" fill="${ink}">${ver}</text>`;
-  }
-
-  function versionHalo(x, y, w, h, role){
-    if(role === 'primary')
-      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${VCOLOR}" fill-opacity="0.16" stroke="${VCOLOR}" stroke-width="1.2"></rect>`;
-    if(role === 'side')
-      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="none" stroke="${VCOLOR}" stroke-width="1.2" stroke-dasharray="3,2"></rect>`;
-    return '';
-  }
-
-  function versionLink(x1, y1, x2, y2, style){
-    const dotted = style === 'dotted';
-    const color = dotted ? COLOR_MUTED : COLOR_TEAL;
-    const a = Math.atan2(y2 - y1, x2 - x1);
-    const bx = x2 - 7*Math.cos(a), by = y2 - 7*Math.sin(a);
-    const px = 4*Math.sin(a), py = -4*Math.cos(a);
-    return `<line x1="${x1}" y1="${y1}" x2="${bx}" y2="${by}" stroke="${color}" stroke-width="1.4" opacity="${dotted ? 0.9 : 0.7}"${dotted ? ' stroke-dasharray="2,3"' : ''}></line>
-      <polygon points="${x2},${y2} ${bx+px},${by+py} ${bx-px},${by-py}" fill="${color}" opacity="${dotted ? 0.7 : 0.85}"></polygon>`;
-  }
-
-  // hasRight: a neighbour is docked on the exit side — the process icons then
-  // straddle the seam exactly like a merged process icon in the base flow.
-  function versionDiagram(v, w, hasRight){
-    const tpl = templatesById[v.base];
-    const apiW = 44*ICON_S, apiH = 22*ICON_S, gearR = 15*ICON_S;
-    const procX = hasRight ? w : Math.round(w*0.68);
-    const pos = {};
-    v.nodes.forEach(n => {
-      const y = LANE_Y[n.lane];
-      pos[n.k] = n.type === 'api'
-        ? { cx: apiW/2, cy: y, left: 0, right: apiW, top: y - apiH/2, bottom: y + apiH/2 }
-        : { cx: procX, cy: y, left: procX - gearR, right: procX + gearR, top: y - gearR, bottom: y + gearR };
-    });
-    const nodeByK = {};
-    v.nodes.forEach(n => nodeByK[n.k] = n);
-
-    let out = assetBox(apiW/2, 19, (w + 15) - apiW/2, VH - 43, 'iPaaS');
-    out += `<text x="${w/2}" y="12.5" text-anchor="middle" font-family="${FONT_MONO}" font-size="7" fill="${VCOLOR}" letter-spacing="0.02em">${v.label}</text>`;
-    v.links.forEach(([from, to, style]) => {
-      const a = pos[from], b = pos[to];
-      out += versionLink(a.right + 3, a.cy, b.left - 3, b.cy, style);
-    });
-    v.nodes.forEach(n => {
-      const p = pos[n.k];
-      const highlighted = n.role === 'primary' || n.role === 'side';
-      const color = highlighted ? VCOLOR : (n.role === 'retired' ? COLOR_MUTED : tpl.color);
-      let g = `<g class="vnode" data-role="${n.role}" data-node="${n.k}"${n.role === 'retired' ? ' opacity="0.45"' : ''}>`;
-      g += versionHalo(p.left - 4, p.top - 4, (p.right - p.left) + 8, (p.bottom - p.top) + 8, n.role);
-      g += `<g transform="translate(${p.left},${p.top}) scale(${ICON_S})">` +
-           (n.type === 'api' ? apiIconMarkup(color) : gearMarkup(color)) + '</g>';
-      // API badge sits beside the icon (above its outgoing link), clear of the
-      // asset-box label; process badge sits at the gear's top-right.
-      g += n.type === 'api'
-        ? versionBadge(p.right + 4, p.cy - 13, n.ver, n.role)
-        : versionBadge(p.right - 3, p.top - 9, n.ver, n.role);
-      g += '</g>';
-      out += g;
-    });
-    return out;
-  }
-
-  function buildVersionSvg(v, w, hasRight){
-    return '<svg class="cblock-svg" width="' + w + '" height="' + VH + '" viewBox="0 0 ' + w + ' ' + VH + '">' +
-      '<path class="cblock-shell" d="' + puzzlePath(w, VH, CORNER_R, TAB_R) + '"></path>' +
-      versionDiagram(v, w, hasRight) +
-      '<circle class="port left" cx="0" cy="' + VCY + '" r="5"></circle>' +
-      '<circle class="port right" cx="' + w + '" cy="' + VCY + '" r="5"></circle>' +
-      '</svg>';
-  }
-
   // ---------------------------------------------------------------
   // Palette
   // ---------------------------------------------------------------
@@ -1248,12 +988,11 @@
       div.appendChild(empty);
     } else {
       blocksForRoute.forEach(tpl => {
-        const built = buildBlockMarkup(tpl);
         const item = document.createElement('div');
         item.className = 'palette-block';
         item.draggable = true;
         item.title = tpl.purpose || '';
-        item.innerHTML = built.svg + '<div class="pb-label">' + tpl.label + '</div>';
+        item.innerHTML = blockPreviewSvg(tpl) + '<div class="pb-label">' + tpl.label + '</div>';
         item.addEventListener('dragstart', (e) => {
           if(item.classList.contains('unavailable')){ e.preventDefault(); return; }
           e.dataTransfer.setData('application/json', JSON.stringify({templateId: tpl.id}));
@@ -1303,7 +1042,7 @@
       item.className = 'palette-block version-card';
       item.draggable = true;
       item.title = v.purpose;
-      item.innerHTML = buildVersionSvg(v, w, false) +
+      item.innerHTML = versionPreviewSvg(v) +
         '<div class="pb-label">' + v.label + '</div><div class="pb-sub">' + tpl.label + '</div>';
       item.addEventListener('dragstart', (e) => {
         if(item.classList.contains('unavailable')){ e.preventDefault(); return; }
@@ -1317,6 +1056,46 @@
     });
     versionGrid.appendChild(div);
   });
+
+  // Drag the library's right edge to resize it; the cards grow with it.
+  (function(){
+    const app = document.querySelector('.app');
+    const handle = document.getElementById('paletteResizer');
+    const MIN = 220, DEFAULT = 260;
+    const maxW = () => Math.max(MIN, Math.min(720, window.innerWidth - 360));
+    const setW = (w) => {
+      w = Math.round(Math.min(maxW(), Math.max(MIN, w)));
+      app.style.setProperty('--palette-w', w + 'px');
+      return w;
+    };
+    try { const saved = parseInt(localStorage.getItem('pb.paletteWidth'), 10); if(saved) setW(saved); } catch(err){}
+    const remember = (w) => { try { localStorage.setItem('pb.paletteWidth', String(w)); } catch(err){} };
+    let dragging = false, grabOffset = 0;
+    handle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      // keep the edge under the cursor exactly where it was grabbed
+      grabOffset = e.clientX - handle.getBoundingClientRect().right;
+      handle.setPointerCapture(e.pointerId);
+      handle.classList.add('dragging');
+      document.body.classList.add('resizing-palette');
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', (e) => { if(dragging) setW(e.clientX - grabOffset - app.getBoundingClientRect().left); });
+    const stop = (e) => {
+      if(!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing-palette');
+      remember(parseInt(getComputedStyle(app).getPropertyValue('--palette-w'), 10) || DEFAULT);
+    };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+    handle.addEventListener('dblclick', () => remember(setW(DEFAULT)));
+    window.addEventListener('resize', () => {
+      const cur = parseInt(getComputedStyle(app).getPropertyValue('--palette-w'), 10);
+      if(cur) setW(cur);
+    });
+  })();
 
   const paletteTabs = document.querySelectorAll('.palette-tab');
   const paletteHeadDesc = document.getElementById('paletteHeadDesc');
@@ -1359,7 +1138,7 @@
       item.draggable = ok;
       item.title = ok ? v.purpose : 'Add a ' + templatesById[v.base].label + ' block to the base flow first';
     });
-    renderCopy();
+    renderFlows();
   }
 
   // ---------------------------------------------------------------
@@ -1376,36 +1155,44 @@
   const coordZoom = document.getElementById('coordZoom');
   const zoomReadout = document.getElementById('zoomReadout');
 
-  let panX = 60, panY = 60, zoom = 1;
+  let panX = 60, panY = 60, zoom = 1;       // view of the base flow
+  let vPanX = 60, vPanY = 60, vZoom = 1;    // view of the versioned copy — independent of the base
+  let activePane = 'base';                  // the pane the toolbar's zoom buttons act on (the one last touched)
   let snap = true;
   let selectedBlock = null;
   let blockCounter = 0;
 
   function applyTransform(){
     world.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
-    vworld.style.transform = world.style.transform; // same view, so the copy lines up block-for-block
-    zoomReadout.textContent = Math.round(zoom*100) + '%';
-    coordZoom.textContent = Math.round(zoom*100) + '%';
+    vworld.style.transform = 'translate(' + vPanX + 'px,' + vPanY + 'px) scale(' + vZoom + ')';
+    const z = activePane === 'copy' ? vZoom : zoom;
+    zoomReadout.textContent = Math.round(z*100) + '%';
+    coordZoom.textContent = Math.round(z*100) + '%';
     updateGrid();
   }
 
+  // A faint dot at every snap point (20px), thinned out when zoomed far out.
+  function dotGrid(el, px, py, z){
+    let step = 20 * z;
+    while(step < 14) step *= 2;
+    const r = Math.max(1, Math.min(1.6, 1.1 * z));
+    el.style.backgroundImage = 'radial-gradient(circle, var(--grid-dot) ' + r + 'px, transparent ' + (r + 0.6) + 'px)';
+    el.style.backgroundSize = step + 'px ' + step + 'px';
+    el.style.backgroundPosition = ((((px % step) + step) % step) - step/2) + 'px ' + ((((py % step) + step) % step) - step/2) + 'px';
+  }
   function updateGrid(){
-    const fine = 20 * zoom;
-    const strong = 100 * zoom;
-    const offX = ((panX % fine) + fine) % fine;
-    const offY = ((panY % fine) + fine) % fine;
-    const offXs = ((panX % strong) + strong) % strong;
-    const offYs = ((panY % strong) + strong) % strong;
-    canvasWrap.style.backgroundImage =
-      'linear-gradient(var(--grid-line) 1px, transparent 1px),' +
-      'linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),' +
-      'linear-gradient(var(--grid-line-strong) 1px, transparent 1px),' +
-      'linear-gradient(90deg, var(--grid-line-strong) 1px, transparent 1px)';
-    canvasWrap.style.backgroundSize = fine+'px '+fine+'px, '+fine+'px '+fine+'px, '+strong+'px '+strong+'px, '+strong+'px '+strong+'px';
-    canvasWrap.style.backgroundPosition = offX+'px '+offY+'px, '+offX+'px '+offY+'px, '+offXs+'px '+offYs+'px, '+offXs+'px '+offYs+'px';
-    versionPane.style.backgroundImage = canvasWrap.style.backgroundImage;
-    versionPane.style.backgroundSize = canvasWrap.style.backgroundSize;
-    versionPane.style.backgroundPosition = canvasWrap.style.backgroundPosition;
+    dotGrid(canvasWrap, panX, panY, zoom);
+    dotGrid(versionPane, vPanX, vPanY, vZoom);
+  }
+
+  function setActivePane(pane){
+    if(pane === 'copy' && !canvasWrap.classList.contains('split')) pane = 'base';
+    activePane = pane;
+    document.getElementById('baseTag').classList.toggle('active', pane === 'base');
+    document.getElementById('copyTag').classList.toggle('active', pane === 'copy');
+    const z = pane === 'copy' ? vZoom : zoom;
+    zoomReadout.textContent = Math.round(z*100) + '%';
+    coordZoom.textContent = Math.round(z*100) + '%';
   }
 
   function clientToWorld(clientX, clientY){
@@ -1413,32 +1200,42 @@
     return { x:(clientX-rect.left-panX)/zoom, y:(clientY-rect.top-panY)/zoom };
   }
 
-  function setZoomAtScreenPoint(newZoom, screenX, screenY){
+  function setZoomAtScreenPoint(newZoom, screenX, screenY, pane){
     newZoom = Math.min(2.5, Math.max(0.25, newZoom));
-    const rect = canvasWrap.getBoundingClientRect();
-    const wx = (screenX-rect.left-panX)/zoom;
-    const wy = (screenY-rect.top-panY)/zoom;
-    zoom = newZoom;
-    panX = (screenX-rect.left) - wx*zoom;
-    panY = (screenY-rect.top) - wy*zoom;
+    const copy = pane === 'copy';
+    const rect = (copy ? versionPane : canvasWrap).getBoundingClientRect();
+    const px = copy ? vPanX : panX, py = copy ? vPanY : panY, z = copy ? vZoom : zoom;
+    const wx = (screenX - rect.left - px) / z;
+    const wy = (screenY - rect.top - py) / z;
+    const nx = (screenX - rect.left) - wx*newZoom;
+    const ny = (screenY - rect.top) - wy*newZoom;
+    if(copy){ vZoom = newZoom; vPanX = nx; vPanY = ny; }
+    else { zoom = newZoom; panX = nx; panY = ny; }
     applyTransform();
   }
 
-  document.getElementById('zoomIn').addEventListener('click', () => {
-    const rect = canvasWrap.getBoundingClientRect();
-    setZoomAtScreenPoint(zoom+0.15, rect.left+rect.width/2, rect.top+rect.height/2);
+  // Toolbar zoom acts on the pane you touched last, around that pane's centre.
+  function zoomActivePane(delta){
+    const copy = activePane === 'copy';
+    const rect = (copy ? versionPane : canvasWrap).getBoundingClientRect();
+    const h = (!copy && canvasWrap.classList.contains('split')) ? rect.height/2 : rect.height;
+    setZoomAtScreenPoint((copy ? vZoom : zoom) + delta, rect.left + rect.width/2, rect.top + h/2, activePane);
+  }
+  document.getElementById('zoomIn').addEventListener('click', () => zoomActivePane(0.15));
+  document.getElementById('zoomOut').addEventListener('click', () => zoomActivePane(-0.15));
+  // Reset view puts both panes back to the starting view.
+  document.getElementById('zoomReset').addEventListener('click', () => {
+    panX = 60; panY = 60; zoom = 1;
+    vPanX = 60; vPanY = 60; vZoom = 1;
+    applyTransform();
   });
-  document.getElementById('zoomOut').addEventListener('click', () => {
-    const rect = canvasWrap.getBoundingClientRect();
-    setZoomAtScreenPoint(zoom-0.15, rect.left+rect.width/2, rect.top+rect.height/2);
-  });
-  document.getElementById('zoomReset').addEventListener('click', () => { panX=60; panY=60; zoom=1; applyTransform(); });
 
   canvasWrap.addEventListener('wheel', (e) => {
     e.preventDefault();
     const factor = e.deltaY > 0 ? 0.92 : 1.08;
-    const inPane = versionPane.contains(e.target);
-    setZoomAtScreenPoint(zoom*factor, e.clientX, e.clientY - (inPane ? versionPane.offsetTop : 0));
+    const pane = versionPane.contains(e.target) ? 'copy' : 'base';
+    setActivePane(pane);
+    setZoomAtScreenPoint((pane === 'copy' ? vZoom : zoom)*factor, e.clientX, e.clientY, pane);
   }, { passive:false });
 
   const snapToggle = document.getElementById('snapToggle');
@@ -1499,32 +1296,42 @@
   // ---------------------------------------------------------------
   // Canvas panning (drag empty space) + click-to-deselect
   // ---------------------------------------------------------------
-  let isPanning = false, panStartX, panStartY, panOrigX, panOrigY, movedDuringPan = false;
+  let isPanning = false, panStartX, panStartY, panOrigX, panOrigY, movedDuringPan = false, panPane = 'base';
 
   canvasWrap.addEventListener('pointerdown', (e) => {
     if(e.target !== canvasWrap && e.target !== world && e.target !== versionPane && e.target !== vworld) return;
     isPanning = true;
     movedDuringPan = false;
     panStartX = e.clientX; panStartY = e.clientY;
-    panOrigX = panX; panOrigY = panY;
+    panPane = (e.target === versionPane || e.target === vworld) ? 'copy' : 'base';
+    setActivePane(panPane);
+    panOrigX = panPane === 'copy' ? vPanX : panX;
+    panOrigY = panPane === 'copy' ? vPanY : panY;
     canvasWrap.classList.add('panning');
     canvasWrap.setPointerCapture(e.pointerId);
+    // Stop the browser starting its own text-selection drag: it cancels the
+    // pointer mid-pan and used to leave panning stuck on.
+    e.preventDefault();
   });
   canvasWrap.addEventListener('pointermove', (e) => {
     if(!isPanning) return;
     const dx = e.clientX - panStartX;
     const dy = e.clientY - panStartY;
     if(Math.abs(dx) > 3 || Math.abs(dy) > 3) movedDuringPan = true;
-    panX = panOrigX + dx;
-    panY = panOrigY + dy;
+    if(panPane === 'copy'){ vPanX = panOrigX + dx; vPanY = panOrigY + dy; }
+    else { panX = panOrigX + dx; panY = panOrigY + dy; }
     applyTransform();
   });
   canvasWrap.addEventListener('pointerup', (e) => {
     if(!isPanning) return;
     isPanning = false;
     canvasWrap.classList.remove('panning');
-    canvasWrap.releasePointerCapture(e.pointerId);
+    if(canvasWrap.hasPointerCapture(e.pointerId)) canvasWrap.releasePointerCapture(e.pointerId);
     if(!movedDuringPan) deselectAll();
+  });
+  canvasWrap.addEventListener('pointercancel', () => {
+    isPanning = false;
+    canvasWrap.classList.remove('panning');
   });
 
   // ---------------------------------------------------------------
@@ -1582,9 +1389,6 @@
   function commitDock(elA, sideA, elB, sideB){
     elA.dataset[sideA + 'Linked'] = elB.dataset.id;
     elB.dataset[sideB + 'Linked'] = elA.dataset.id;
-    elA.querySelector('.port.' + sideA).classList.add('merged');
-    elB.querySelector('.port.' + sideB).classList.add('merged');
-    tryMergeIcons(elA, sideA, elB, sideB);
   }
 
   function createBlock(tpl, x, y){
@@ -1616,141 +1420,6 @@
     selectedBlock = el;
   }
 
-  // ---------------------------------------------------------------
-  // Port geometry + docking (merge) logic
-  // ---------------------------------------------------------------
-
-  // A block's entry/exit-anchored icon (e.g. its "process" gear) can fuse
-  // with a matching icon on whatever it docks to, so two lego-blocks that
-  // each own half of the same logical step render as a single shared icon.
-  function findIconByAnchor(elem, anchor){
-    return elem.querySelector('.icon-group[data-anchor="' + anchor + '"]');
-  }
-
-  // The surviving icon of a merge sits right on the shared seam and its
-  // shape (plus, for slid icons, its box border) physically pokes a few
-  // pixels into the neighboring block. Both blocks share the same default
-  // z-index, so whichever was created later would otherwise paint over it.
-  // Track boost need per-side so one side undocking doesn't strip a boost
-  // still required by the other side.
-  function setBoost(elem, side, on){
-    elem.dataset[side + 'Boosted'] = on ? 'true' : '';
-    const boosted = elem.dataset.leftBoosted === 'true' || elem.dataset.rightBoosted === 'true';
-    elem.classList.toggle('z-boost', boosted);
-  }
-
-  function tryMergeIcons(el, mySide, other, otherSide){
-    const mySideAnchor = mySide === 'left' ? 'entry' : 'exit';
-    const otherSideAnchor = otherSide === 'left' ? 'entry' : 'exit';
-    const myIcon = findIconByAnchor(el, mySideAnchor);
-    const otherIcon = findIconByAnchor(other, otherSideAnchor);
-    if(!myIcon || !otherIcon) return;
-    if(myIcon.dataset.type !== otherIcon.dataset.type) return; // different roles, keep both visible
-
-    // If one side's icon is the owner of a drawn asset-boundary box, it must be
-    // the one that survives — otherwise the visible icon could end up outside
-    // the box, depending purely on which block happened to be dragged.
-    const type = myIcon.dataset.type;
-    let keepEl, keepSide, keepIcon, hideEl, hideSide, hideIcon;
-
-    if(type === 'api' || type === 'file'){
-      // An API or file touchpoint is always modeled as living at the entry
-      // of whichever asset it belongs to — the entry-side copy is the
-      // permanent one; the exit-side copy is a stand-in that fades once it
-      // turns out to be the same door. This is derived straight from
-      // anchor, independent of any boundary-flag bookkeeping, so it can't
-      // get the sides backwards.
-      if(mySideAnchor === 'entry'){
-        keepEl = el; keepSide = mySide; keepIcon = myIcon;
-        hideEl = other; hideSide = otherSide; hideIcon = otherIcon;
-      } else {
-        keepEl = other; keepSide = otherSide; keepIcon = otherIcon;
-        hideEl = el; hideSide = mySide; hideIcon = myIcon;
-      }
-    } else {
-      const myIsOwner = myIcon.dataset.boundary === 'true';
-      const otherIsOwner = otherIcon.dataset.boundary === 'true';
-      if(myIsOwner && !otherIsOwner){
-        keepEl = el; keepSide = mySide; keepIcon = myIcon;
-        hideEl = other; hideSide = otherSide; hideIcon = otherIcon;
-      } else {
-        // default (also covers "otherIsOwner" and "neither is an owner"): keep
-        // the stationary block's copy, fade the dragged-in block's copy.
-        keepEl = other; keepSide = otherSide; keepIcon = otherIcon;
-        hideEl = el; hideSide = mySide; hideIcon = myIcon;
-      }
-    }
-
-    hideIcon.classList.add('icon-hidden');
-    hideEl.dataset[hideSide + 'IconAction'] = 'hidden';
-
-    // Boost the keeper above its neighbor's default paint layer so the
-    // surviving icon (which sits right at the shared seam and can overlap
-    // the neighbor's own rendered area by a few pixels) never gets
-    // physically covered by whichever block happens to be later in the DOM.
-    setBoost(keepEl, keepSide, true);
-
-    // Edge-fixed icons (APIs) are already positioned exactly where a merge
-    // would put them — nothing to move. "Inset" icons (process, topic)
-    // normally live inside the block and need to slide out to the seam so
-    // they land exactly where the (now-hidden) neighbor's copy used to be.
-    // Either way, the boxes themselves are untouched: whichever box belongs
-    // to the surviving icon just stays exactly as it always was, so it
-    // always reads as one complete rectangle, never half-open.
-    if(keepIcon.dataset.fixed === 'true'){
-      keepEl.dataset[keepSide + 'IconAction'] = '';
-      return;
-    }
-
-    // Each icon type has its own local geometry (a "process" gear and an
-    // "api" home-plate aren't centered the same way), so the seam offset
-    // has to come from the icon itself, not a single shared constant.
-    const halfX = parseFloat(keepIcon.dataset.halfX) || ICON_HALF;
-    const halfY = parseFloat(keepIcon.dataset.halfY) || ICON_HALF;
-    const keepAnchor = keepSide === 'left' ? 'entry' : 'exit';
-    const keepW = parseFloat(keepEl.style.width);
-    // Tuck the icon fully inside the lego-block shell — its outer edge
-    // touches the block's own boundary but never crosses it (same rule as
-    // the API icons). The permanent asset box's edge already sits at the
-    // icon's center for this same reason, so the two line up automatically.
-    // Unlike APIs (always at the edge), a merged process/topic icon should
-    // read as fully *enclosed* by its asset — so it straddles the block's
-    // physical edge, and the owner's box (below) extends past that edge to
-    // fully wrap around it rather than stopping at the boundary.
-    const seamX = keepAnchor === 'entry' ? -halfX : (keepW - halfX);
-    keepIcon.setAttribute('transform', 'translate(' + seamX + ',' + (BLOCK_H/2 - halfY) + ')');
-    keepEl.dataset[keepSide + 'IconAction'] = 'moved';
-  }
-
-  function restoreMergedIcon(elem, side){
-    setBoost(elem, side, false);
-
-    const action = elem.dataset[side + 'IconAction'];
-    if(!action) return;
-    const anchor = side === 'left' ? 'entry' : 'exit';
-    const icon = findIconByAnchor(elem, anchor);
-    if(icon){
-      if(action === 'hidden') icon.classList.remove('icon-hidden');
-      else if(action === 'moved') icon.setAttribute('transform', icon.dataset.defaultTransform);
-    }
-    elem.dataset[side + 'IconAction'] = '';
-  }
-
-  function clearLink(el, side){
-    const linkedId = el.dataset[side + 'Linked'];
-    if(!linkedId) return;
-    const other = world.querySelector('[data-id="' + linkedId + '"]');
-    el.dataset[side + 'Linked'] = '';
-    el.querySelector('.port.' + side).classList.remove('merged');
-    restoreMergedIcon(el, side);
-    if(other){
-      const otherSide = side === 'left' ? 'right' : 'left';
-      other.dataset[otherSide + 'Linked'] = '';
-      other.querySelector('.port.' + otherSide).classList.remove('merged');
-      restoreMergedIcon(other, otherSide);
-    }
-  }
-
   // Only the end blocks of the single chain can be removed individually
   // (shrinking that end); removing anything in the middle would split the
   // flow into two, which this canvas doesn't support, so it resets instead.
@@ -1763,15 +1432,11 @@
     } else if(idx === 0){
       const neighbor = chainOrder[1];
       neighbor.dataset.leftLinked = '';
-      neighbor.querySelector('.port.left').classList.remove('merged');
-      restoreMergedIcon(neighbor, 'left');
       chainOrder.shift();
       el.remove();
     } else if(idx === chainOrder.length - 1){
       const neighbor = chainOrder[chainOrder.length - 2];
       neighbor.dataset.rightLinked = '';
-      neighbor.querySelector('.port.right').classList.remove('merged');
-      restoreMergedIcon(neighbor, 'right');
       chainOrder.pop();
       el.remove();
     } else {
@@ -1799,10 +1464,23 @@
   // ---------------------------------------------------------------
   // Versioned copy (bottom half of the split canvas)
   // ---------------------------------------------------------------
-  // Rebuilt from scratch from the base flow after every base change: unchanged
-  // blocks are clones of their base block (dimmed); a versioned block replaces
-  // its base block's clone in place, at the same x, and is the only thing in
-  // the copy you can select. Deleting a base block drops its version too.
+  // Rebuilt from scratch from the base flow after every base change. Unchanged
+  // blocks are dimmed stand-ins; a versioned block takes its base block's place
+  // at the same x and is the only thing in the copy you can select. Deleting a
+  // base block drops its version too.
+  function chainGeometry(withVersions){
+    return chainOrder.map(b => ({
+      left: parseFloat(b.style.left), top: parseFloat(b.style.top), w: parseFloat(b.style.width),
+      tpl: b.dataset.tpl, variant: withVersions ? (versionOverrides[b.dataset.id] || null) : null
+    }));
+  }
+
+  // Redraws both panes' flow layers (and the copy's tiles).
+  function renderFlows(){
+    renderFlowLayer(world, buildFlowModel(chainGeometry(false), false));
+    renderCopy();
+  }
+
   function renderCopy(){
     const ids = new Set(chainOrder.map(b => b.dataset.id));
     Object.keys(versionOverrides).forEach(k => { if(!ids.has(k)) delete versionOverrides[k]; });
@@ -1812,32 +1490,32 @@
     canvasWrap.classList.toggle('split', active);
     vworld.innerHTML = '';
     selectedCopy = null;
-    if(!active) return;
+    if(!active){ if(wasActive) setActivePane('base'); return; }
 
-    chainOrder.forEach((b, i) => {
+    chainOrder.forEach((b) => {
       const vid = versionOverrides[b.dataset.id];
-      const hasLeft = i > 0, hasRight = i < chainOrder.length - 1;
-      let el;
+      const w = parseFloat(b.style.width);
+      const h = vid ? VH : BLOCK_H;
+      const el = document.createElement('div');
+      el.className = 'cblock copy-block' + (vid ? ' versioned' : '');
+      el.style.left = b.style.left;
+      el.style.top = (parseFloat(b.style.top) - (h - BLOCK_H)/2) + 'px';
+      el.style.width = w + 'px';
+      el.style.height = h + 'px';
+      el.dataset.baseId = b.dataset.id;
+      el.dataset.tpl = b.dataset.tpl;
       if(vid){
         const v = variantsById[vid];
-        const w = parseFloat(b.style.width);
-        el = document.createElement('div');
-        el.className = 'cblock copy-block versioned';
-        el.style.left = b.style.left;
-        el.style.top = (parseFloat(b.style.top) - (VH - BLOCK_H)/2) + 'px';
-        el.style.width = w + 'px';
-        el.style.height = VH + 'px';
         el.dataset.variant = vid;
         el.title = v.label + ' — ' + v.purpose;
-        el.innerHTML = buildVersionSvg(v, w, hasRight) +
-          '<div class="cblock-label"></div><div class="delete-x" title="Remove this version">\u00D7</div>';
-        el.querySelector('.cblock-label').textContent = b.querySelector('.cblock-label').textContent;
-        if(hasLeft) el.querySelector('.port.left').classList.add('merged');
-        if(hasRight) el.querySelector('.port.right').classList.add('merged');
+        el.innerHTML = tileSvg(w, h) + '<div class="vcaption"></div><div class="cblock-label"></div>' +
+          '<div class="delete-x" title="Remove this version">×</div>';
+        el.querySelector('.vcaption').textContent = v.label;
         el.addEventListener('pointerdown', (e) => {
           e.stopPropagation();
           if(e.target.classList.contains('delete-x')) return;
           deselectAll();
+          setActivePane('copy');
           el.classList.add('selected');
           selectedCopy = el;
         });
@@ -1846,35 +1524,25 @@
           removeVersion(el.dataset.baseId);
         });
       } else {
-        el = b.cloneNode(true);
-        el.classList.remove('selected', 'dragging');
-        el.classList.add('copy-block');
-        el.removeAttribute('data-id');
-        el.removeAttribute('title');
-        // a versioned neighbour draws the shared seam icons itself
-        if(hasLeft && versionOverrides[chainOrder[i-1].dataset.id]){
-          const ic = el.querySelector('.icon-group[data-anchor="entry"]');
-          if(ic) ic.classList.add('icon-hidden');
-        }
-        if(hasRight && versionOverrides[chainOrder[i+1].dataset.id]){
-          const ic = el.querySelector('.icon-group[data-anchor="exit"]');
-          if(ic) ic.classList.add('icon-hidden');
-        }
+        el.innerHTML = tileSvg(w, h) + '<div class="cblock-label"></div>';
       }
-      el.dataset.baseId = b.dataset.id;
+      el.querySelector('.cblock-label').textContent = b.querySelector('.cblock-label').textContent;
       vworld.appendChild(el);
       if(keepSelected && keepSelected === b.dataset.id && vid){ el.classList.add('selected'); selectedCopy = el; }
     });
-    if(!wasActive) fitFlowIntoTopHalf();
+    renderFlowLayer(vworld, buildFlowModel(chainGeometry(true), true));
+    if(!wasActive) openCopyView();
   }
 
-  // When the split first opens, centre the flow vertically in the top half,
-  // so the copy lands centred in the bottom half too.
-  function fitFlowIntoTopHalf(){
+  // When the split first opens: centre the base flow in the top half and start
+  // the copy at the same view, so it appears directly underneath. From then on
+  // the two panes pan and zoom independently.
+  function openCopyView(){
     if(chainOrder.length === 0) return;
     const half = canvasWrap.clientHeight / 2;
     const top = Math.min(...chainOrder.map(b => parseFloat(b.style.top))) - (VH - BLOCK_H)/2;
     panY = Math.max(36, (half - VH*zoom)/2 + 6) - top*zoom;
+    vPanX = panX; vPanY = panY; vZoom = zoom;
     applyTransform();
   }
 
@@ -2118,6 +1786,7 @@
       if(e.target.classList.contains('cblock-label') && e.target.isContentEditable) return;
       e.stopPropagation();
       selectBlock(el);
+      setActivePane('base');
       dragging = true;
       el.setPointerCapture(e.pointerId);
       startX = e.clientX; startY = e.clientY;
@@ -2148,7 +1817,7 @@
       });
       coordX.textContent = Math.round(snappedLeft);
       coordY.textContent = Math.round(snappedTop);
-      if(canvasWrap.classList.contains('split')) renderCopy();
+      renderFlows();
     });
 
     el.addEventListener('pointerup', (e) => {
@@ -2215,7 +1884,8 @@
   window.__debug = { templatesById, attachToChain, removeChainBlock, recordHistory,
     serializeFlow, validateFlow, loadFlow, undo, redo, chainOrder: () => chainOrder,
     dropVersion: (vid, x, y) => dropVersion(variantsById[vid], x, y), removeVersion,
-    versionOverrides: () => versionOverrides, variantsById };
+    versionOverrides: () => versionOverrides, variantsById,
+    views: () => ({ base:{ panX, panY, zoom }, copy:{ panX:vPanX, panY:vPanY, zoom:vZoom }, active:activePane }) };
 })();
 </script>
 </body>

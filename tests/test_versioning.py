@@ -39,13 +39,13 @@ with sync_playwright() as p:
     check('first drop creates split + version', split() and ov() == ['a2p-contract-parallel'])
     check('copy has one block per base block', pg.locator('#vworld .cblock').count() == 3)
     check('copy versioned block aligned to base x', ev("document.querySelector('#vworld .versioned').style.left === window.__debug.chainOrder()[0].style.left"))
-    check('roles drawn: 1 primary, 1 side-effect', pg.locator('#vworld .vnode[data-role=primary]').count() == 1 and pg.locator('#vworld .vnode[data-role=side]').count() == 1)
+    check('roles drawn: 1 primary, 1 side-effect', pg.locator('#vworld .node[data-role=primary]').count() == 1 and pg.locator('#vworld .node[data-role=side]').count() == 1)
     check('base flow itself unchanged', pg.locator('#world .versioned').count() == 0 and n() == 3)
 
     # replace with another variant on the same block
     ev("window.__debug.dropVersion('a2p-process-switch',10,10)")
     check('second version replaces the first', ov() == ['a2p-process-switch'])
-    check('retired link drawn dotted', pg.locator('#vworld .versioned line[stroke-dasharray]').count() >= 1)
+    check('retired link drawn dotted', pg.locator('#vworld .flow-layer .link.retired').count() >= 1)
 
     # base edits flow through: rename + drag
     lbl = pg.locator('#world .cblock[data-id="' + ev("window.__debug.chainOrder()[0].dataset.id") + '"] .cblock-label')
@@ -56,7 +56,7 @@ with sync_playwright() as p:
     check('base drag moves copy', ev("document.querySelector('#vworld .versioned').style.left === window.__debug.chainOrder()[0].style.left"))
 
     # export -> clear (in-app confirm, no browser dialog) -> import
-    copyHtml = lambda: __import__('re').sub(r'data-(base-id|seq|left-linked|right-linked)="[^"]*"', '', ev("document.getElementById('vworld').innerHTML")).replace(' selected', '')
+    copyHtml = lambda: __import__('re').sub(r'data-(base-id|seq|left-linked|right-linked|id)="[^"]*"', '', ev("document.getElementById('vworld').innerHTML")).replace(' selected', '')
     pg.mouse.click(700, 840); pg.wait_for_timeout(400); before = copyHtml()
     with pg.expect_download() as dl: pg.click('#exportBtn')
     dl.value.save_as(D + 'f.json'); f = json.load(open(D + 'f.json'))

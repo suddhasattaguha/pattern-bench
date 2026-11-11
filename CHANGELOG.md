@@ -160,3 +160,22 @@ one logical change each with a real diff behind them.
   confirm() dialog. Replaced with an in-app confirmation (also used for
   the middle-block delete prompt).
 - Added `tests/test_versioning.py` (30 checks).
+
+## v1.9 — Visual redesign, independent panes, resizable library
+- Blocks redrawn as arrow-shaped tiles that nest into each other; shared
+  connectors sit once on the join; one flow line runs through the flow.
+- New symbols: Process (cog in hexagon), Topic (fan-out), Queue (pipe with
+  messages), File (folder with file). API keeps its v1.8 orientation.
+- Colour now means platform owner (teal iPaaS, amber Message Broker, grey
+  external), shown as soft bands that replace the dashed boundary boxes.
+  Violet is reserved for versioning.
+- Dot grid, larger labels, redesigned palette cards. Top toolbar unchanged.
+- Rendering rewritten around a flow-level layer (`buildFlowModel` /
+  `renderFlowLayer`); per-block icon merging and `z-boost` removed.
+- Base flow and versioned copy pan and zoom independently; toolbar zoom
+  follows the pane touched last; Reset view re-aligns both.
+- Library panel is resizable by dragging its right edge (double-click to
+  reset; width remembered where the browser allows it).
+- Fix: a pane drag could be cancelled by the browser's text-selection drag
+  and leave panning stuck on.
+- Added `tests/test_layout.py` (19 checks).

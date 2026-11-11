@@ -20,14 +20,16 @@ Single HTML file, zero dependencies, zero build step. Open
   that can actually extend one of its two open ends stay draggable; every
   other block greys out. The canvas is deliberately restricted to composing
   **one** end-to-end flow at a time.
-- Blocks dock via interlocking puzzle-piece silhouettes. When two blocks
-  share a connector type at the touching ports (e.g. both have a "process"
-  icon there), the icons fuse into one shared icon instead of showing two.
-- Dashed **asset-boundary** rectangles show which platform/asset owns which
-  part of the flow. API and File connectors are modeled as fixed, permanent
-  thresholds (they sit at the edge of their box); Process and Topic
-  connectors are modeled as genuinely internal/shared, so their boundary
-  extends into the neighboring block to fully enclose the icon once merged.
+- Blocks are arrow-shaped tiles (notch on the entry side, point on the exit
+  side) that nest into each other, so the shape itself shows the flow
+  direction. The connector two blocks share sits once, on the join.
+- **Symbol shape = connector type**: API (tapered plate), Process (cog in a
+  hexagon), Topic (one-to-many fan-out), Queue (pipe with waiting
+  messages), File (folder with a file).
+- **Colour = platform owner**: teal for iPaaS, amber for Message Broker,
+  grey for external. A soft band in the owner's colour sits behind
+  everything that platform owns (this replaces the dashed boundary boxes).
+- One solid flow line runs through the whole flow.
 - Dragging any block moves the whole assembled flow together.
 - **Undo / Redo** (toolbar, or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z) covers every
   flow change: add, delete, move, rename, clear and import.
@@ -46,10 +48,16 @@ Single HTML file, zero dependencies, zero build step. Open
   drops its version). Select a versioned block in the copy and press
   Delete (or ×) to remove that version; with no versions left the split
   closes.
-- **Version roles** inside a versioned block: solid violet halo + filled
-  `v2` badge = the object that actually changed; dashed violet halo +
-  outlined `v2` badge = versioned as a side-effect; faded icon + dotted link
-  = retired v1 link. A legend sits in the copy pane.
+- **Version roles** inside a versioned block (violet is used for
+  versioning only): solid violet symbol + filled `v2` badge = the object
+  that actually changed; dashed violet outline + outlined `v2` badge =
+  versioned as a side-effect; grey dotted link = retired v1 link. A legend
+  sits in the copy pane.
+- **Independent panes**: the base flow and the versioned copy pan and zoom
+  separately (drag or scroll inside either one). The toolbar's zoom buttons
+  act on the pane touched last; Reset view re-aligns both.
+- **Resizable library**: drag the library's right edge to widen it (cards
+  grow with it); double-click the edge to reset.
 
 ## Current base patterns
 
@@ -77,30 +85,17 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
 
 - **Templates**: each block is a plain object — `id`, `label`, `route`
   (`entry`/`exit`), `entryType`/`exitType` (the connector type at each
-  port — `api`, `file`, `topic`, `process`), `size`, `color`, and a
-  `diagram(w, h, color)` function that returns the block's inner SVG markup.
-- **Rendering**: a block's outer shape is a puzzle-piece path
-  (`puzzlePath` — concave notch on the entry edge, convex tab on the exit
-  edge) with the template's `diagram` output layered inside it
-  (`buildBlockMarkup`).
-- **Merging** (`tryMergeIcons`): when two blocks dock and share an icon type
-  at the touching ports, one side is chosen as the "owner" (survives,
-  permanent) and the other fades entirely. API/File types are anchor-based
-  (entry side always owns); Process/Topic types use a `data-boundary`
-  ownership flag baked into specific templates (e.g. API-to-Process owns
-  the shared "process" icon over Process-to-Publish).
-- **Edge-fixed vs. sliding icons**: API/File icons (`data-fixed="true"`)
-  always sit exactly at the block's physical edge and never move — their
-  asset-boundary box is a fixed, permanent rectangle. Process/Topic icons
-  live inset by default and slide to straddle the seam on merge
-  (`data-half-x`/`data-half-y` give each icon's own geometry for that
-  calculation); their owning box extends past the block's true edge by
-  that icon's half-width so it still fully encloses the icon post-merge.
-- **z-boost**: whichever block currently owns a merged icon gets a
-  temporary `z-boost` class (higher z-index) so its icon/box can never be
-  visually covered by whichever neighboring block happens to paint later in
-  DOM order. This was a real, verified bug (see Development History) —
-  don't remove this without re-testing the occlusion case.
+  port — `api`, `file`, `topic`, `process`) and `size`.
+- **Rendering**: a block element is only its tile (`tilePath`) and label.
+  Everything on top — the flow line, connector symbols, platform bands,
+  version badges — is drawn by one flow-level renderer:
+  `buildFlowModel()` turns the chain into stations (one per connector,
+  shared connectors appear once) and `renderFlowLayer()` draws them into a
+  single SVG layer per pane. There is no per-block icon merging or z-order
+  juggling any more; the layer is simply re-rendered after every change.
+- **Templates** describe their connectors as data (`entry`, optional
+  `mid`, `exit`, each with a `type` and an `owner` platform) instead of a
+  drawing function.
 - **Chain model**: `chainOrder` is the single flow's blocks, left to right.
   `getChainOpenRequirements()` reads the two open ends' required connector
   types; `isTemplateCompatible()` / `refreshPaletteAvailability()` drive the
@@ -142,6 +137,8 @@ and rejection of bad files: `python3 tests/test_history_io.py`.
 `tests/test_versioning.py` covers the versioned palette and copy (create,
 replace, mirror on rename/move/delete, undo, export/import, in-app confirm):
 `python3 tests/test_versioning.py`.
+`tests/test_layout.py` covers independent pane pan/zoom and the resizable
+library: `python3 tests/test_layout.py`.
 
 ## Known scope / next steps
 
