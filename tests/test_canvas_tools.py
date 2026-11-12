@@ -37,6 +37,7 @@ with sync_playwright() as p:
     # ---------- select an end, then drag ----------
     flow(*base)
     normal = avail()
+    check('Consume-to-Publish is no longer in the library', ev("[...document.querySelectorAll('#quadrantGrid .pb-label')].every(e=>e.textContent!=='Consume-to-Publish')") and not ev("!!window.__debug.templatesById['consume-to-publish']"))
     click_block(0)
     check('selecting the first block narrows the library to what fits the start', avail() == ['API-to-Process', 'Consume-to-Process', 'File-to-Process'])
     check('library says which end it is showing', pg.is_visible('#endHint') and 'start' in pg.inner_text('#endHintText'))
@@ -106,17 +107,18 @@ with sync_playwright() as p:
     check('a highlighted version dropped anywhere lands on that block', ev("Object.values(window.__debug.versionOverrides())") == ['p2t-contract-switch']
           and ev("window.__debug.versionOverrides()[window.__debug.chainOrder()[1].dataset.id]") == 'p2t-contract-switch')
     check('the target clears after applying', ev("window.__debug.versionTarget()") is None)
-    pg.locator('#world .flow-layer .node[data-type=queue]').click()
+    check('the copy is now the big view; connectors are clicked there', pg.is_visible('#versionPane'))
+    pg.locator('#vworld .flow-layer .node[data-type=queue]').click()
     check('a queue offers the versions where it changes with its process', sugg() == ['New Process v2 · own Queue v2', 'Topic v2 · own Queue + Process v2'])
-    pg.click('#world .target-card .dc-close')
+    pg.click('#vworld .target-card .dc-close')
     check('the × closes the pop-up and clears the selection', ev("window.__debug.versionTarget()") is None and pg.locator('.target-card').count() == 0)
-    pg.locator('#world .flow-layer .node[data-type=queue]').click()
+    pg.locator('#vworld .flow-layer .node[data-type=queue]').click()
     pg.keyboard.press('Escape')
     check('Escape clears the target', ev("window.__debug.versionTarget()") is None and pg.locator('.target-card').count() == 0)
-    pg.locator('#world .flow-layer .node[data-type=file]').click()
-    check('a connector at the edge has one block and no side choice', pg.locator('#world .target-card .dc-side').count() == 0
+    pg.locator('#vworld .flow-layer .node[data-type=file]').click()
+    check('a connector at the edge has one block and no side choice', pg.locator('#vworld .target-card .dc-side').count() == 0
           and sugg() == ['New File v2 · own Process v2', 'New File v2 · shared Process'])
-    pg.mouse.click(1300, 110)
+    pg.mouse.click(950, 170)
     check('clicking empty canvas clears the target', ev("window.__debug.versionTarget()") is None)
     pg.click('#tabBaseFlow')
     check('back in Base Flow Design, versioning mode is off', not pg.is_visible('#modeBanner'))

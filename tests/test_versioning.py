@@ -23,14 +23,14 @@ with sync_playwright() as p:
     ov = lambda: ev("Object.values(window.__debug.versionOverrides())")
     split = lambda: ev("document.getElementById('canvasWrap').classList.contains('split')")
     pg.click('#tabVersioned')
-    check('version cards unavailable with empty flow', pg.locator('.version-card.unavailable').count() == 22)
+    check('version cards unavailable with empty flow', pg.locator('.version-card.unavailable').count() == 27)
     check('every quadrant has versioned blocks', pg.locator('#versionGrid .quad-empty').count() == 0)
-    check('exit quadrants hold the Process-to-API, -File and -Publish blocks', pg.locator('#versionGrid .quad:nth-child(3) .version-card').count() == 3 and pg.locator('#versionGrid .quad:nth-child(4) .version-card').count() == 6)
-    check('entry quadrants hold the API-, File- and Consume-to-Process blocks', pg.locator('#versionGrid .quad:nth-child(1) .version-card').count() == 6 and pg.locator('#versionGrid .quad:nth-child(2) .version-card').count() == 7)
+    check('exit quadrants hold Process-to-API/-File/-Publish and Consume-to-API blocks', pg.locator('#versionGrid .quad:nth-child(3) .version-card').count() == 3 and pg.locator('#versionGrid .quad:nth-child(4) .version-card').count() == 8)
+    check('entry quadrants hold API-/File-/Consume-to-Process and API-to-Publish blocks', pg.locator('#versionGrid .quad:nth-child(1) .version-card').count() == 6 and pg.locator('#versionGrid .quad:nth-child(2) .version-card').count() == 10)
 
     for t in ['api-to-process', 'process-to-publish', 'consume-to-api']:
         ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
-    check('only versions of blocks in the flow are available', pg.locator('.version-card.unavailable').count() == 15)
+    check('only versions of blocks in the flow are available', pg.locator('.version-card.unavailable').count() == 18)
     check('no split before first version', not split())
 
     # real drag-and-drop from the palette card onto the base block
@@ -49,7 +49,8 @@ with sync_playwright() as p:
     check('second version replaces the first', ov() == ['a2p-process-switch'])
     check('retired link drawn dotted', pg.locator('#vworld .flow-layer .link.retired').count() >= 1)
 
-    # base edits flow through: rename + drag
+    # base edits flow through: rename + drag (base is the big view in Base Flow Design)
+    pg.click('#tabBaseFlow')
     lbl = pg.locator('#world .cblock[data-id="' + ev("window.__debug.chainOrder()[0].dataset.id") + '"] .cblock-label')
     lbl.dblclick(); pg.keyboard.press('Control+a'); pg.keyboard.type('Order API'); pg.keyboard.press('Enter')
     check('base rename shows in copy', pg.inner_text('#vworld .versioned .cblock-label') == 'Order API')
@@ -80,6 +81,7 @@ with sync_playwright() as p:
     pg.keyboard.press('Control+z')
 
     # select + Delete key removes version only
+    pg.click('#tabVersioned')   # copy is the big view in versioning mode
     pg.locator('#vworld .versioned').click(position={'x': 100, 'y': 125})
     pg.keyboard.press('Delete')
     check('Delete on versioned block removes version, keeps base', ov() == [] and n() == 3)
@@ -113,7 +115,7 @@ with sync_playwright() as p:
     pg.click('#clearCanvas'); pg.click('#confirmOk')
     for t in ['api-to-process', 'process-to-api']:
         ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
-    check('Process-to-API versions available once it is in the flow', pg.locator('.version-card.unavailable').count() == 15)
+    check('Process-to-API versions available once it is in the flow', pg.locator('.version-card.unavailable').count() == 20)
     for vid in ['p2a-contract-parallel', 'p2a-contract-switch', 'p2a-process-shared']:
         ev(f"window.__debug.dropVersion('{vid}',10,10)")
         check(vid + ' applies to Process-to-API', ov() == [vid])

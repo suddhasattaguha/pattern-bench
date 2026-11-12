@@ -437,13 +437,39 @@
   }
   .cblock.selected .delete-x{ display:block; }
 
-  /* ---------- VERSIONED COPY (split canvas) ---------- */
+  /* ---------- VERSIONED COPY (big view + small window) ----------
+     The mode decides which view gets the whole canvas: Base Flow Design shows
+     the base, Versioned Artifacts shows the copy. The other one shrinks to a
+     small reference window in a corner; clicking it swaps them. */
   .version-pane{
-    display:none; position:absolute; left:0; right:0; top:50%; bottom:0;
-    overflow:hidden; background:var(--ink); border-top:1px solid var(--panel-border); box-shadow:0 -1px 0 var(--accent-version);
+    display:none; position:absolute; left:0; right:0; top:0; bottom:0;
+    overflow:hidden; background:var(--ink);
     z-index:12; cursor:grab;
   }
-  .canvas-wrap.split .version-pane{ display:block; }
+  .canvas-wrap.copy-big .version-pane{ display:block; }
+  .canvas-wrap.copy-big #baseTag{ display:none !important; }
+  .mini-view{
+    display:none; position:absolute; right:12px; width:300px; height:150px; z-index:15;
+    background:var(--ink); border:1px solid var(--panel-border); border-radius:8px; overflow:hidden;
+    cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,0.35);
+  }
+  .canvas-wrap.split .mini-view{ display:block; }
+  .mini-view.at-top{ top:48px; }
+  .mini-view.at-bottom{ bottom:40px; }
+  .mini-view.of-copy{ border-color:var(--accent-version); }
+  .mini-view:hover{ box-shadow:0 0 0 2px var(--accent-version), 0 6px 20px rgba(0,0,0,0.35); }
+  .mini-stage{ position:absolute; left:0; top:0; transform-origin:0 0; pointer-events:none; }
+  .mini-stage *{ pointer-events:none !important; }
+  .mini-tag{
+    position:absolute; left:8px; top:6px; z-index:2; pointer-events:none;
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-muted); background:var(--panel); border:1px solid var(--panel-border); border-radius:3px; padding:2px 6px;
+  }
+  .mini-view.of-copy .mini-tag{ color:var(--accent-version); border-color:var(--accent-version); }
+  .mini-swap{
+    position:absolute; right:8px; bottom:6px; z-index:2; pointer-events:none;
+    font-family:var(--font-ui); font-size:10.5px; color:var(--text-muted);
+  }
   .pane-tag{
     position:absolute; top:8px; left:12px; z-index:13; pointer-events:none;
     font-family:var(--font-mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase;
@@ -626,6 +652,11 @@
         <span class="legend-item"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--text-muted)" stroke-width="2.5" stroke-dasharray="1 6" stroke-linecap="round"/></svg>Retired</span>
       </div>
     </div>
+    <div class="mini-view" id="miniView" title="Click to swap the two views">
+      <div class="mini-stage" id="miniStage"></div>
+      <div class="mini-tag" id="miniTag">Versioned copy</div>
+      <div class="mini-swap">⇄ click to swap</div>
+    </div>
     <div class="confirm-box" id="confirmBox"><span id="confirmMsg"></span><button class="btn danger" id="confirmOk">OK</button><button class="btn" id="confirmCancel">Cancel</button></div>
     <div class="empty-hint" id="staticHint">Drag any pattern from the library to start a flow. From there, only patterns that actually fit the open ends stay available — drop one anywhere and it docks into place automatically, upstream or downstream. Drag any block to move the whole flow. Double-click a label to rename, press <b>Delete</b> to remove an end block.</div>
     <div class="toast" id="toast"></div>
@@ -720,7 +751,6 @@
     'file-to-process':    { entry:{type:'file', owner:'external', strong:true},    mid:[], exit:{type:'process', owner:'ipaas', strong:true} },
     'process-to-file':    { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'file', owner:'external'} },
     'consume-to-api':     { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.50}], exit:{type:'api', owner:'external'} },
-    'consume-to-publish': { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.50}], exit:{type:'topic', owner:'broker2'} },
     'api-to-publish':     { entry:{type:'api', owner:'external', strong:true},  mid:[], exit:{type:'topic', owner:'broker'} }
   };
 
@@ -1014,16 +1044,6 @@
       exitType:'api',
     },
     {
-      id:'consume-to-publish',
-      label:'Consume-to-Publish',
-      route:'entry',
-      purpose:'A topic-to-topic bridge: consumes from an upstream topic and republishes straight to a downstream topic, with no separate processing step called out.',
-      size:'wide',
-      color:'#D9614B',
-      entryType:'topic',
-      exitType:'topic',
-    },
-    {
       id:'api-to-publish',
       label:'API-to-Publish',
       route:'entry',
@@ -1295,7 +1315,53 @@
               {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
               {k:'q2', type:'queue', lane:'bot', ver:'v2', role:'side'},
               {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'} ],
-      links:[ ['t','q1','solid'], ['q1','p1','solid'], ['t','q2','solid'], ['q2','p2','solid'] ] }
+      links:[ ['t','q1','solid'], ['q1','p1','solid'], ['t','q2','solid'], ['q2','p2','solid'] ] },
+
+    // Consume-to-API (Exit-Route): the broker pushes straight to a target API.
+    // The publisher owns the topic and the downstream owns the API, so each
+    // change is a switch of the one queue.
+    { id:'c2a-topic-switch', base:'consume-to-api', route:'exit', change:'contract',
+      label:'Topic v2 · Queue switches subscription',
+      purpose:'New topic version: the queue switches its subscription from Topic v1 to Topic v2 and keeps pushing to the same target API. The link to Topic v1 is retired.',
+      nodes:[ {k:'t1', type:'topic', lane:'top', ver:'v1', role:'retired'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'},
+              {k:'q',  type:'queue', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'a',  type:'api', lane:'mid', ver:'v1', role:'unchanged'} ],
+      links:[ ['t1','q','dotted'], ['t2','q','solid'], ['q','a','solid'] ] },
+    { id:'c2a-api-switch', base:'consume-to-api', route:'exit', change:'contract',
+      label:'Target API v2 · push switches',
+      purpose:'Downstream changes the target API to v2: the queue switches its push from API v1 to API v2. The link to API v1 is retired.',
+      nodes:[ {k:'t',  type:'topic', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'q',  type:'queue', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'a1', type:'api', lane:'top', ver:'v1', role:'retired'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['t','q','solid'], ['q','a1','dotted'], ['q','a2','solid'] ] },
+
+    // API-to-Publish (Entry-Route): integration owns both the inbound API and
+    // the topic it publishes to. A new topic version is a switch (no dual
+    // publishing).
+    { id:'a2t-api-parallel', base:'api-to-publish', route:'entry', change:'contract',
+      label:'API v2 next to v1 · same Topic',
+      purpose:'New API version: API v2 is added next to API v1 and both publish to the same, unchanged topic.',
+      nodes:[ {k:'a1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'},
+              {k:'t',  type:'topic', lane:'mid', ver:'v1', role:'unchanged'} ],
+      links:[ ['a1','t','solid'], ['a2','t','solid'] ] },
+    { id:'a2t-api-topic-switch', base:'api-to-publish', route:'entry', change:'contract',
+      label:'API v2 · Topic switches to v2',
+      purpose:'New API version that also needs a new topic: API v2 publishes to Topic v2. API v1 and its link to Topic v1 are retired.',
+      nodes:[ {k:'a1', type:'api', lane:'top', ver:'v1', role:'retired'},
+              {k:'t1', type:'topic', lane:'top', ver:'v1', role:'retired'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'side'} ],
+      links:[ ['a1','t1','dotted'], ['a2','t2','solid'] ] },
+    { id:'a2t-topic-switch', base:'api-to-publish', route:'entry', change:'contract',
+      label:'Topic v2 · same API',
+      purpose:'New topic version: the API stays as it is and switches its publishing from Topic v1 to Topic v2. The link to Topic v1 is retired.',
+      nodes:[ {k:'a',  type:'api', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'t1', type:'topic', lane:'top', ver:'v1', role:'retired'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['a','t1','dotted'], ['a','t2','solid'] ] }
   ];
   const variantsById = {};
   VERSION_VARIANTS.forEach(v => variantsById[v.id] = v);
@@ -1436,7 +1502,7 @@
   const paletteHeadDesc = document.getElementById('paletteHeadDesc');
   const PALETTE_TAB_DESC = {
     base: 'Build one flow at a time. Only patterns that fit its open ends stay available here.',
-    versioned: 'Versioning mode: click a connector on the canvas to see its versions, or drop a versioned block onto its base block. A versioned copy opens below the base.'
+    versioned: 'Versioning mode: click a connector on the canvas to see its versions, or drop a versioned block onto its base block. The versioned copy takes the canvas; the base stays as a small reference.'
   };
   paletteTabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1450,6 +1516,7 @@
       // clicks select something to version. Leaving it clears any selection.
       canvasWrap.classList.toggle('versioning', !isBase);
       if(isBase) clearVersionTarget();
+      updateLayout();
     });
   });
 
@@ -1535,7 +1602,7 @@
   }
 
   function setActivePane(pane){
-    if(pane === 'copy' && !canvasWrap.classList.contains('split')) pane = 'base';
+    pane = canvasWrap.classList.contains('copy-big') ? 'copy' : 'base';   // zoom always acts on the big view
     activePane = pane;
     document.getElementById('baseTag').classList.toggle('active', pane === 'base');
     document.getElementById('copyTag').classList.toggle('active', pane === 'copy');
@@ -1567,8 +1634,7 @@
   function zoomActivePane(delta){
     const copy = activePane === 'copy';
     const rect = (copy ? versionPane : canvasWrap).getBoundingClientRect();
-    const h = (!copy && canvasWrap.classList.contains('split')) ? rect.height/2 : rect.height;
-    setZoomAtScreenPoint((copy ? vZoom : zoom) + delta, rect.left + rect.width/2, rect.top + h/2, activePane);
+    setZoomAtScreenPoint((copy ? vZoom : zoom) + delta, rect.left + rect.width/2, rect.top + rect.height/2, activePane);
   }
   document.getElementById('zoomIn').addEventListener('click', () => zoomActivePane(0.15));
   document.getElementById('zoomOut').addEventListener('click', () => zoomActivePane(-0.15));
@@ -1581,6 +1647,7 @@
 
   canvasWrap.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if(miniView.contains(e.target)) return;
     const factor = e.deltaY > 0 ? 0.92 : 1.08;
     const pane = versionPane.contains(e.target) ? 'copy' : 'base';
     setActivePane(pane);
@@ -1838,6 +1905,7 @@
     renderTargetCard(world);
     renderCopy();
     if(!canvasWrap.classList.contains('split')) highlightSuggestions([]);
+    scheduleMini();
   }
 
   function renderCopy(){
@@ -1849,7 +1917,8 @@
     canvasWrap.classList.toggle('split', active);
     vworld.innerHTML = '';
     selectedCopy = null;
-    if(!active){ highlightSuggestions([]); if(wasActive) setActivePane('base'); return; }
+    updateLayout();
+    if(!active){ highlightSuggestions([]); return; }
     const decisions = computeDecisions();
     const pendingIdx = new Set(decisions.map(d => d.index));
 
@@ -1897,6 +1966,7 @@
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
     revealDecisions(fresh);
+    scheduleMini();
   }
 
   // ---------------------------------------------------------------
@@ -2223,21 +2293,73 @@
     if(decisions.length) tab.dataset.pending = decisions.length; else delete tab.dataset.pending;
   }
 
-  // When the split first opens: centre the base flow in the top half and start
-  // the copy at the same view, so it appears directly underneath. From then on
-  // the two panes pan and zoom independently.
+  // When the copy first opens it starts at the base's view (same x and zoom),
+  // vertically centred. From then on the two views pan and zoom independently.
   function openCopyView(){
     if(chainOrder.length === 0) return;
-    const half = canvasWrap.clientHeight / 2;
     const top = Math.min(...chainOrder.map(b => parseFloat(b.style.top))) - (VH - BLOCK_H)/2;
-    panY = Math.max(36, (half - VH*zoom)/2 + 6) - top*zoom;
-    vPanX = panX; vPanY = panY; vZoom = zoom;
+    vPanX = panX; vZoom = zoom;
+    vPanY = Math.max(48, (canvasWrap.clientHeight - VH*zoom)/2 - 40) - top*zoom;
     applyTransform();
   }
 
+  // ---------------------------------------------------------------
+  // Big view + small window
+  // ---------------------------------------------------------------
+  // The mode picks the big view: the copy in versioning mode (once it exists),
+  // the base otherwise. The other view is a small, fitted reference in a corner
+  // — base at the top right, copy at the bottom right. Clicking it swaps them
+  // by switching the library tab, so the mode always matches the big view.
+  const miniView = document.getElementById('miniView');
+  const miniStage = document.getElementById('miniStage');
+  const miniTag = document.getElementById('miniTag');
+  function updateLayout(){
+    const copyBig = canvasWrap.classList.contains('split') && canvasWrap.classList.contains('versioning');
+    canvasWrap.classList.toggle('copy-big', copyBig);
+    miniView.classList.toggle('at-top', copyBig);
+    miniView.classList.toggle('at-bottom', !copyBig);
+    miniView.classList.toggle('of-copy', !copyBig);
+    miniTag.textContent = copyBig ? 'Base flow' : 'Versioned copy';
+    setActivePane();
+    scheduleMini();
+  }
+  let miniQueued = false;
+  function scheduleMini(){
+    if(miniQueued) return;
+    miniQueued = true;
+    requestAnimationFrame(() => { miniQueued = false; updateMini(); });
+  }
+  function updateMini(){
+    miniStage.innerHTML = '';
+    if(!canvasWrap.classList.contains('split')) return;
+    const src = canvasWrap.classList.contains('copy-big') ? world : vworld;
+    const tiles = [...src.querySelectorAll(':scope > .cblock')];
+    if(!tiles.length) return;
+    const box = tiles.reduce((a, t) => {
+      const l = parseFloat(t.style.left), tp = parseFloat(t.style.top);
+      return { l:Math.min(a.l, l), t:Math.min(a.t, tp), r:Math.max(a.r, l + parseFloat(t.style.width)), b:Math.max(a.b, tp + parseFloat(t.style.height)) };
+    }, { l:Infinity, t:Infinity, r:-Infinity, b:-Infinity });
+    box.l -= 40; box.r += 40; box.t -= 44; box.b += 44;      // room for containers and their labels
+    const W = miniView.clientWidth, H = miniView.clientHeight - 22, top = 22;
+    const sc = Math.min(W / (box.r - box.l), H / (box.b - box.t), 1);
+    const clone = src.cloneNode(true);
+    clone.querySelectorAll('.decision-card, .decision-pill, .label-editor, .delete-x').forEach(n => n.remove());
+    clone.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+    clone.removeAttribute('id');
+    clone.style.transform = 'none';
+    miniStage.appendChild(clone);
+    const ox = (W - (box.r - box.l)*sc)/2 - box.l*sc, oy = top + (H - (box.b - box.t)*sc)/2 - box.t*sc;
+    miniStage.style.transform = 'translate(' + ox + 'px,' + oy + 'px) scale(' + sc + ')';
+  }
+  miniView.addEventListener('pointerdown', e => e.stopPropagation());
+  miniView.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById(canvasWrap.classList.contains('copy-big') ? 'tabBaseFlow' : 'tabVersioned').click();
+  });
+
   function blockAtPoint(clientX, clientY){
     const hit = (el) => { const r = el.getBoundingClientRect(); return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom; };
-    const inPane = canvasWrap.classList.contains('split') && hit(versionPane);
+    const inPane = canvasWrap.classList.contains('copy-big') && hit(versionPane);
     const pool = inPane ? [...vworld.children] : chainOrder;
     const el = pool.find(hit);
     if(!el) return null;
@@ -2266,7 +2388,7 @@
     versionOverrides[target.dataset.id] = v.id;
     renderCopy();
     recordHistory();
-    showToast(first ? 'Versioned copy created below the base flow.' : 'Version applied: ' + v.label + '.');
+    showToast(first ? 'Versioned copy created. The base flow stays as a small reference (top right).' : 'Version applied: ' + v.label + '.');
   }
 
   function removeVersion(baseId){

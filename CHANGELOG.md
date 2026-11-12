@@ -238,3 +238,11 @@ one logical change each with a real diff behind them.
   decision card: decide later). The version card closes once a side is
   chosen (click the connector again to reopen it). Clicking empty canvas
   closes open cards; decisions stay as pending pills.
+- Big view + small window replaces the split canvas: the mode's view (base in
+  Base Flow Design, copy in versioning mode) takes the whole canvas; the other
+  is a small fitted reference window (base top right, copy bottom right).
+  Clicking it swaps the views and the library tab.
+- New versioned blocks: Consume-to-API (Topic v2 · Queue switches
+  subscription; Target API v2 · push switches) and API-to-Publish (API v2 next
+  to v1 · same Topic; API v2 · Topic switches to v2; Topic v2 · same API).
+- Removed Consume-to-Publish from the library (not a real scenario).

@@ -41,14 +41,18 @@ Single HTML file, zero dependencies, zero build step. Open
   External / contract change. It holds versioned blocks for API-to-Process,
   File-to-Process and Consume-to-Process (Entry quadrants), and
   Process-to-API, Process-to-File and Process-to-Publish (Exit quadrants).
-- **Versioned copy.** Dropping a versioned block onto its base block splits
-  the canvas: base flow on top, a versioned copy in the bottom half,
-  block-for-block aligned. The copy is linked, not cloned — it's re-derived
+- **Versioned copy.** Dropping a versioned block onto its base block creates
+  a versioned copy, block-for-block aligned with the base. The mode decides
+  which view gets the whole canvas: in versioning mode (Versioned Artifacts
+  tab) the copy is big and the base is a small reference window at the top
+  right; in Base Flow Design the base is big and the copy sits in a small
+  window at the bottom right. Clicking the small window swaps the views (and
+  the library tab). The copy is linked, not cloned — it's re-derived
   from the base flow plus the applied versions, so renaming, moving or
   deleting a base block is mirrored in the copy (deleting a base block also
   drops its version). Select a versioned block in the copy and press
-  Delete (or ×) to remove that version; with no versions left the split
-  closes.
+  Delete (or ×) to remove that version; with no versions left the copy
+  and its small window close.
 - **Version roles** inside a versioned block (violet is used for
   versioning only): solid violet symbol + filled `v2` badge = the object
   that actually changed; dashed violet outline + outlined `v2` badge =
@@ -88,14 +92,13 @@ Single HTML file, zero dependencies, zero build step. Open
 | API-to-Process | Entry | API | Process |
 | File-to-Process | Entry | File (SFTP-style folder pickup) | Process |
 | Consume-to-Process | Entry | Topic/Queue | Process |
-| Consume-to-Publish | Entry | Topic/Queue | Topic (relay) |
 | API-to-Publish | Entry | API | Topic |
 | Process-to-Publish | Exit | Process | Topic |
 | Process-to-API | Exit | Process | API |
 | Process-to-File | Exit | Process | File |
 | Consume-to-API | Exit | Topic/Queue | API |
 
-The bridge patterns (Consume-to-Publish, API-to-Publish, Consume-to-API)
+The bridge patterns (API-to-Publish, Consume-to-API)
 connect two real-world touchpoints directly, with no separate processing
 step called out. Route classification (Entry vs. Exit) is a purely visual
 grouping in the palette — it doesn't affect docking compatibility, which is

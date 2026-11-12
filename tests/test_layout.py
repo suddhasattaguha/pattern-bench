@@ -21,42 +21,54 @@ with sync_playwright() as p:
     pg.wait_for_timeout(200)
     v0 = views()
 
-    # pan the copy pane only
-    pg.mouse.move(1250, 780); pg.mouse.down(); pg.mouse.move(1150, 740, steps=4); pg.mouse.up()
+    # base mode: the base has the whole canvas, the copy is a small window
+    check('Base Flow Design: base is the big view, copy hidden behind it', not pg.is_visible('#versionPane'))
+    check('the copy shows as a small window at the bottom right', pg.is_visible('#miniView') and 'of-copy' in pg.get_attribute('#miniView', 'class')
+          and 'at-bottom' in pg.get_attribute('#miniView', 'class') and pg.locator('#miniStage .cblock.versioned').count() == 1)
+    pg.mouse.move(600, 760); pg.mouse.down(); pg.mouse.move(650, 790, steps=4); pg.mouse.up()
     v1 = views()
-    check('dragging the copy pane moves only the copy', v1['copy']['panX'] == v0['copy']['panX'] - 100 and v1['copy']['panY'] == v0['copy']['panY'] - 40 and v1['base'] == v0['base'])
-    check('copy pane becomes the active pane', v1['active'] == 'copy')
-
-    # pan the base pane only
-    pg.mouse.move(1250, 120); pg.mouse.down(); pg.mouse.move(1300, 150, steps=4); pg.mouse.up()
+    check('dragging the canvas moves only the base', v1['base']['panX'] == v0['base']['panX'] + 50 and v1['copy'] == v0['copy'])
+    pg.mouse.move(900, 300); pg.mouse.wheel(0, 100)
     v2 = views()
-    check('dragging the base pane moves only the base', v2['base']['panX'] == v1['base']['panX'] + 50 and v2['copy'] == v1['copy'])
-    check('base pane becomes the active pane', v2['active'] == 'base')
+    check('wheel zooms only the base', v2['base']['zoom'] < v1['base']['zoom'] and v2['copy'] == v1['copy'])
+    pg.click('#zoomIn'); v3 = views()
+    check('toolbar zoom acts on the big view (base)', v3['base']['zoom'] > v2['base']['zoom'] and v3['copy'] == v2['copy'])
+    mb = pg.locator('#miniView').bounding_box()
+    pg.mouse.move(mb['x'] + 150, mb['y'] + 75); pg.mouse.wheel(0, -100)
+    check('wheel over the small window changes nothing', views() == v3)
 
-    # wheel zoom per pane
-    pg.mouse.move(900, 700); pg.mouse.wheel(0, -100)
-    v3 = views()
-    check('wheel over the copy zooms only the copy', v3['copy']['zoom'] > v2['copy']['zoom'] and v3['base']['zoom'] == v2['base']['zoom'])
-    pg.mouse.move(900, 200); pg.mouse.wheel(0, 100)
+    # swap: clicking the small window switches to versioning mode
+    pg.click('#miniView')
+    check('clicking the small window swaps: copy becomes the big view', pg.is_visible('#versionPane'))
+    check('…and switches the library to Versioned Artifacts', 'active' in pg.get_attribute('#tabVersioned', 'class') and pg.is_visible('#modeBanner'))
+    check('the base is now the small window at the top right', 'at-top' in pg.get_attribute('#miniView', 'class')
+          and pg.inner_text('#miniTag').lower() == 'base flow' and pg.locator('#miniStage .cblock').count() == 3)
     v4 = views()
-    check('wheel over the base zooms only the base', v4['base']['zoom'] < v3['base']['zoom'] and v4['copy']['zoom'] == v3['copy']['zoom'])
+    check('copy is the active pane', v4['active'] == 'copy')
+    pg.mouse.move(900, 600); pg.mouse.down(); pg.mouse.move(800, 560, steps=4); pg.mouse.up()
+    v5 = views()
+    check('dragging the canvas moves only the copy', v5['copy']['panX'] == v4['copy']['panX'] - 100 and v5['copy']['panY'] == v4['copy']['panY'] - 40 and v5['base'] == v4['base'])
+    pg.mouse.move(900, 600); pg.mouse.wheel(0, -100)
+    v6 = views()
+    check('wheel zooms only the copy', v6['copy']['zoom'] > v5['copy']['zoom'] and v6['base'] == v5['base'])
+    pg.click('#zoomIn'); v7 = views()
+    check('toolbar zoom acts on the big view (copy)', v7['copy']['zoom'] > v6['copy']['zoom'] and v7['base'] == v6['base'])
+    check('zoom readout shows the big view', pg.inner_text('#zoomReadout') == str(round(v7['copy']['zoom'] * 100)) + '%')
+    pg.click('#zoomReset'); v8 = views()
+    check('Reset view re-aligns both views', v8['base'] == v8['copy'] and v8['base']['zoom'] == 1)
 
-    # toolbar zoom follows the pane touched last
-    pg.click('#zoomIn'); v5 = views()
-    check('toolbar zoom acts on the active (base) pane', v5['base']['zoom'] > v4['base']['zoom'] and v5['copy']['zoom'] == v4['copy']['zoom'])
-    pg.mouse.click(1250, 780); pg.click('#zoomIn'); v6 = views()
-    check('toolbar zoom acts on the copy after touching it', v6['copy']['zoom'] > v5['copy']['zoom'] and v6['base']['zoom'] == v5['base']['zoom'])
-    check('zoom readout shows the active pane', pg.inner_text('#zoomReadout') == str(round(v6['copy']['zoom'] * 100)) + '%')
-
-    pg.click('#zoomReset'); v7 = views()
-    check('Reset view re-aligns both panes', v7['base'] == v7['copy'] and v7['base']['zoom'] == 1)
-
-    # versioned block is still hit-testable after independent zoom
-    pg.mouse.move(900, 700); pg.mouse.wheel(0, -100); pg.mouse.wheel(0, -100)
+    # versioned block is still hit-testable after zooming the copy
+    pg.mouse.move(900, 600); pg.mouse.wheel(0, -100); pg.mouse.wheel(0, -100)
     r = ev("(()=>{const r=document.querySelector('#vworld .versioned').getBoundingClientRect();return [r.x+r.width/2,r.y+16]})()")
     pg.mouse.click(r[0], r[1])
     check('versioned block selectable in zoomed copy', pg.locator('#vworld .versioned.selected').count() == 1)
     pg.click('#zoomReset')
+
+    pg.click('#miniView')
+    check('clicking the small window again returns to the base flow', not pg.is_visible('#versionPane') and 'active' in pg.get_attribute('#tabBaseFlow', 'class'))
+    pg.click('#tabVersioned')
+    check('the library tab swaps the views too', pg.is_visible('#versionPane'))
+    pg.click('#tabBaseFlow')
 
     # resizable library
     w = lambda: ev("document.querySelector('.palette').getBoundingClientRect().width")

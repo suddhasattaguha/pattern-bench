@@ -17,6 +17,7 @@ with sync_playwright() as p:
         pg.goto(URL)
         for t in tpls:
             ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
+        pg.click('#tabVersioned')   # versioning mode: the copy gets the big view
     def drop(vid, idx):
         r = ev(f"(()=>{{const r=window.__debug.chainOrder()[{idx}].getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]}})()")
         ev(f"window.__debug.dropVersion('{vid}',{r[0]},{r[1]})")
@@ -48,14 +49,14 @@ with sync_playwright() as p:
     pg.click('#vworld .decision-card .dc-close')
     check('the × also leaves the decision open as a pill', pg.locator('#vworld .decision-pill').count() == 1 and pg.locator('#vworld .decision-card').count() == 0)
     pg.click('#vworld .decision-pill')
-    pg.mouse.click(1300, 110)
+    pg.mouse.click(950, 170)
     check('clicking empty canvas closes the card to a pill', pg.locator('#vworld .decision-pill').count() == 1 and len(dec()) == 1)
     pg.click('#vworld .decision-pill')
 
     # show in library
-    pg.click('#tabBaseFlow')
     pg.click('#vworld .decision-card [data-action=library]')
-    check('Show in library switches to the Versioned tab', 'active' in (pg.get_attribute('#tabVersioned', 'class') or ''))
+    check('Show in library keeps the Versioned tab with the suggestion in view', 'active' in (pg.get_attribute('#tabVersioned', 'class') or '')
+          and pg.locator('.version-card.suggested').first.is_visible())
 
     # pick an option
     pg.click('#vworld .decision-card .dc-opt[data-variant=a2p-process-switch]')
@@ -94,12 +95,21 @@ with sync_playwright() as p:
     drop('a2p-contract-parallel', 2)
     check('the block two steps away is not asked (no chain)', [x['index'] for x in dec()] == [1])
 
-    # --- neighbour without defined versions ---
+    # --- Consume-to-API: a new topic upstream asks the relay to switch ---
     flow('process-to-publish', 'consume-to-api')
     drop('p2t-contract-switch', 0)
     d = dec()
-    check('neighbour without versions is still marked pending', len(d) == 1 and d[0]['options'] == [])
-    check('card says no versions are defined yet', 'No versioned blocks are defined for Consume-to-API' in pg.inner_text('#vworld .decision-card'))
+    check('Topic v2 upstream asks Consume-to-API, suggesting the subscription switch', len(d) == 1 and d[0]['options'] == ['c2a-topic-switch'])
+    check('card offers that one option', pg.locator('#vworld .decision-card .dc-opt').count() == 1)
+    # --- API-to-Publish: Topic v2 asks the downstream Consume-to-Process ---
+    flow('api-to-publish', 'consume-to-process')
+    drop('a2t-topic-switch', 0)
+    check('API-to-Publish Topic v2 asks Consume-to-Process with its three topic options',
+          [x['options'] for x in dec()] == [['c2p-contract-parallel', 'c2p-contract-dual', 'c2p-contract-switch']])
+    drop('a2t-api-parallel', 0)
+    check('API v2 next to v1 on the same topic opens nothing downstream', len(dec()) == 0)
+    flow('process-to-publish', 'consume-to-api')
+    drop('p2t-contract-switch', 0)
 
     # --- removing the source version clears the decision ---
     ev("window.__debug.removeVersion(window.__debug.chainOrder()[0].dataset.id)")
