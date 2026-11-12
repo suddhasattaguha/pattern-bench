@@ -38,8 +38,8 @@ Single HTML file, zero dependencies, zero build step. Open
   blocks that don't fit together are rejected with a message.
 - A second palette, **Versioned Artifacts**, is a 2×2 grid: rows are
   Entry-Route / Exit-Route, columns are Internal / process change and
-  External / contract change. It currently holds four versioned blocks for
-  API-to-Process (two per Entry quadrant); Exit quadrants are still empty.
+  External / contract change. It holds four versioned blocks for API-to-Process
+  (Entry quadrants) and three for Process-to-API (Exit quadrants).
 - **Versioned copy.** Dropping a versioned block onto its base block splits
   the canvas: base flow on top, a versioned copy in the bottom half,
   block-for-block aligned. The copy is linked, not cloned — it's re-derived

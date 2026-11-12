@@ -182,3 +182,10 @@ one logical change each with a real diff behind them.
 - Library cards now keep a fixed size and wrap: widening the library shows
   more cards per row (Entry and Exit stay side by side) instead of
   enlarging the cards.
+- Three versioned blocks for Process-to-API (fills the Exit quadrants):
+  Target API v2 · own Process v2, Target API v2 · same Process (contract);
+  New Process v2 · same target API (process). No "Process v2 · own API v2":
+  a process change in the integration layer never forces a target API change.
+- Fix: in the versioned copy, links from the block upstream of a versioned
+  block now reach each of its lanes (they ended between them).
+- Fix: platform band label stays inside a versioned tile.

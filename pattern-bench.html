@@ -637,6 +637,10 @@
   function buildFlowModel(blocks, dimUnversioned){
     const sets = [];      // connector positions along the flow; a versioned block can put two lanes at one position
     const links = [];
+    // Links are worked out after the loop: a versioned block splits the seam it
+    // shares with its upstream neighbour into lanes, and the neighbour's links
+    // must reach those lanes, not the single connector that was there before.
+    const pending = [];
     blocks.forEach((b, i) => {
       const spec = NODE_SPECS[b.tpl];
       const v = b.variant ? variantsById[b.variant] : null;
@@ -663,7 +667,10 @@
         strong:!!spec.exit.strong, vblock: v ? i : null };
       sets.push(exit); segs.push([last, exit]);
 
-      const dim = dimUnversioned && !v;
+      pending.push({ segs, v, dim: dimUnversioned && !v });
+    });
+
+    pending.forEach(({ segs, v, dim }) => {
       if(v && segs.length === 1){
         // a versioned block says exactly which lane connects to which
         const at = (k) => {
@@ -698,7 +705,9 @@
             y1: first.cy + Math.min(...dys) - BAND_R, y2: first.cy + Math.max(...dys) + BAND_R,
             squareLeft: fs.edge, squareRight: ls.edge,
             atStart: first === sets[0], atEnd: last === sets[sets.length - 1],
-            owner: first.nodes[0].owner, dim: dimUnversioned && first.vblock === null
+            owner: first.nodes[0].owner, dim: dimUnversioned && first.vblock === null,
+            // a versioned block's band can start on its upstream seam; keep the label inside its tile
+            labelMinX: first.vblock === null ? null : blocks[first.vblock].left + SEAM_X + TILE_D + 24
           });
         }
       }
@@ -734,11 +743,12 @@
       if(label){
         const narrow = w < label.length*7.5 + 44;
         // a label wider than its band grows inwards at either end of the flow, so it never runs off the last block
-        const nx = b.atEnd && !b.atStart ? b.x2 - 6 : (b.atStart && !b.atEnd ? b.x1 + 6 : b.x1 + w/2);
-        const anchor = b.atEnd && !b.atStart ? 'end' : (b.atStart && !b.atEnd ? 'start' : 'middle');
+        let nx = b.atEnd && !b.atStart ? b.x2 - 6 : (b.atStart && !b.atEnd ? b.x1 + 6 : b.x1 + w/2);
+        let anchor = b.atEnd && !b.atStart ? 'end' : (b.atStart && !b.atEnd ? 'start' : 'middle');
+        if(b.labelMinX !== null && b.labelMinX !== undefined){ nx = b.labelMinX; anchor = 'start'; }
         out += narrow
           ? '<text class="band-label ' + cls + '" x="' + nx + '" y="' + (b.y1 - 6) + '" text-anchor="' + anchor + '">' + label + '</text>'
-          : '<text class="band-label ' + cls + '" x="' + (b.x1 + (b.squareLeft ? 38 : 20)) + '" y="' + (b.y1 - 6) + '">' + label + '</text>';
+          : '<text class="band-label ' + cls + '" x="' + Math.max(b.x1 + (b.squareLeft ? 38 : 20), b.labelMinX || -Infinity) + '" y="' + (b.y1 - 6) + '">' + label + '</text>';
       }
     });
     model.links.forEach(l => {
@@ -971,7 +981,33 @@
       nodes:[ {k:'a',  type:'api', lane:'mid', ver:'v1', role:'unchanged'},
               {k:'p1', type:'process', lane:'top', ver:'v1', role:'retired'},
               {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'} ],
-      links:[ ['a','p1','dotted'], ['a','p2','solid'] ] }
+      links:[ ['a','p1','dotted'], ['a','p2','solid'] ] },
+
+    // Process-to-API (Exit-Route): the process calls a target API (e.g. an
+    // S/4HANA API). A process change in the integration layer never forces a
+    // change on the target API, so there is no "Process v2 · own API v2" here.
+    { id:'p2a-contract-parallel', base:'process-to-api', route:'exit', change:'contract',
+      label:'Target API v2 · own Process v2',
+      purpose:'Breaking target API change: API v2 is added next to API v1. Process v1 keeps calling API v1; a new Process v2 calls API v2.',
+      nodes:[ {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'a1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'side'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['p1','a1','solid'], ['p2','a2','solid'] ] },
+    { id:'p2a-contract-switch', base:'process-to-api', route:'exit', change:'contract',
+      label:'Target API v2 · same Process',
+      purpose:'Breaking target API change: the one process switches over to API v2. Its link to API v1 is retired.',
+      nodes:[ {k:'p',  type:'process', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'a1', type:'api', lane:'top', ver:'v1', role:'retired'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['p','a1','dotted'], ['p','a2','solid'] ] },
+    { id:'p2a-process-shared', base:'process-to-api', route:'exit', change:'process',
+      label:'New Process v2 · same target API',
+      purpose:'Process change in the integration layer: Process v2 takes over the calls to the unchanged target API. Process v1’s link is retired.',
+      nodes:[ {k:'p1', type:'process', lane:'top', ver:'v1', role:'retired'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'},
+              {k:'a',  type:'api', lane:'mid', ver:'v1', role:'unchanged'} ],
+      links:[ ['p1','a','dotted'], ['p2','a','solid'] ] }
   ];
   const variantsById = {};
   VERSION_VARIANTS.forEach(v => variantsById[v.id] = v);
