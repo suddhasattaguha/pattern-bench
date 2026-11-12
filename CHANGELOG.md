@@ -246,3 +246,16 @@ one logical change each with a real diff behind them.
   subscription; Target API v2 · push switches) and API-to-Publish (API v2 next
   to v1 · same Topic; API v2 · Topic switches to v2; Topic v2 · same API).
 - Removed Consume-to-Publish from the library (not a real scenario).
+- Ripple of contract changes: absorb here (v1 Δ, code change in the same
+  version) or pass on (asks about a code change), in both directions; passed
+  on, it flags ⚠ dependent logic on end applications / an exposed API's
+  callers, or opens a topic version decision.
+- Calling application for an exposed API: asked when the API is placed at the
+  start; CALLER container; flagged by API versions and ripples.
+- Ripple forecast with a Best case / Worst case toggle; worst case can be
+  dismissed as validated.
+- Versioned Artifacts: a labelled 2×2 grid showing only the versions of blocks
+  in the flow; empty quadrants say "Nothing for this flow".
+- Start from a description ("file to API", "API to API via event"): narrows
+  the library to the route's blocks and places the start step when it's unique.
+- Legend moved to the bottom left of the copy and gained Code change / Impact.

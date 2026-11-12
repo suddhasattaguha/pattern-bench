@@ -36,11 +36,17 @@ Single HTML file, zero dependencies, zero build step. Open
 - **Export / Import** saves the flow as a small JSON file and loads it back
   (see *Flow file format* below). Imports are validated: unknown patterns or
   blocks that don't fit together are rejected with a message.
-- A second palette, **Versioned Artifacts**, is a 2×2 grid: rows are
-  Entry-Route / Exit-Route, columns are Internal / process change and
-  External / contract change. It holds versioned blocks for API-to-Process,
-  File-to-Process and Consume-to-Process (Entry quadrants), and
-  Process-to-API, Process-to-File and Process-to-Publish (Exit quadrants).
+- **Start from a description**: type e.g. "file to API" or "API to API via
+  event" above the library. Plain keyword rules (no AI at runtime) find every
+  end-to-end route between the two end applications; the library shows only
+  the blocks on those routes, and if exactly one block can start them it is
+  placed on an empty canvas. Unrecognised text changes nothing and offers
+  clickable end-to-end examples; a topic is never a start or an end.
+- A second palette, **Versioned Artifacts**, is a real 2×2 grid with its
+  axes labelled: rows Entry route / Exit route, columns Internal (process
+  change) / External (contract change). Only the versions of blocks in the
+  flow are shown; an empty quadrant says "Nothing for this flow". All 8 base
+  blocks have versions (27 in total).
 - **Versioned copy.** Dropping a versioned block onto its base block creates
   a versioned copy, block-for-block aligned with the base. The mode decides
   which view gets the whole canvas: in versioning mode (Versioned Artifacts
@@ -78,6 +84,27 @@ Single HTML file, zero dependencies, zero build step. Open
   Suggestions are the neighbour's versions in which that new connector
   version is the changed object. "Decide later" keeps it as a pending mark.
   The chain beyond the direct neighbour is deliberately not followed yet.
+- **Ripple of a contract change**: a contract version that keeps a shared,
+  unchanged process (e.g. "New API v2 · shared Process", "same Queue
+  subscribes to both", "Target API v2 · same Process") hands the new schema
+  to that process. The neighbour sharing it is asked, in either direction:
+  **Absorb here** (a code change in the same version, marked `v1 Δ`; the
+  ripple stops) or **Pass it on**, followed by "does the process need a code
+  change?". Passed on, the change lands on what lies beyond: an end
+  application's API or folder gets **⚠ dependent logic**, an exposed API
+  flags its callers, and a topic opens a version decision on that block.
+  One step at a time; answered questions show as a pill (click to change).
+- **Calling application**: placing an exposed API (API-to-Process /
+  API-to-Publish) at the start asks whether an end application calls it.
+  Yes adds a CALLER container joined to the API; a new version of the API,
+  or a ripple reaching it, flags the caller. Answered No? Click the API's
+  open left side to add it later. Adding a block in front removes it.
+- **Ripple forecast**: for every contract change, a band above the copy
+  shows how far it could travel. A toggle switches between **Best case**
+  (absorbed at the first process) and **Worst case** (reaches the end
+  application or caller), with blocks, assets and owner boundaries counted.
+  A worst case validated as not happening can be dismissed; then only the
+  best case stays.
 - **Independent panes**: the base flow and the versioned copy pan and zoom
   separately (drag or scroll inside either one). The toolbar's zoom buttons
   act on the pane touched last; Reset view re-aligns both.
@@ -155,6 +182,12 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
 - `versions` (optional) lists the versioned blocks applied in the copy:
   `block` is an index into `blocks`, `variant` must belong to that block's
   pattern.
+- `caller` (optional, boolean): the first block's exposed API has a calling
+  application (its name is a `containers` entry with `at: "caller"`).
+- `ripples` (optional): answered ripple questions — `block` (the source
+  version's block), `choice` (`absorb` | `pass`), `code` (true | false | null).
+- `dismissedWorstCase` (optional): block indices whose worst-case forecast
+  was dismissed.
 
 ## Tests
 
@@ -170,6 +203,9 @@ replace, mirror on rename/move/delete, undo, export/import, in-app confirm):
 click-to-version and the Consume-to-Process versions.
 `tests/test_layout.py` covers independent pane pan/zoom and the resizable
 library: `python3 tests/test_layout.py`.
+`tests/test_ripple.py` covers the ripple questions and markers, the calling
+application, the ripple forecast and starting from a description:
+`python3 tests/test_ripple.py`.
 
 ## Known scope / next steps
 

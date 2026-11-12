@@ -66,9 +66,11 @@ with sync_playwright() as p:
     pg.keyboard.press('Control+z')
     check('undo brings the open decision back', len(dec()) == 1 and pg.locator('#vworld .decision-card').count() == 1)
 
-    # a version that keeps the shared connector unchanged opens nothing
+    # a version that keeps the shared process opens no version decision — but its
+    # contract change reaches that process, so the neighbour is asked absorb / pass on
     drop('p2a-contract-switch', 1)
-    check('Target API v2 · same Process opens no decision', len(dec()) == 0)
+    check('Target API v2 · same Process opens no version decision, only the ripple question',
+          [(x.get('kind'), x['index']) for x in dec()] == [('ripple', 0)])
     # process v2 with v1 retired also opens the decision
     drop('p2a-process-shared', 1)
     check('New Process v2 · same target API opens the upstream decision', [x['options'] for x in dec()] == [['a2p-process-parallel', 'a2p-process-switch']])

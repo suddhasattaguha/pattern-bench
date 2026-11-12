@@ -197,10 +197,25 @@
   }
   .quadrant-grid.two-col{ grid-template-rows:1fr; }
   /* The versions grid scrolls as one sheet, so a quadrant is as tall as its cards. */
-  #versionGrid{ grid-template-rows:auto auto; align-content:start; overflow-y:auto; background:var(--panel); gap:0; }
-  #versionGrid .quad{ overflow:visible; border-bottom:1px solid var(--panel-border); }
-  #versionGrid .quad:nth-child(odd){ border-right:1px solid var(--panel-border); }
-  #versionGrid .quad-title{ position:static; }
+  /* The versions grid is a real 2×2: change type across the top, route down the side.
+     Only versions of blocks in the flow are shown, so each quadrant stays compact. */
+  #versionGrid{ grid-template-columns:22px 1fr 1fr; grid-template-rows:auto max-content max-content; align-content:start; overflow-y:auto;
+    background:var(--panel); gap:0; padding:0 8px 10px 4px; }
+  #versionGrid .vg-corner{ border-bottom:1px solid var(--panel-border); }
+  #versionGrid .vg-col{ padding:9px 6px 7px; text-align:center; font-family:var(--font-mono); font-size:9.5px; font-weight:700;
+    letter-spacing:0.06em; text-transform:uppercase; line-height:1.35; border-bottom:2px solid currentColor; }
+  #versionGrid .vg-col small{ display:block; font-weight:500; letter-spacing:0.02em; text-transform:none; font-family:var(--font-ui); font-size:10px; color:var(--text-muted); }
+  #versionGrid .vg-row{ writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; font-family:var(--font-mono); font-size:10px;
+    font-weight:700; letter-spacing:0.1em; text-transform:uppercase; border-left:2px solid currentColor; padding:0 3px; }
+  #versionGrid .quad{ overflow:visible; min-height:150px; padding:8px 6px; box-sizing:border-box;
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(min(var(--card-w), 100%), var(--card-w))); justify-content:center; align-content:start; gap:8px;
+    border:1px solid var(--panel-border); border-top:none; border-left:none; }
+  #versionGrid .quad:has(.quad-empty:not([hidden])){ align-content:center; }
+  #versionGrid .quad .palette-block{ width:100%; }
+  #versionGrid .quad[data-q$=process]{ border-left:1px solid var(--panel-border); }
+  #versionGrid .quad-empty{ grid-column:1 / -1; }
+  #versionGrid .quad-empty[hidden]{ display:none; }
+  .palette-block.version-card.off-flow{ display:none; }
   .axis-label{
     position:absolute;
     font-family:var(--font-mono);
@@ -480,7 +495,7 @@
   .canvas-wrap.split #baseTag{ display:block; }
   .version-pane .pane-tag{ color:var(--accent-version); border-color:var(--accent-version); }
   .version-legend{
-    position:absolute; top:8px; right:12px; z-index:13; pointer-events:none;
+    position:absolute; bottom:12px; left:12px; z-index:13; pointer-events:none;
     display:flex; gap:14px; align-items:center;
     font-family:var(--font-ui); font-size:11.5px; color:var(--text-primary);
     background:var(--panel); border:1px solid var(--panel-border); border-radius:6px; padding:5px 10px;
@@ -533,6 +548,65 @@
   /* A neighbour that must decide how to handle a new version on its shared connector */
   .cblock.copy-block.pending{ opacity:1; }
   .cblock.copy-block.pending .tile-rim{ fill:var(--accent-amber); stroke:var(--accent-amber); stroke-width:10.5; }
+  /* ---------- Ripple of contract changes ---------- */
+  .dbadge rect{ fill:var(--panel); stroke:var(--accent-teal); stroke-width:1.5; }
+  .dbadge text{ fill:var(--accent-teal); font-family:var(--font-mono); font-size:10.5px; font-weight:700; }
+  .ibadge rect{ fill:var(--accent-amber); stroke:none; }
+  .ibadge text{ fill:#1b1306; font-family:var(--font-ui); font-size:10.5px; font-weight:700; }
+  .pcont.impact{ stroke:var(--accent-amber); stroke-width:2.5; stroke-opacity:1; }
+  .flow-layer .node.impact{ filter:drop-shadow(0 0 4px var(--accent-amber)); }
+  .ripple-pill{
+    position:absolute; z-index:40; height:26px; padding:0 11px; white-space:nowrap; cursor:pointer;
+    border-radius:13px; border:1.5px solid var(--accent-teal); background:var(--panel); color:var(--text-primary);
+    font-family:var(--font-ui); font-size:11.5px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.25);
+  }
+  .ripple-pill:hover{ background:var(--block-bg); }
+  .fc-band{
+    position:absolute; z-index:30; height:26px; box-sizing:border-box; display:flex; align-items:center; gap:8px;
+    padding:0 6px 0 12px; border-radius:13px; white-space:nowrap; overflow:visible;
+    font-family:var(--font-ui); font-size:11.5px; font-weight:600; color:var(--text-primary);
+  }
+  .fc-band.best{ background:color-mix(in srgb, var(--accent-teal) 16%, transparent); border:1.5px solid var(--accent-teal); }
+  .fc-band.worst{ background:color-mix(in srgb, var(--accent-amber) 14%, transparent); border:1.5px dashed var(--accent-amber); }
+  .fc-band .fc-kind{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.06em; text-transform:uppercase; }
+  .fc-band.best .fc-kind{ color:var(--accent-teal); }
+  .fc-band.worst .fc-kind{ color:var(--accent-amber); }
+  .fc-dismiss{ border:none; background:transparent; color:var(--text-muted); font-family:var(--font-ui); font-size:11px;
+    text-decoration:underline; cursor:pointer; padding:2px 4px; }
+  .fc-dismiss:hover{ color:var(--text-primary); }
+  .forecast-toggle{
+    display:none; position:absolute; top:40px; left:12px; z-index:13; align-items:center; gap:4px;
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:8px; padding:3px 4px 3px 9px;
+    font-family:var(--font-mono); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted);
+  }
+  .forecast-toggle.show{ display:flex; }
+  .forecast-toggle button{ border:1px solid transparent; background:transparent; color:var(--text-primary); border-radius:6px;
+    font-family:var(--font-ui); font-size:12px; padding:4px 9px; cursor:pointer; text-transform:none; letter-spacing:0; }
+  .forecast-toggle button.on{ border-color:var(--accent-amber); background:var(--block-bg); font-weight:600; }
+  .forecast-toggle button[data-mode=best].on{ border-color:var(--accent-teal); }
+  .decision-card.caller-card{ border-color:var(--ext); }
+  .decision-card.caller-card::before{ border-color:var(--ext); }
+  .decision-card.caller-card .dc-head{ color:var(--text-primary); }
+  .decision-card.ripple-card .dc-opt[data-ripple], .decision-card.ripple-card .dc-opt[data-code]{ border-color:var(--accent-teal); }
+
+  /* ---------- Start from a description ---------- */
+  .flow-prompt{ padding:9px 12px 8px; border-bottom:1px solid var(--panel-border); }
+  .fp-row{ display:flex; gap:6px; }
+  .fp-row input{ flex:1; min-width:0; box-sizing:border-box; padding:7px 9px; border-radius:6px; border:1px solid var(--panel-border);
+    background:var(--block-bg); color:var(--text-primary); font-family:var(--font-ui); font-size:12.5px; }
+  .fp-row input:focus{ outline:2px solid var(--accent-teal); outline-offset:0; }
+  .fp-msg{ margin-top:7px; font-size:11.5px; line-height:1.4; color:var(--text-primary); }
+  .fp-msg[hidden]{ display:none; }
+  .fp-msg.warn{ color:var(--text-muted); }
+  .fp-examples{ display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+  .fp-example{ border:1px solid var(--panel-border); background:transparent; color:var(--text-primary); border-radius:12px;
+    padding:3px 9px; font-family:var(--font-ui); font-size:11.5px; cursor:pointer; }
+  .fp-example:hover{ border-color:var(--accent-teal); }
+  .palette-block.off-route{ display:none; }
+  .canvas-wrap:not(.versioning) #world .flow-layer .node.can-add-caller{ pointer-events:all; cursor:pointer; }
+  .canvas-wrap:not(.versioning) #world .flow-layer .node.can-add-caller:hover{ filter:drop-shadow(0 0 4px var(--ext)); }
+  body.lib-versioned #routeHint, body.lib-versioned #endHint{ display:none; }
+
   .decision-card{
     position:absolute; z-index:40; width:260px; box-sizing:border-box; cursor:default;
     background:var(--panel); border:1.5px solid var(--accent-amber); border-radius:10px;
@@ -633,6 +707,11 @@
       <button class="palette-tab active" id="tabBaseFlow" data-tab="base">Base Flow Design</button>
       <button class="palette-tab" id="tabVersioned" data-tab="versioned">Versioned Artifacts</button>
     </div>
+    <div class="flow-prompt" id="flowPrompt">
+      <div class="fp-row"><input id="flowPromptInput" type="text" placeholder="Describe the flow, e.g. file to API" spellcheck="false" autocomplete="off" aria-label="Describe the flow"><button class="btn" id="flowPromptGo">Go</button></div>
+      <div class="fp-msg" id="flowPromptMsg" hidden></div>
+    </div>
+    <div class="end-hint" id="routeHint" hidden><span id="routeHintText"></span><button class="dc-link" id="routeHintClear">Show all</button></div>
     <div class="end-hint" id="endHint" hidden><span id="endHintText"></span><button class="dc-link" id="endHintClear">Show all</button></div>
     <div class="quadrant-grid two-col" id="quadrantGrid"></div>
     <div class="quadrant-grid" id="versionGrid" style="display:none;"></div>
@@ -650,7 +729,10 @@
         <span class="legend-item"><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--accent-version)"/></svg>Changed</span>
         <span class="legend-item"><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--accent-version)" stroke-width="1.6" stroke-dasharray="3 2"/></svg>Side-effect</span>
         <span class="legend-item"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--text-muted)" stroke-width="2.5" stroke-dasharray="1 6" stroke-linecap="round"/></svg>Retired</span>
+        <span class="legend-item"><svg width="22" height="14"><rect x="1" y="1" width="20" height="12" rx="4" fill="none" stroke="var(--accent-teal)" stroke-width="1.5"/><text x="11" y="10.5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-teal)">Δ</text></svg>Code change</span>
+        <span class="legend-item"><svg width="14" height="14"><rect x="0" y="0" width="14" height="14" rx="4" fill="var(--accent-amber)"/><text x="7" y="11" text-anchor="middle" font-size="10" font-weight="700" fill="#1b1306">!</text></svg>Impact</span>
       </div>
+      <div class="forecast-toggle" id="forecastToggle"><span>Ripple forecast</span><button data-mode="best" class="on">Best case</button><button data-mode="worst">Worst case</button></div>
     </div>
     <div class="mini-view" id="miniView" title="Click to swap the two views">
       <div class="mini-stage" id="miniStage"></div>
@@ -686,6 +768,15 @@
   // Platform / asset names the user gave containers, keyed by a connector key ('block-3:out').
   let containerLabels = {};
   let baseContainers = [];
+  // An end application calling the exposed API of the first block (one caller per API).
+  let callers = {};                 // first block id -> true
+  const callerAsked = new Set();    // blocks whose "called by an end application?" question was answered
+  let callerPrompt = null;          // block id whose question card is open
+  // Ripple of a contract change through a shared process: source block id ->
+  // { vid, choice:'absorb'|'pass', code:true|false|null } (vid = the version it answers).
+  let rippleChoices = {};
+  let forecastMode = 'best';        // ripple forecast shown: 'best' | 'worst'
+  let forecastDismissed = {};       // source block id -> vid: worst case validated as not happening
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
@@ -697,7 +788,8 @@
     ipaas:    { label:'iPaaS',          cls:'own-ipaas' },
     broker:   { label:'Message Broker', cls:'own-broker' },
     broker2:  { label:'Message Broker', cls:'own-broker' },  // a second, separate broker
-    external: { label:'',               cls:'own-external' }
+    external: { label:'',               cls:'own-external' },
+    caller:   { label:'',               cls:'own-external' }   // the end application calling an exposed API
   };
 
   // Connector symbols: half-width, and whether the symbol sits ON its
@@ -707,7 +799,8 @@
     file:    { half:24, edge:true },
     process: { half:22, edge:false },
     topic:   { half:20, edge:false },
-    queue:   { half:34, edge:false }
+    queue:   { half:34, edge:false },
+    app:     { half:22, edge:true }
   };
 
   // All symbols are drawn centred on (0,0); colours come from CSS classes.
@@ -731,6 +824,10 @@
                '<rect class="n-dot" x="-23" y="-7" width="9" height="14" rx="2.5"></rect>' +
                '<rect class="n-dot" x="-10" y="-7" width="9" height="14" rx="2.5"></rect>' +
                '<rect class="n-dot" x="3" y="-7" width="9" height="14" rx="2.5"></rect>';
+      case 'app':      // an application window: the end application calling an exposed API
+        return '<rect class="n-shape" x="-21" y="-16" width="42" height="32" rx="5"></rect>' +
+               '<path class="n-line" stroke-width="2" d="M-21 -7H21M-12 1h24M-12 7h15"></path>' +
+               '<circle class="n-dot" cx="-15" cy="-11.5" r="1.8"></circle><circle class="n-dot" cx="-9.5" cy="-11.5" r="1.8"></circle>';
       case 'file':     // a folder with a file in it
         return '<rect class="n-shape" x="-9" y="-19" width="22" height="26" rx="3"></rect>' +
                '<path class="n-line" stroke-width="2" d="M-4 -12h12M-4 -7h12"></path>' +
@@ -778,6 +875,7 @@
     // shares with its upstream neighbour into lanes, and the neighbour's links
     // must reach those lanes, not the single connector that was there before.
     const deferred = [];
+    let callerSet = null, firstEntry = null;
     blocks.forEach((b, i) => {
       const spec = NODE_SPECS[b.tpl];
       const v = b.variant ? variantsById[b.variant] : null;
@@ -786,8 +884,13 @@
         .map(n => ({ type:end.type, owner:end.owner, dy:LANE_DY[n.lane], role:n.role, ver:n.ver, key:n.k }));
       let entry;
       if(i === 0){
+        if(b.caller){
+          callerSet = { x:b.left - 92, cy, nodes:[{ type:'app', owner:'caller', dy:0 }], strong:true, vblock:null, bi:i, key:b.id + ':caller', caller:true };
+          sets.push(callerSet);
+        }
         entry = { x:b.left + SEAM_X, cy, nodes:[{ type:spec.entry.type, owner:spec.entry.owner, dy:0 }], strong:!!spec.entry.strong, vblock:null, bi:i, key:b.id + ':in' };
         sets.push(entry);
+        firstEntry = entry;
       } else {
         entry = sets[sets.length - 1];   // the seam shared with the upstream block
         entry.bis = (entry.bis || [entry.bi]).concat(i);
@@ -829,6 +932,11 @@
       }
     });
 
+    if(callerSet) firstEntry.nodes.forEach(z => links.push({
+      x1:callerSet.x, y1:callerSet.cy, x2:firstEntry.x, y2:firstEntry.cy + z.dy,
+      retired: z.role === 'retired', dim: dimUnversioned && firstEntry.vblock === null && !pending.has(0)
+    }));
+
     // Platform containers: consecutive connectors with the same owner form one
     // asset, framed outside the tiles (the joins stay where they are). Each
     // run is a separate asset, even on the same platform. End applications
@@ -845,7 +953,8 @@
         const first = run[0], last = run[run.length - 1], owner = first.nodes[0].owner;
         const x1 = first.x - SYMBOLS[first.nodes[0].type].half - 16;
         const x2 = last.x + SYMBOLS[last.nodes[0].type].half + 16;
-        const over = tiles.filter(t => t.x2 > x1 + 6 && t.x1 < x2 - 6);
+        let over = tiles.filter(t => t.x2 > x1 + 6 && t.x1 < x2 - 6);
+        if(!over.length) over = [tiles[0]];   // the caller sits left of the first tile
         const active = run.some(st => st.vblock !== null || pending.has(st.bi));
         containers.push({
           x1, x2, y1: Math.min(...over.map(t => t.y1)) - 46, y2: Math.max(...over.map(t => t.y2)) + 12,
@@ -864,7 +973,8 @@
     sets.forEach(st => st.nodes.forEach(n => nodes.push({
       x:st.x, y:st.cy + n.dy, type:n.type, owner:n.owner, role:n.role || null, ver:n.ver || null,
       dim: dimUnversioned && st.vblock === null && !pending.has(st.bi),
-      skey: st.key, bis: (st.bis || [st.bi]).map(bi => blocks[bi].id).filter(Boolean)
+      key: st.key, caller: !!st.caller,
+      skey: st.caller ? null : st.key, bis: (st.bis || [st.bi]).map(bi => blocks[bi].id).filter(Boolean)
     })));
     return { containers, links, nodes };
   }
@@ -885,7 +995,8 @@
       }
     });
     model.nodes.forEach(n => {
-      const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '');
+      const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '') +
+        (n.caller ? ' caller-node' : '') + (n.impact ? ' impact' : '') + (n.delta ? ' delta' : '');
       out += '<g class="node ' + cls + '" data-type="' + n.type + '"' + (n.role ? ' data-role="' + n.role + '"' : '') +
         (n.skey ? ' data-skey="' + n.skey + '" data-blocks="' + n.bis.join(',') + '"' : '') +
         ' transform="translate(' + n.x + ',' + n.y + ')">' + symbolMarkup(n.type) + '</g>';
@@ -893,6 +1004,18 @@
         const bx = n.x + (n.type === 'api' ? 32 : SYMBOLS[n.type].half + 6), by = n.y - (n.type === 'api' ? 25 : 29);
         out += '<g class="vbadge role-' + n.role + '"><rect x="' + bx + '" y="' + by + '" width="24" height="18" rx="6"></rect>' +
           '<text x="' + (bx+12) + '" y="' + (by+13) + '" text-anchor="middle">' + n.ver + '</text></g>';
+      }
+      if(n.delta){
+        // a code change in the same version: not a new version
+        const bx = n.x + SYMBOLS[n.type].half + 6, by = n.y + 9;
+        out += '<g class="dbadge"><title>Code change in the same version (not a new version)</title><rect x="' + bx + '" y="' + by + '" width="50" height="18" rx="6"></rect>' +
+          '<text x="' + (bx+25) + '" y="' + (by+13) + '" text-anchor="middle">v1 Δ</text></g>';
+      }
+      if(n.impact){
+        // dependent logic behind an end application's API / folder may be impacted
+        const bx = n.x - 58, by = n.y + 24;
+        out += '<g class="ibadge"><title>Dependent logic in the end application may be impacted</title><rect x="' + bx + '" y="' + by + '" width="116" height="18" rx="6"></rect>' +
+          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">⚠ dependent logic</text></g>';
       }
     });
     return out;
@@ -908,10 +1031,10 @@
   function containerMarkup(model, editable){
     let out = '';
     model.containers.forEach((c, ci) => {
-      const ext = c.owner === 'external';
-      const cls = OWNERS[c.owner].cls + (c.dim ? ' dim' : '');
+      const ext = c.owner === 'external' || c.owner === 'caller';
+      const cls = OWNERS[c.owner].cls + (c.dim ? ' dim' : '') + (c.impact ? ' impact' : '');
       out += '<rect class="pcont ' + cls + '" x="' + c.x1 + '" y="' + c.y1 + '" width="' + (c.x2 - c.x1) + '" height="' + (c.y2 - c.y1) + '" rx="' + (ext ? 5 : 18) + '"></rect>';
-      const type = ext ? 'END APPLICATION' : OWNERS[c.owner].label.toUpperCase();
+      const type = c.owner === 'caller' ? 'CALLER' : ext ? 'END APPLICATION' : OWNERS[c.owner].label.toUpperCase();
       const lab = containerLabel(c.keys);
       const name = lab ? [lab.platform, lab.asset].filter(Boolean).join(' \u00B7 ') : '';
       const shown = name || (editable ? '+ name' : '');
@@ -1421,21 +1544,29 @@
     { route:'exit',  change:'process',  title:'Exit · Internal / process change' },
     { route:'exit',  change:'contract', title:'Exit · External / contract change' }
   ];
-  VERSION_QUADS.forEach(q => {
+  const vgCell = (cls, html, color) => {
+    const el = document.createElement('div');
+    el.className = cls;
+    el.innerHTML = html;
+    if(color) el.style.color = color;
+    versionGrid.appendChild(el);
+  };
+  vgCell('vg-corner', '');
+  vgCell('vg-col', 'Internal<small>process change</small>', 'var(--text-primary)');
+  vgCell('vg-col', 'External<small>contract change</small>', 'var(--accent-version)');
+  const quadEmpties = [];
+  VERSION_QUADS.forEach((q, qi) => {
+    if(qi % 2 === 0) vgCell('vg-row', q.route === 'entry' ? 'Entry route' : 'Exit route', q.route === 'entry' ? 'var(--accent-teal)' : 'var(--accent-amber)');
     const div = document.createElement('div');
     div.className = 'quad';
-    const titleEl = document.createElement('div');
-    titleEl.className = 'quad-title';
-    titleEl.textContent = q.title;
-    titleEl.style.color = q.route === 'entry' ? 'var(--accent-teal)' : 'var(--accent-amber)';
-    div.appendChild(titleEl);
+    div.dataset.q = q.route + '-' + q.change;
+    div.title = q.title;
     const items = VERSION_VARIANTS.filter(v => v.route === q.route && v.change === q.change);
-    if(items.length === 0){
-      const empty = document.createElement('div');
-      empty.className = 'quad-empty';
-      empty.textContent = 'No versioned blocks defined yet';
-      div.appendChild(empty);
-    }
+    const empty = document.createElement('div');
+    empty.className = 'quad-empty';
+    empty.textContent = 'Nothing for this flow';
+    div.appendChild(empty);
+    quadEmpties.push({ empty, items });
     items.forEach(v => {
       const tpl = templatesById[v.base];
       const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
@@ -1511,6 +1642,8 @@
       const isBase = tab.dataset.tab === 'base';
       quadrantGrid.style.display = isBase ? 'grid' : 'none';
       versionGrid.style.display = isBase ? 'none' : 'grid';
+      flowPrompt.style.display = isBase ? '' : 'none';
+      document.body.classList.toggle('lib-versioned', !isBase);
       paletteHeadDesc.textContent = PALETTE_TAB_DESC[tab.dataset.tab];
       // The Versioned Artifacts tab is versioning mode: only then do connector
       // clicks select something to version. Leaving it clears any selection.
@@ -1544,15 +1677,148 @@
         item.title = tpl.purpose || '';
       }
     });
+    // Versioned Artifacts: only the versions of blocks in the flow are shown at all.
     VERSION_VARIANTS.forEach(v => {
       const item = paletteItemsByVariantId[v.id];
       if(!item) return;
       const ok = chainOrder.some(b => b.dataset.tpl === v.base);
-      item.classList.toggle('unavailable', !ok);
+      item.classList.toggle('off-flow', !ok);
       item.draggable = ok;
-      item.title = ok ? v.purpose : 'Add a ' + templatesById[v.base].label + ' block to the base flow first';
+    });
+    quadEmpties.forEach(({ empty, items }) => { empty.hidden = items.some(v => chainOrder.some(b => b.dataset.tpl === v.base)); });
+    // A route described in the prompt narrows the base library to its blocks.
+    routeHint.hidden = !routeFilter;
+    if(routeFilter) routeHintText.textContent = 'Showing the blocks on routes from ' + routeFilter.label + '.';
+    templates.forEach(tpl => {
+      const item = paletteItemsByTemplateId[tpl.id];
+      if(item) item.classList.toggle('off-route', !!routeFilter && !routeFilter.ids.has(tpl.id));
     });
   }
+
+  // ---------------------------------------------------------------
+  // Start from a description ("file to API", "API to file via event")
+  // Plain keyword rules, no AI at runtime: the text names a source and a target
+  // end application (file or API) and, optionally, an event in between. The
+  // tool searches its own docking rules for every end-to-end route, narrows the
+  // library to the blocks on those routes and, when only one block can start
+  // them, places that start step on an empty canvas.
+  // ---------------------------------------------------------------
+  const routeHint = document.getElementById('routeHint');
+  const routeHintText = document.getElementById('routeHintText');
+  const flowPrompt = document.getElementById('flowPrompt');
+  const flowPromptInput = document.getElementById('flowPromptInput');
+  const flowPromptMsg = document.getElementById('flowPromptMsg');
+  let routeFilter = null;   // { ids:Set(template ids), label }
+  const END_NAME = { file:'File', api:'API' };
+  // Only true end-to-end scenarios: an end application at both ends; a topic is never a start or an end.
+  const PROMPT_EXAMPLES = ['file to API', 'API to API', 'file to file', 'API to file', 'file to API via event', 'API to API via event'];
+  const END_WORDS = [
+    ['file', /\b(files?|sftp|folders?|csv|flat ?files?|ftp)\b/],
+    ['api', /\b(apis?|rest|https?|odata|soap|endpoints?|web ?services?)\b/]
+  ];
+  const EVENT_WORDS = /\b(events?|topics?|publish(es|ing)?|pub ?\/? ?sub|brokers?|async(hronous)?|queues?|kafka|messag(e|es|ing)|event-driven)\b/;
+  function findEnd(text){
+    let best = null;
+    END_WORDS.forEach(([type, re]) => { const m = re.exec(text); if(m && (!best || m.index < best.index)) best = { type, index:m.index }; });
+    return best ? best.type : null;
+  }
+  function parseFlowPrompt(raw){
+    const text = ' ' + raw.toLowerCase().replace(/[\u2192]|->|=>/g, ' to ') + ' ';
+    const viaEvent = EVENT_WORDS.test(text);
+    const parts = text.split(/\bto\b|\binto\b|\btowards\b/);
+    let src = null, tgt = null;
+    if(parts.length > 1){ src = findEnd(parts[0]); tgt = findEnd(parts.slice(1).join(' ')); }
+    else {
+      const found = [];
+      END_WORDS.forEach(([type, re]) => { const g = new RegExp(re.source, 'g'); let m; while((m = g.exec(text))) found.push({ type, index:m.index }); });
+      found.sort((a, b) => a.index - b.index);
+      src = found[0] ? found[0].type : null;
+      tgt = found[1] ? found[1].type : null;
+    }
+    return { src, tgt, viaEvent };
+  }
+  // Every chain of blocks from an end application of type src to one of type tgt.
+  function findRoutes(src, tgt, viaEvent){
+    const routes = [];
+    const walk = (path) => {
+      const last = path[path.length - 1];
+      if(last.exitType === tgt){
+        const viaTopic = path.slice(0, -1).some(t => t.exitType === 'topic');
+        if(viaTopic === viaEvent) routes.push(path.map(t => t.id));
+        return;
+      }
+      if(path.length >= 4 || !['process', 'topic'].includes(last.exitType)) return;   // an API or file in the middle would be another end application
+      templates.filter(t => t.entryType === last.exitType && !path.includes(t)).forEach(t => walk([...path, t]));
+    };
+    templates.filter(t => t.entryType === src).forEach(t => walk([t]));
+    return routes;
+  }
+  function promptMessage(text, examples, warn){
+    flowPromptMsg.hidden = false;
+    flowPromptMsg.classList.toggle('warn', !!warn);
+    flowPromptMsg.innerHTML = '';
+    const p = document.createElement('div');
+    p.textContent = text;
+    flowPromptMsg.appendChild(p);
+    if(examples && examples.length){
+      const row = document.createElement('div');
+      row.className = 'fp-examples';
+      examples.forEach(ex => {
+        const b = document.createElement('button');
+        b.className = 'fp-example';
+        b.textContent = ex;
+        b.addEventListener('click', () => { flowPromptInput.value = ex; runFlowPrompt(ex); });
+        row.appendChild(b);
+      });
+      flowPromptMsg.appendChild(row);
+    }
+  }
+  function setRouteFilter(ids, label){ routeFilter = { ids:new Set(ids), label }; refreshLibrary(); }
+  function runFlowPrompt(raw){
+    const { src, tgt, viaEvent } = parseFlowPrompt(raw || '');
+    if(!src && !tgt){
+      promptMessage('Couldn\u2019t recognise a source or a target end application. Try one of these:', PROMPT_EXAMPLES, true);
+      return;
+    }
+    if(!tgt){
+      const starts = templates.filter(t => t.entryType === src && findRoutes(src, 'api', viaEvent).concat(findRoutes(src, 'file', viaEvent)).some(r => r[0] === t.id));
+      setRouteFilter(starts.map(t => t.id), END_NAME[src] + ' (where to?)');
+      promptMessage('Starts from ' + END_NAME[src] + '. Where should it go?', PROMPT_EXAMPLES.filter(e => e.toLowerCase().startsWith(src)));
+      return;
+    }
+    if(!src){
+      const ends = templates.filter(t => t.exitType === tgt);
+      setRouteFilter(ends.map(t => t.id), '(where from?) to ' + END_NAME[tgt]);
+      promptMessage('Ends at ' + END_NAME[tgt] + '. Where does it start?', PROMPT_EXAMPLES.filter(e => e.toLowerCase().split(' to ')[1].startsWith(tgt)));
+      return;
+    }
+    const routes = findRoutes(src, tgt, viaEvent);
+    const label = END_NAME[src] + ' to ' + END_NAME[tgt] + (viaEvent ? ' via event' : '');
+    if(!routes.length){
+      promptMessage('No end-to-end route found for ' + label + '. Try one of these:', PROMPT_EXAMPLES, true);
+      return;
+    }
+    setRouteFilter(routes.flat(), label);
+    const starts = [...new Set(routes.map(r => r[0]))];
+    const n = plural(routes.length, 'route');
+    if(starts.length === 1 && chainOrder.length === 0){
+      const r = canvasWrap.getBoundingClientRect();
+      const pt = clientToWorld(r.left + r.width*0.35, r.top + r.height*0.45);
+      attachToChain(templatesById[starts[0]], pt.x, pt.y);
+      recordHistory();
+      promptMessage(label + ': ' + n + '. Placed ' + templatesById[starts[0]].label + ' as the start step \u2014 build on from its right end.');
+    } else if(starts.length === 1){
+      promptMessage(label + ': ' + n + '. The canvas already has a flow, so nothing was placed; the library shows only the blocks on these routes.');
+    } else {
+      promptMessage(label + ': ' + n + '. More than one block can start it (' + starts.map(id => templatesById[id].label).join(' or ') + ') \u2014 drag the one you want.');
+    }
+  }
+  flowPromptInput.addEventListener('keydown', (e) => {
+    e.stopPropagation();   // typing must not trigger canvas shortcuts (Delete, Ctrl+Z…)
+    if(e.key === 'Enter'){ e.preventDefault(); runFlowPrompt(flowPromptInput.value); }
+  });
+  document.getElementById('flowPromptGo').addEventListener('click', () => runFlowPrompt(flowPromptInput.value));
+  document.getElementById('routeHintClear').addEventListener('click', () => { routeFilter = null; flowPromptMsg.hidden = true; refreshLibrary(); });
 
   // ---------------------------------------------------------------
   // Infinite canvas state: pan (screen px) + zoom
@@ -1690,6 +1956,7 @@
   document.getElementById('clearCanvas').addEventListener('click', () => {
     if(chainOrder.length === 0) return;
     askConfirm('Remove the current flow' + (Object.keys(versionOverrides).length ? ' and its versioned copy' : '') + '?', 'Clear', () => {
+      routeFilter = null; flowPromptMsg.hidden = true;
       resetChain();
       recordHistory();
     });
@@ -1744,7 +2011,7 @@
     isPanning = false;
     canvasWrap.classList.remove('panning');
     if(canvasWrap.hasPointerCapture(e.pointerId)) canvasWrap.releasePointerCapture(e.pointerId);
-    if(!movedDuringPan){ deselectAll(); clearVersionTarget(); closeDecisionCards(); }
+    if(!movedDuringPan){ deselectAll(); clearVersionTarget(); closeDecisionCards(); if(callerPrompt) answerCaller(false); }
   });
   canvasWrap.addEventListener('pointercancel', () => {
     isPanning = false;
@@ -1779,6 +2046,7 @@
     if(chainOrder.length === 0){
       const el = createBlock(tpl, gridSnap(dropX - w/2), gridSnap(dropY - BLOCK_H/2));
       chainOrder = [el];
+      askAboutCaller(el);
       refreshPaletteAvailability();
       return;
     }
@@ -1800,9 +2068,58 @@
       const el = createBlock(tpl, x, y);
       commitDock(el, 'right', anchor, 'left');
       chainOrder.unshift(el);
+      delete callers[anchor.dataset.id];   // its API is no longer the start of the flow
+      askAboutCaller(el);
     }
     endSelected = !!end;   // keep building on the end the user chose
     refreshPaletteAvailability();
+  }
+
+  // An exposed API at the start of the flow: ask once whether an end
+  // application calls it, so impact on that caller can be flagged later.
+  function askAboutCaller(el){
+    const tpl = templatesById[el.dataset.tpl];
+    if(tpl.entryType === 'api' && !callerAsked.has(el.dataset.id) && !callers[el.dataset.id]) callerPrompt = el.dataset.id;
+  }
+  function answerCaller(yes){
+    const id = callerPrompt;
+    callerPrompt = null;
+    if(!id) return;
+    callerAsked.add(id);
+    if(yes) callers[id] = true;
+    renderFlows();
+    if(yes){ recordHistory(); showToast('Calling application added. Name it via its container label.'); }
+  }
+  function renderCallerCard(){
+    world.querySelectorAll(':scope > .caller-card').forEach(c => c.remove());
+    const b = chainOrder[0];
+    if(!callerPrompt || !b || b.dataset.id !== callerPrompt || callers[callerPrompt]){ callerPrompt = null; return; }
+    const card = document.createElement('div');
+    card.className = 'decision-card caller-card';
+    card.style.left = (parseFloat(b.style.left) - 30) + 'px';
+    card.style.top = (parseFloat(b.style.top) + BLOCK_H + 14) + 'px';
+    card.style.setProperty('--arrow-x', '40px');
+    card.addEventListener('pointerdown', e => e.stopPropagation());
+    const head = document.createElement('div');
+    head.className = 'dc-head';
+    head.textContent = 'Calling application?';
+    card.appendChild(closeButton('Close', () => answerCaller(false)));
+    const q = document.createElement('p');
+    q.className = 'dc-q';
+    q.textContent = 'Is this API called by an end application?';
+    const note = document.createElement('p');
+    note.className = 'dc-note';
+    note.textContent = 'Adding it lets the tool flag impact on the caller when the API changes or gets versions.';
+    card.append(head, q, note);
+    [['yes', 'Yes · add the calling application'], ['no', 'No']].forEach(([a, label]) => {
+      const btn = document.createElement('button');
+      btn.className = 'dc-opt';
+      btn.dataset.caller = a;
+      btn.textContent = label;
+      btn.addEventListener('click', () => answerCaller(a === 'yes'));
+      card.appendChild(btn);
+    });
+    world.appendChild(card);
   }
 
   function commitDock(elA, sideA, elB, sideB){
@@ -1878,6 +2195,10 @@
     chainOrder = [];
     versionOverrides = {};
     containerLabels = {};
+    callers = {};
+    callerPrompt = null;
+    rippleChoices = {};
+    forecastDismissed = {};
     closeLabelEditor();
     selectedBlock = null;
     updateEmptyHint();
@@ -1892,17 +2213,26 @@
   // at the same x and is the only thing in the copy you can select. Deleting a
   // base block drops its version too.
   function chainGeometry(withVersions){
-    return chainOrder.map(b => ({
+    return chainOrder.map((b, i) => ({
       id: b.dataset.id, left: parseFloat(b.style.left), top: parseFloat(b.style.top), w: parseFloat(b.style.width),
-      tpl: b.dataset.tpl, variant: withVersions ? (versionOverrides[b.dataset.id] || null) : null
+      tpl: b.dataset.tpl, variant: withVersions ? (versionOverrides[b.dataset.id] || null) : null,
+      caller: i === 0 && !!callers[b.dataset.id]
     }));
   }
 
   // Redraws both panes' flow layers (and the copy's tiles).
   function renderFlows(){
     if(versionTarget && !versionTarget.blocks.every(id => chainOrder.some(b => b.dataset.id === id))) versionTarget = null;
+    const firstId = chainOrder[0] ? chainOrder[0].dataset.id : null;
+    Object.keys(callers).forEach(k => { if(k !== firstId) delete callers[k]; });   // a caller belongs to the start of the flow
     renderFlowLayer(world, buildFlowModel(chainGeometry(false), false));
+    // the first block's exposed API can be clicked to add a calling application later
+    if(firstId && templatesById[chainOrder[0].dataset.tpl].entryType === 'api' && !callers[firstId]){
+      const n = world.querySelector('.flow-layer .node[data-skey="' + firstId + ':in"]');
+      if(n){ n.classList.add('can-add-caller'); n.insertAdjacentHTML('afterbegin', '<title>Called by an end application? Click to add it</title>'); }
+    }
     renderTargetCard(world);
+    renderCallerCard();
     renderCopy();
     if(!canvasWrap.classList.contains('split')) highlightSuggestions([]);
     scheduleMini();
@@ -1918,7 +2248,7 @@
     vworld.innerHTML = '';
     selectedCopy = null;
     updateLayout();
-    if(!active){ highlightSuggestions([]); return; }
+    if(!active){ highlightSuggestions([]); document.getElementById('forecastToggle').classList.remove('show'); return; }
     const decisions = computeDecisions();
     const pendingIdx = new Set(decisions.map(d => d.index));
 
@@ -1960,8 +2290,16 @@
       vworld.appendChild(el);
       if(keepSelected && keepSelected === b.dataset.id && vid){ el.classList.add('selected'); selectedCopy = el; }
     });
-    renderFlowLayer(vworld, buildFlowModel(chainGeometry(true), true, pendingIdx));
-    const fresh = renderDecisions(decisions);
+    const model = buildFlowModel(chainGeometry(true), true, pendingIdx);
+    const ripples = computeRipples();
+    model.nodes.forEach(n => {
+      if(n.type === 'process' && ripples.delta.has(n.skey) && n.role !== 'retired' && n.ver !== 'v2'){ n.delta = true; n.dim = false; }
+      if(ripples.impact.has(n.key) && n.role !== 'retired'){ n.impact = true; n.dim = false; }
+    });
+    model.containers.forEach(c => { if(c.keys.some(k => ripples.impact.has(k))){ c.impact = true; c.dim = false; } });
+    renderFlowLayer(vworld, model);
+    const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...decisions]);
+    renderForecasts();
     renderTargetCard(vworld);
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
@@ -1996,6 +2334,15 @@
     if(first) first.scrollIntoView({ block:'nearest', behavior:'smooth' });
   }
   function clearVersionTarget(){ if(versionTarget){ versionTarget = null; renderFlows(); } }
+  world.addEventListener('click', (e) => {
+    if(canvasWrap.classList.contains('versioning')) return;
+    const n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
+    const b = chainOrder[0];
+    if(!n || !b || n.dataset.skey !== b.dataset.id + ':in' || n.dataset.type !== 'api' || callers[b.dataset.id]) return;
+    e.stopPropagation();
+    callerPrompt = b.dataset.id;
+    renderFlows();
+  });
   [world, vworld].forEach(w => w.addEventListener('click', (e) => {
     if(!canvasWrap.classList.contains('versioning')) return;
     const n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
@@ -2086,7 +2433,7 @@
       '<label>Platform<input name="platform" maxlength="80" placeholder="e.g. SAP BTP, Azure"></label>' +
       '<label>Asset name<input name="asset" maxlength="80" placeholder="e.g. order-intake"></label>' +
       '<div class="le-actions"><button class="btn" data-a="cancel">Cancel</button><button class="btn" data-a="save">Save</button></div>';
-    ed.querySelector('.le-head').textContent = c.owner === 'external' ? 'End application' : OWNERS[c.owner].label;
+    ed.querySelector('.le-head').textContent = c.owner === 'caller' ? 'Calling application' : c.owner === 'external' ? 'End application' : OWNERS[c.owner].label;
     const [pIn, aIn] = ed.querySelectorAll('input');
     pIn.value = cur.platform || '';
     aIn.value = cur.asset || '';
@@ -2122,7 +2469,7 @@
   // has to decide how to handle it. Only the direct neighbour is checked —
   // the chain beyond it is deliberately parked for now.
   // ---------------------------------------------------------------
-  const CONNECTOR_LABEL = { api:'API', process:'Process', topic:'Topic', queue:'Queue', file:'File' };
+  const CONNECTOR_LABEL = { api:'API', process:'Process', topic:'Topic', queue:'Queue', file:'File', app:'Calling application' };
   const DECISION_W = 260;                 // keep in step with .decision-card's width
   const collapsedDecisions = new Set();   // decisions the user chose to leave open ("Decide later")
   let shownDecisions = new Set();         // decisions already on screen, so only new ones pull the view
@@ -2150,8 +2497,175 @@
           side, type, ver: nn.ver, options, current: nv ? nv.id : null });
       });
     });
+    const r = computeRipples();
+    r.asks.filter(a => !a.resolved).forEach(a => out.push(a));
+    r.forced.forEach(d => { if(!out.some(x => x.key === d.key)) out.push(d); });
     return out;
   }
+
+  // ---------------------------------------------------------------
+  // Ripple of a contract change
+  // A contract version that keeps a shared, unchanged process (e.g. "New API v2 ·
+  // shared Process", "same Queue subscribes to both") hands the new schema to that
+  // process. The neighbour sharing the process is asked: absorb it here (a code
+  // change in the same version, v1 Δ) or pass it on. Passing it on asks whether
+  // the process needs a code change, then lands on what lies beyond: an end
+  // application's API or folder (⚠ dependent logic), the calling application of
+  // an exposed API, or a topic (which then needs a version decision). One step
+  // at a time, in both directions.
+  // ---------------------------------------------------------------
+  const primaryNode = (v) => v.nodes.find(n => n.role === 'primary');
+  const handsToSharedProcess = (v) => v.change === 'contract' &&
+    v.nodes.some(n => n.type === 'process' && n.role === 'unchanged') && !v.nodes.some(n => n.type === 'process' && n.ver !== 'v1');
+  const joinKey = (j) => j === 0 ? chainOrder[0].dataset.id + ':in' : chainOrder[j-1].dataset.id + ':out';
+
+  function computeRipples(){
+    const out = { asks:[], delta:new Set(), impact:new Set(), forced:[] };
+    chainOrder.forEach((b, i) => {
+      const v = variantsById[versionOverrides[b.dataset.id]];
+      if(!v) return;
+      const spec = NODE_SPECS[b.dataset.tpl];
+      const pn = primaryNode(v);
+      // a new version of the exposed API reaches its calling application directly
+      if(i === 0 && pn && pn.type === 'api' && spec.entry.type === 'api' && callers[b.dataset.id]) out.impact.add(b.dataset.id + ':caller');
+      if(!handsToSharedProcess(v)) return;
+      const dir = spec.exit.type === 'process' ? 'downstream' : spec.entry.type === 'process' ? 'upstream' : null;
+      if(!dir) return;
+      const j = dir === 'downstream' ? i + 1 : i - 1;
+      const n = chainOrder[j];
+      if(!n || versionOverrides[n.dataset.id]) return;   // nothing beyond, or the neighbour has its own version
+      const nspec = NODE_SPECS[n.dataset.tpl];
+      const skey = dir === 'downstream' ? b.dataset.id + ':out' : n.dataset.id + ':out';
+      const far = dir === 'downstream' ? { type:nspec.exit.type, owner:nspec.exit.owner, key:n.dataset.id + ':out' }
+                                       : { type:nspec.entry.type, owner:nspec.entry.owner, key:joinKey(j) };
+      if(far.type === 'api' && far.owner !== 'external' && j === 0 && callers[n.dataset.id]) far.caller = n.dataset.id + ':caller';
+      const st = rippleChoices[b.dataset.id];
+      const choice = st && st.vid === v.id ? st : null;
+      const ask = { key:'ripple|' + b.dataset.id, kind:'ripple', blockId:n.dataset.id, index:j, sourceId:b.dataset.id, vid:v.id,
+        side:dir, type:'process', skey, changed:pn, far, choice,
+        resolved: !!choice && (choice.choice === 'absorb' || choice.code === true || choice.code === false) };
+      out.asks.push(ask);
+      if(!ask.resolved) return;
+      if(choice.choice === 'absorb' || choice.code) out.delta.add(skey);
+      if(choice.choice === 'absorb') return;
+      // passed on: what the change lands on beyond the process
+      if(far.type === 'api' || far.type === 'file') out.impact.add(far.caller || far.key);
+      else if(far.type === 'topic'){
+        const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && x.change === 'contract' &&
+          x.nodes.some(m => m.type === 'topic' && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
+        out.forced.push({ key:n.dataset.id + '|passed', blockId:n.dataset.id, index:j, sourceId:b.dataset.id, side:dir,
+          type:'topic', ver:'v2', options, current:null, passed:true });
+      }
+    });
+    return out;
+  }
+  function farLabel(far){
+    if(far.caller) return 'the calling application';
+    if(far.type === 'topic') return 'the Topic';
+    if(far.owner === 'external') return far.type === 'file' ? 'the end application\u2019s folder' : 'the end application\u2019s API';
+    return 'the API\u2019s callers';
+  }
+  function setRipple(srcId, patch){
+    const vid = versionOverrides[srcId];
+    if(!vid) return;
+    collapsedDecisions.delete('ripple|' + srcId);
+    if(patch === null) delete rippleChoices[srcId];
+    else rippleChoices[srcId] = Object.assign({ vid, choice:null, code:null }, rippleChoices[srcId] && rippleChoices[srcId].vid === vid ? rippleChoices[srcId] : {}, patch);
+    renderCopy();
+    recordHistory();
+  }
+
+  // ---------------------------------------------------------------
+  // Ripple forecast: how far each contract change could travel.
+  // Best case = absorbed at the first process it reaches; worst case = passed on
+  // all the way to the end application (or the exposed API's caller).
+  // ---------------------------------------------------------------
+  function computeForecasts(){
+    const out = [];
+    if(!chainOrder.length) return out;
+    const stations = buildFlowModel(chainGeometry(false), false).nodes;   // left to right, one per connector
+    const blocks = chainGeometry(false);
+    chainOrder.forEach((b, i) => {
+      const v = variantsById[versionOverrides[b.dataset.id]];
+      if(!v || v.change !== 'contract') return;
+      const pn = primaryNode(v);
+      if(!pn) return;
+      const spec = NODE_SPECS[b.dataset.tpl];
+      let dir = null, startKey = null;
+      if(pn.type === spec.entry.type){ dir = 'down'; startKey = joinKey(i); }
+      else if(pn.type === spec.exit.type){ dir = pn.type === 'topic' ? 'down' : 'up'; startKey = b.dataset.id + ':out'; }
+      if(!dir) return;
+      const start = stations.findIndex(st => st.key === startKey);
+      if(start < 0) return;
+      const step = dir === 'down' ? 1 : -1, last = dir === 'down' ? stations.length - 1 : 0;
+      let best = last;
+      for(let k = start + step; dir === 'down' ? k <= last : k >= last; k += step){ if(stations[k].type === 'process'){ best = k; break; } }
+      const summary = (endK) => {
+        const lo = Math.min(start, endK), hi = Math.max(start, endK), range = stations.slice(lo, hi + 1);
+        // blocks the change travels through: those with at least two of its connectors in range
+        const seen = {}; range.forEach(st => st.bis.forEach(id => { seen[id] = (seen[id] || 0) + 1; }));
+        const bset = new Set(Object.keys(seen).filter(id => seen[id] >= 2));
+        let assets = 0, prev = null;
+        range.forEach(st => { const o = st.owner === 'broker2' ? 'broker2' : st.owner; if(o !== prev){ assets++; prev = o; } });
+        const end = stations[endK];
+        return { x1: stations[lo].x - 30, x2: stations[hi].x + 30, blocks: bset.size, assets, boundaries: assets - 1,
+          reachesEnd: end.owner === 'external' || end.owner === 'caller', endType: end.type, endCaller: end.caller, stopsAtProcess: end.type === 'process' };
+      };
+      out.push({ sourceId: b.dataset.id, vid: v.id, dir, changed: pn, best: summary(best), worst: summary(last),
+        dismissed: forecastDismissed[b.dataset.id] === v.id });
+    });
+    return out;
+  }
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  function renderForecasts(){
+    const toggle = document.getElementById('forecastToggle');
+    const list = computeForecasts();
+    toggle.classList.toggle('show', list.length > 0);
+    toggle.querySelectorAll('button').forEach(btn => btn.classList.toggle('on', btn.dataset.mode === forecastMode));
+    if(!list.length) return;
+    const tops = chainOrder.map(b => parseFloat(b.style.top));
+    const baseY = Math.min(...tops) - (VH - BLOCK_H)/2 - 46 - 36;   // above the containers' labels
+    list.forEach((f, k) => {
+      const worst = forecastMode === 'worst' && !f.dismissed;
+      const r = worst ? f.worst : f.best;
+      const band = document.createElement('div');
+      band.className = 'fc-band ' + (worst ? 'worst' : 'best');
+      band.dataset.source = f.sourceId;
+      band.style.left = r.x1 + 'px';
+      band.style.top = (baseY - k*34) + 'px';
+      band.style.minWidth = (r.x2 - r.x1) + 'px';
+      band.addEventListener('pointerdown', e => e.stopPropagation());
+      const what = CONNECTOR_LABEL[f.changed.type] + ' ' + f.changed.ver;
+      const arrow = f.dir === 'down' ? '\u2192' : '\u2190';
+      let text;
+      if(worst){
+        const endName = r.endCaller ? 'the calling application' : r.reachesEnd ? 'the end application' : 'the end of the flow';
+        text = arrow + ' ' + what + ' reaches ' + endName + ' \u00B7 ' + plural(r.blocks, 'block') + ' \u00B7 ' + plural(r.assets, 'asset') + ' \u00B7 ' + plural(r.boundaries, 'owner boundary').replace('boundarys', 'boundaries');
+      } else {
+        text = arrow + ' ' + what + (r.stopsAtProcess ? ' absorbed at the first process' : ' reaches ' + (r.reachesEnd ? 'the end application' : 'the end of the flow') + ' (no process to absorb it)') +
+          ' \u00B7 ' + plural(r.blocks, 'block') + ' \u00B7 ' + plural(r.assets, 'asset');
+      }
+      band.innerHTML = '<span class="fc-kind"></span><span class="fc-text"></span>';
+      band.querySelector('.fc-kind').textContent = worst ? 'Worst case' : (forecastMode === 'worst' && f.dismissed ? 'Best case (worst dismissed)' : 'Best case');
+      band.querySelector('.fc-text').textContent = text;
+      if(worst){
+        const x = document.createElement('button');
+        x.className = 'fc-dismiss';
+        x.textContent = 'Validated \u2014 won\u2019t happen';
+        x.title = 'Remove the worst case for this change; only the best case stays';
+        x.addEventListener('click', () => { forecastDismissed[f.sourceId] = f.vid; renderCopy(); recordHistory(); });
+        band.appendChild(x);
+      }
+      vworld.appendChild(band);
+    });
+  }
+  document.getElementById('forecastToggle').addEventListener('pointerdown', e => e.stopPropagation());
+  document.getElementById('forecastToggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-mode]');
+    if(!btn || btn.dataset.mode === forecastMode) return;
+    forecastMode = btn.dataset.mode;
+    renderCopy();
+  });
 
   // Collapse every open question to its pending pill (nothing is decided).
   function closeDecisionCards(){
@@ -2194,32 +2708,89 @@
       const y = nextY[d.blockId] ?? (parseFloat(b.style.top) + BLOCK_H + 14);
       const what = CONNECTOR_LABEL[d.type] + ' ' + d.ver;
       const name = b.querySelector('.cblock-label').textContent;
-      if(collapsedDecisions.has(d.key)){
+      if(collapsedDecisions.has(d.key) && !(d.kind === 'ripple' && d.resolved)){
         const pill = document.createElement('button');
         pill.className = 'decision-pill';
         pill.dataset.key = d.key;
         pill.style.left = (d.side === 'upstream' ? x + DECISION_W - 150 : x) + 'px'; pill.style.top = y + 'px';
         pill.textContent = '\u26A0 Decision pending';
-        pill.title = what + ' is new. How should ' + name + ' handle it?';
+        pill.title = d.kind === 'ripple' ? 'A contract change reaches the process shared with ' + name + '.' : what + ' is new. How should ' + name + ' handle it?';
         pill.addEventListener('pointerdown', e => e.stopPropagation());
         pill.addEventListener('click', () => { collapsedDecisions.delete(d.key); renderCopy(); });
         vworld.appendChild(pill);
         nextY[d.blockId] = y + 38;
         return;
       }
+      if(d.kind === 'ripple' && d.resolved){
+        const pill = document.createElement('button');
+        pill.className = 'ripple-pill';
+        pill.dataset.key = d.key;
+        pill.style.left = (d.side === 'upstream' ? x + DECISION_W - 190 : x) + 'px'; pill.style.top = y + 'px';
+        pill.textContent = d.choice.choice === 'absorb' ? '\u2713 Absorbed here (v1 \u0394)'
+          : '\u2192 Passed on' + (d.choice.code ? ' (v1 \u0394)' : ' untouched');
+        pill.title = 'Click to change how ' + name + ' handles the contract change';
+        pill.addEventListener('pointerdown', e => e.stopPropagation());
+        pill.addEventListener('click', () => setRipple(d.sourceId, null));
+        vworld.appendChild(pill);
+        nextY[d.blockId] = y + 36;
+        return;
+      }
       const card = document.createElement('div');
-      card.className = 'decision-card';
+      card.className = 'decision-card' + (d.kind === 'ripple' ? ' ripple-card' : '');
       card.dataset.key = d.key;
       card.style.left = x + 'px'; card.style.top = y + 'px';
       card.style.setProperty('--arrow-x', (d.side === 'upstream' ? DECISION_W - 40 : 22) + 'px');
       card.addEventListener('pointerdown', e => e.stopPropagation());
+      if(d.kind === 'ripple'){
+        const head = document.createElement('div');
+        head.className = 'dc-head';
+        head.textContent = '\u26A0 Contract change reaches this process';
+        card.appendChild(closeButton('Decide later', () => { collapsedDecisions.add(d.key); renderCopy(); }));
+        const src = chainOrder.find(c => c.dataset.id === d.sourceId);
+        const q = document.createElement('p');
+        q.className = 'dc-q';
+        const passing = d.choice && d.choice.choice === 'pass';
+        q.textContent = passing ? 'Passing it on to ' + farLabel(d.far) + ': does the process need a code change?'
+          : CONNECTOR_LABEL[d.changed.type] + ' ' + d.changed.ver + ' (' + src.querySelector('.cblock-label').textContent + ') reaches the process shared with ' + name + '. Absorb it here, or pass it on?';
+        card.append(head, q);
+        const opts = passing
+          ? [['code', 'yes', 'Yes \u00B7 code change in the same version (v1 \u0394)'], ['code', 'no', 'No \u00B7 passes through untouched']]
+          : [['ripple', 'absorb', 'Absorb here \u00B7 code change, same version (v1 \u0394)'], ['ripple', 'pass', 'Pass it on to ' + farLabel(d.far)]];
+        opts.forEach(([attr, val, label]) => {
+          const btn = document.createElement('button');
+          btn.className = 'dc-opt';
+          btn.dataset[attr] = val;
+          btn.textContent = label;
+          btn.addEventListener('click', () => setRipple(d.sourceId, attr === 'ripple' ? { choice: val, code: null } : { code: val === 'yes' }));
+          card.appendChild(btn);
+        });
+        const actions = document.createElement('div');
+        actions.className = 'dc-actions';
+        if(passing){
+          const back = document.createElement('button');
+          back.className = 'dc-link'; back.dataset.action = 'back';
+          back.textContent = 'Back';
+          back.addEventListener('click', () => setRipple(d.sourceId, null));
+          actions.appendChild(back);
+        }
+        const later = document.createElement('button');
+        later.className = 'dc-link'; later.dataset.action = 'later';
+        later.textContent = 'Decide later';
+        later.addEventListener('click', () => { collapsedDecisions.add(d.key); renderCopy(); });
+        actions.appendChild(later);
+        card.appendChild(actions);
+        vworld.appendChild(card);
+        nextY[d.blockId] = y + card.offsetHeight + 12;
+        return;
+      }
       const head = document.createElement('div');
       head.className = 'dc-head';
       head.textContent = '\u26A0 Decision needed';
       card.appendChild(closeButton('Decide later', () => { collapsedDecisions.add(d.key); renderCopy(); }));
       const q = document.createElement('p');
       q.className = 'dc-q';
-      q.textContent = what + ' is new. How should ' + name + ' handle it?';
+      q.textContent = d.passed ? 'A contract change was passed on to ' + CONNECTOR_LABEL[d.type] + '. How should ' + name + ' version it?'
+                               : what + ' is new. How should ' + name + ' handle it?';
       card.append(head, q);
       if(d.current){
         const note = document.createElement('p');
@@ -2281,7 +2852,7 @@
 
   function highlightSuggestions(decisions){
     // a connector the user clicked takes over the highlight until it's cleared
-    const suggested = new Set(versionTarget ? targetOptions(versionTarget) : decisions.flatMap(d => d.options));
+    const suggested = new Set(versionTarget ? targetOptions(versionTarget) : decisions.flatMap(d => d.options || []));
     const any = suggested.size > 0 || !!versionTarget;
     VERSION_VARIANTS.forEach(v => {
       const el = paletteItemsByVariantId[v.id];
@@ -2343,7 +2914,7 @@
     const W = miniView.clientWidth, H = miniView.clientHeight - 22, top = 22;
     const sc = Math.min(W / (box.r - box.l), H / (box.b - box.t), 1);
     const clone = src.cloneNode(true);
-    clone.querySelectorAll('.decision-card, .decision-pill, .label-editor, .delete-x').forEach(n => n.remove());
+    clone.querySelectorAll('.decision-card, .decision-pill, .ripple-pill, .fc-band, .label-editor, .delete-x').forEach(n => n.remove());
     clone.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
     clone.removeAttribute('id');
     clone.style.transform = 'none';
@@ -2429,7 +3000,13 @@
         const [id, at] = k.split(':');
         const i = chainOrder.findIndex(b => b.dataset.id === id);
         return i < 0 ? null : { block: i, at, platform: v.platform || '', asset: v.asset || '' };
-      }).filter(Boolean)
+      }).filter(Boolean),
+      caller: !!(first && callers[first.dataset.id]),
+      ripples: chainOrder.map((b, i) => {
+        const r = rippleChoices[b.dataset.id];
+        return r && r.vid === versionOverrides[b.dataset.id] ? { block: i, choice: r.choice, code: r.code ?? null } : null;
+      }).filter(Boolean),
+      dismissedWorstCase: chainOrder.map((b, i) => forecastDismissed[b.dataset.id] && forecastDismissed[b.dataset.id] === versionOverrides[b.dataset.id] ? i : -1).filter(i => i >= 0)
     };
   }
 
@@ -2479,11 +3056,25 @@
     if(f.containers !== undefined){
       if(!Array.isArray(f.containers)) return 'Flow file has an invalid container list.';
       for(const c of f.containers){
-        if(!c || !Number.isInteger(c.block) || c.block < 0 || c.block >= f.blocks.length || !/^(in|out|m\d)$/.test(c.at) ||
+        if(!c || !Number.isInteger(c.block) || c.block < 0 || c.block >= f.blocks.length || !/^(in|out|m\d|caller)$/.test(c.at) ||
            typeof c.platform !== 'string' || typeof c.asset !== 'string' || c.platform.length > 80 || c.asset.length > 80)
           return 'Flow file has an invalid container label.';
       }
     }
+    if(f.caller !== undefined && typeof f.caller !== 'boolean') return 'Flow file has an invalid caller entry.';
+    if(f.caller && (f.blocks.length === 0 || templatesById[f.blocks[0].pattern].entryType !== 'api'))
+      return 'Only a flow that starts with an exposed API can have a calling application.';
+    if(f.ripples !== undefined){
+      if(!Array.isArray(f.ripples)) return 'Flow file has an invalid ripple list.';
+      for(const r of f.ripples){
+        if(!r || !Number.isInteger(r.block) || r.block < 0 || r.block >= f.blocks.length || !['absorb', 'pass'].includes(r.choice) ||
+           !(r.code === null || typeof r.code === 'boolean'))
+          return 'Flow file has an invalid ripple entry.';
+      }
+    }
+    if(f.dismissedWorstCase !== undefined &&
+       (!Array.isArray(f.dismissedWorstCase) || !f.dismissedWorstCase.every(i => Number.isInteger(i) && i >= 0 && i < f.blocks.length)))
+      return 'Flow file has an invalid forecast entry.';
     return null;
   }
 
@@ -2518,6 +3109,16 @@
     });
     (f.versions || []).forEach(ver => { versionOverrides[chainOrder[ver.block].dataset.id] = ver.variant; });
     (f.containers || []).forEach(c => { containerLabels[chainOrder[c.block].dataset.id + ':' + c.at] = { platform: c.platform, asset: c.asset }; });
+    if(f.caller){ callers[chainOrder[0].dataset.id] = true; callerAsked.add(chainOrder[0].dataset.id); }
+    chainOrder.forEach(b => callerAsked.add(b.dataset.id));   // loading never asks again
+    (f.ripples || []).forEach(r => {
+      const id = chainOrder[r.block].dataset.id;
+      if(versionOverrides[id]) rippleChoices[id] = { vid: versionOverrides[id], choice: r.choice, code: r.code };
+    });
+    (f.dismissedWorstCase || []).forEach(i => {
+      const id = chainOrder[i].dataset.id;
+      if(versionOverrides[id]) forecastDismissed[id] = versionOverrides[id];
+    });
     deselectAll();
     updateEmptyHint();
     refreshPaletteAvailability();
@@ -2718,6 +3319,7 @@
     dropVersion: (vid, x, y) => dropVersion(variantsById[vid], x, y), removeVersion,
     versionOverrides: () => versionOverrides, variantsById, decisions: computeDecisions,
     versionTarget: () => versionTarget, targetOptions: () => versionTarget ? targetOptions(versionTarget) : [],
+    ripples: computeRipples, forecasts: computeForecasts, callers: () => callers, parsePrompt: parseFlowPrompt, findRoutes,
     // append a pattern at the flow's right end (tests build flows left to right)
     append: (id) => {
       const c = chainOrder, last = c[c.length - 1];
