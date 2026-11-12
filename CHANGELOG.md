@@ -189,3 +189,7 @@ one logical change each with a real diff behind them.
 - Fix: in the versioned copy, links from the block upstream of a versioned
   block now reach each of its lanes (they ended between them).
 - Fix: platform band label stays inside a versioned tile.
+- Versioned blocks for File-to-Process (4) and Process-to-File (3).
+  Rule: whoever owns a contract can command its change — integration owns
+  the inbound file contract (4 options), the downstream owns the outbound
+  file contract (3 options).
