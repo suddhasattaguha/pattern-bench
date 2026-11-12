@@ -72,6 +72,7 @@
   .app{
     display:grid;
     grid-template-rows:52px 1fr;
+    --card-w:114px; /* a library card's size at the default library width */
     grid-template-columns:var(--palette-w, 260px) 1fr;
     grid-template-areas:
       "topbar topbar"
@@ -218,11 +219,16 @@
     background:var(--panel);
     padding:18px 8px 8px;
     overflow-y:auto;
+    /* Cards keep a fixed size and wrap: a wider library shows more cards
+       per row instead of bigger cards. */
     display:flex;
-    flex-direction:column;
+    flex-flow:row wrap;
+    align-content:flex-start;
     gap:8px;
   }
   .quad-title{
+    flex:0 0 calc(100% + 16px);
+    box-sizing:border-box;
     position:sticky;
     top:0;
     z-index:5;
@@ -246,9 +252,14 @@
     border:1px dashed var(--panel-border);
     border-radius:6px;
     opacity:0.8;
+    flex:0 0 100%;
+    box-sizing:border-box;
   }
 
   .palette-block{
+    flex:0 0 auto;
+    width:min(var(--card-w), 100%);
+    box-sizing:border-box;
     display:flex;
     flex-direction:column;
     gap:5px;

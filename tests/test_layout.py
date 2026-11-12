@@ -61,12 +61,15 @@ with sync_playwright() as p:
     # resizable library
     w = lambda: ev("document.querySelector('.palette').getBoundingClientRect().width")
     w0 = w()
+    card0 = ev("(()=>{const c=[...document.querySelectorAll('#quadrantGrid .quad')[0].querySelectorAll('.palette-block')].map(e=>e.getBoundingClientRect());return [Math.round(c[0].width), c.filter(r=>r.top===c[0].top).length]})()")
     hx = w0 - 3
-    pg.mouse.move(hx, 400); pg.mouse.down(); pg.mouse.move(hx + 180, 400, steps=5); pg.mouse.up()
-    check('dragging the library edge widens it', abs(w() - (w0 + 180)) <= 2)
+    pg.mouse.move(hx, 400); pg.mouse.down(); pg.mouse.move(hx + 260, 400, steps=5); pg.mouse.up()
+    check('dragging the library edge widens it', abs(w() - (w0 + 260)) <= 2)
     check('canvas shrinks to match', abs(ev("document.getElementById('canvasWrap').getBoundingClientRect().left") - w()) <= 1)
-    card_w = ev("document.querySelector('.palette-block').getBoundingClientRect().width")
-    check('cards grow with the library', card_w > 140)
+    card = "(()=>{const c=[...document.querySelectorAll('#quadrantGrid .quad')[0].querySelectorAll('.palette-block')].map(e=>e.getBoundingClientRect());return [Math.round(c[0].width), c.filter(r=>r.top===c[0].top).length]})()"
+    cw, per_row = ev(card)
+    check('cards keep their size when the library widens (no zoom effect)', abs(cw - card0[0]) <= 1)
+    check('wider library fits more cards per row', per_row > card0[1])
     pg.mouse.move(w() - 3, 400); pg.mouse.down(); pg.mouse.move(40, 400, steps=5); pg.mouse.up()
     wmin = w(); check('library has a minimum width', 180 <= wmin <= 260)
     pg.mouse.move(wmin - 3, 400); pg.mouse.down(); pg.mouse.move(1300, 400, steps=5); pg.mouse.up()

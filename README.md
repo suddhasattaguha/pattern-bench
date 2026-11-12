@@ -56,8 +56,9 @@ Single HTML file, zero dependencies, zero build step. Open
 - **Independent panes**: the base flow and the versioned copy pan and zoom
   separately (drag or scroll inside either one). The toolbar's zoom buttons
   act on the pane touched last; Reset view re-aligns both.
-- **Resizable library**: drag the library's right edge to widen it (cards
-  grow with it); double-click the edge to reset.
+- **Resizable library**: drag the library's right edge to widen it. Cards
+  keep their size and wrap, so a wider library shows more cards per row;
+  double-click the edge to reset.
 
 ## Current base patterns
 

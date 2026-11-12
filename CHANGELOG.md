@@ -179,3 +179,6 @@ one logical change each with a real diff behind them.
 - Fix: a pane drag could be cancelled by the browser's text-selection drag
   and leave panning stuck on.
 - Added `tests/test_layout.py` (19 checks).
+- Library cards now keep a fixed size and wrap: widening the library shows
+  more cards per row (Entry and Exit stay side by side) instead of
+  enlarging the cards.
