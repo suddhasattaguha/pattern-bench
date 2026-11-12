@@ -231,3 +231,10 @@ one logical change each with a real diff behind them.
   upstream or downstream block; a highlighted version dropped anywhere lands
   on that block. Escape, Clear or an empty-canvas click clears it.
 - Added `tests/test_canvas_tools.py` (41 checks).
+- Versioning mode: connector clicks only select something to version while
+  the Versioned Artifacts tab is open (banner on the canvas). Base Flow
+  Design is plain building; switching back clears any selection.
+- Pop-ups: every card has a × (version card: clears the selection;
+  decision card: decide later). The version card closes once a side is
+  chosen (click the connector again to reopen it). Clicking empty canvas
+  closes open cards; decisions stay as pending pills.

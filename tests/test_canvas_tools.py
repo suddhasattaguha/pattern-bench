@@ -86,21 +86,31 @@ with sync_playwright() as p:
 
     # ---------- click a connector to version it ----------
     flow('file-to-process', 'process-to-publish', 'consume-to-process', 'process-to-api')
+    pg.locator('#world .flow-layer .node[data-type=topic]').click(force=True)
+    check('in Base Flow Design, clicking a connector does not start versioning', ev("window.__debug.versionTarget()") is None and not pg.is_visible('#modeBanner'))
+    pg.click('#tabVersioned')
+    check('Versioned Artifacts tab turns versioning mode on (banner shown)', pg.is_visible('#modeBanner'))
     pg.locator('#world .flow-layer .node[data-type=topic]').click()
     check('clicking a shared topic highlights topic versions from both blocks', sugg() == sorted([
         'New Topic v2 · own Process v2', 'New Topic v2 · same Process', 'Topic v2 · own Queue + Process v2',
         'Topic v2 · same Queue subscribes to both', 'Topic v2 · same Queue switches']))
     check('the clicked connector is marked', pg.locator('#world .node.targeted').count() == 1)
-    check('library switches to Versioned Artifacts', 'active' in (pg.get_attribute('#tabVersioned', 'class') or ''))
     check('pop-up offers upstream and downstream', pg.locator('#world .target-card .dc-side button').count() == 2)
     pg.locator('#world .target-card .dc-side button').nth(0).click()
     check('choosing upstream narrows to Process-to-Publish', sugg() == ['New Topic v2 · own Process v2', 'New Topic v2 · same Process'])
+    check('the pop-up closes once a side is chosen; the connector stays marked', pg.locator('.target-card').count() == 0 and pg.locator('#world .node.targeted').count() == 1)
+    pg.locator('#world .flow-layer .node[data-type=topic]').click()
+    check('clicking the connector again reopens the pop-up to switch sides', pg.locator('#world .target-card').count() == 1)
+    pg.locator('#world .target-card .dc-side button').nth(0).click()
     ev("window.__debug.dropVersion('p2t-contract-switch',10,10)")
     check('a highlighted version dropped anywhere lands on that block', ev("Object.values(window.__debug.versionOverrides())") == ['p2t-contract-switch']
           and ev("window.__debug.versionOverrides()[window.__debug.chainOrder()[1].dataset.id]") == 'p2t-contract-switch')
     check('the target clears after applying', ev("window.__debug.versionTarget()") is None)
     pg.locator('#world .flow-layer .node[data-type=queue]').click()
     check('a queue offers the versions where it changes with its process', sugg() == ['New Process v2 · own Queue v2', 'Topic v2 · own Queue + Process v2'])
+    pg.click('#world .target-card .dc-close')
+    check('the × closes the pop-up and clears the selection', ev("window.__debug.versionTarget()") is None and pg.locator('.target-card').count() == 0)
+    pg.locator('#world .flow-layer .node[data-type=queue]').click()
     pg.keyboard.press('Escape')
     check('Escape clears the target', ev("window.__debug.versionTarget()") is None and pg.locator('.target-card').count() == 0)
     pg.locator('#world .flow-layer .node[data-type=file]').click()
@@ -108,6 +118,9 @@ with sync_playwright() as p:
           and sugg() == ['New File v2 · own Process v2', 'New File v2 · shared Process'])
     pg.mouse.click(1300, 110)
     check('clicking empty canvas clears the target', ev("window.__debug.versionTarget()") is None)
+    pg.click('#tabBaseFlow')
+    check('back in Base Flow Design, versioning mode is off', not pg.is_visible('#modeBanner'))
+    pg.click('#tabVersioned')
     pg.locator('#vworld .flow-layer .node[data-type=process]').nth(0).click()
     check('connectors in the versioned copy are clickable too', ev("window.__debug.versionTarget() && window.__debug.versionTarget().pane") == 'copy'
           and pg.locator('#vworld .target-card').count() == 1)

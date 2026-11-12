@@ -477,8 +477,22 @@
   .end-hint[hidden]{ display:none; }
 
   /* Click a connector to version it */
-  .flow-layer .node[data-skey]{ pointer-events:all; cursor:pointer; }
-  .flow-layer .node[data-skey]:hover{ filter:brightness(1.18); }
+  /* connectors are only clickable in versioning mode (Versioned Artifacts tab) */
+  .canvas-wrap.versioning .flow-layer .node[data-skey]{ pointer-events:all; cursor:pointer; }
+  .canvas-wrap.versioning .flow-layer .node[data-skey]:hover{ filter:drop-shadow(0 0 1.5px var(--accent-version)) drop-shadow(0 0 4px var(--accent-version)); }
+  .mode-banner{
+    display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:14; pointer-events:none;
+    padding:4px 12px; border-radius:14px; border:1px solid var(--accent-version); background:var(--panel);
+    color:var(--text-primary); font-family:var(--font-ui); font-size:12px; white-space:nowrap;
+  }
+  .canvas-wrap.versioning .mode-banner{ display:block; }
+  .mode-banner b{ color:var(--accent-version); font-weight:700; }
+  .dc-close{
+    position:absolute; top:4px; right:4px; width:28px; height:28px; border:none; border-radius:6px; background:transparent;
+    color:var(--text-muted); font-size:18px; line-height:28px; text-align:center; cursor:pointer;
+  }
+  .dc-close:hover, .dc-close:focus-visible{ background:var(--block-bg); color:var(--text-primary); outline:none; }
+  .decision-card .dc-head{ padding-right:24px; }
   .flow-layer .node.targeted{ filter:drop-shadow(0 0 1.5px var(--accent-amber)) drop-shadow(0 0 5px var(--accent-amber)); }
   .decision-card.target-card{ width:250px; border-color:var(--accent-version); }
   .decision-card.target-card .dc-head{ color:var(--accent-version); }
@@ -601,6 +615,7 @@
 
   <main class="canvas-wrap" id="canvasWrap">
     <div class="world" id="world"></div>
+    <div class="mode-banner" id="modeBanner"><b>Versioning mode</b> · click a connector to version it</div>
     <div class="pane-tag active" id="baseTag">Base flow</div>
     <div class="version-pane" id="versionPane">
       <div class="world" id="vworld"></div>
@@ -1421,7 +1436,7 @@
   const paletteHeadDesc = document.getElementById('paletteHeadDesc');
   const PALETTE_TAB_DESC = {
     base: 'Build one flow at a time. Only patterns that fit its open ends stay available here.',
-    versioned: 'Drop a versioned block onto its base block. A versioned copy of the flow opens below the base; the base stays editable and the copy follows it.'
+    versioned: 'Versioning mode: click a connector on the canvas to see its versions, or drop a versioned block onto its base block. A versioned copy opens below the base.'
   };
   paletteTabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1431,6 +1446,10 @@
       quadrantGrid.style.display = isBase ? 'grid' : 'none';
       versionGrid.style.display = isBase ? 'none' : 'grid';
       paletteHeadDesc.textContent = PALETTE_TAB_DESC[tab.dataset.tab];
+      // The Versioned Artifacts tab is versioning mode: only then do connector
+      // clicks select something to version. Leaving it clears any selection.
+      canvasWrap.classList.toggle('versioning', !isBase);
+      if(isBase) clearVersionTarget();
     });
   });
 
@@ -1658,7 +1677,7 @@
     isPanning = false;
     canvasWrap.classList.remove('panning');
     if(canvasWrap.hasPointerCapture(e.pointerId)) canvasWrap.releasePointerCapture(e.pointerId);
-    if(!movedDuringPan){ deselectAll(); clearVersionTarget(); }
+    if(!movedDuringPan){ deselectAll(); clearVersionTarget(); closeDecisionCards(); }
   });
   canvasWrap.addEventListener('pointercancel', () => {
     isPanning = false;
@@ -1908,6 +1927,7 @@
   }
   function clearVersionTarget(){ if(versionTarget){ versionTarget = null; renderFlows(); } }
   [world, vworld].forEach(w => w.addEventListener('click', (e) => {
+    if(!canvasWrap.classList.contains('versioning')) return;
     const n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
     if(!n) return;
     e.stopPropagation();
@@ -1915,14 +1935,29 @@
     const tr = n.transform.baseVal.consolidate();
     const m = tr ? tr.matrix : { e:0, f:0 };
     const blocks = n.dataset.blocks.split(',').filter(Boolean);
-    if(versionTarget && versionTarget.skey === n.dataset.skey && versionTarget.pane === pane){ clearVersionTarget(); return; }
+    if(versionTarget && versionTarget.skey === n.dataset.skey && versionTarget.pane === pane){
+      // same connector again: reopen the card if a side was chosen, otherwise deselect
+      if(versionTarget.only){ versionTarget.only = null; renderFlows(); } else clearVersionTarget();
+      return;
+    }
     setVersionTarget({ pane, skey:n.dataset.skey, type:n.dataset.type, x:m.e, y:m.f, blocks, only:null });
   }));
+
+  function closeButton(label, onClose){
+    const x = document.createElement('button');
+    x.className = 'dc-close';
+    x.setAttribute('aria-label', label);
+    x.title = label;
+    x.textContent = '\u00D7';
+    x.addEventListener('click', onClose);
+    return x;
+  }
 
   function renderTargetCard(worldEl){
     worldEl.querySelectorAll(':scope > .target-card').forEach(c => c.remove());
     const t = versionTarget;
-    if(!t || (worldEl === world) !== (t.pane === 'base')) return;
+    // gone once a side is chosen — the highlight and the glowing connector stay
+    if(!t || (worldEl === world) !== (t.pane === 'base') || t.only) return;
     const card = document.createElement('div');
     card.className = 'decision-card target-card';
     card.style.left = (t.x - 34) + 'px';
@@ -1931,6 +1966,7 @@
     const head = document.createElement('div');
     head.className = 'dc-head';
     head.textContent = 'Version this ' + CONNECTOR_LABEL[t.type];
+    card.appendChild(closeButton('Close', clearVersionTarget));
     const q = document.createElement('p');
     q.className = 'dc-q';
     const n = targetOptions(t).length;
@@ -2047,6 +2083,14 @@
     return out;
   }
 
+  // Collapse every open question to its pending pill (nothing is decided).
+  function closeDecisionCards(){
+    const open = [...vworld.querySelectorAll(':scope > .decision-card:not(.target-card)')].map(c => c.dataset.key);
+    if(!open.length) return;
+    open.forEach(k => collapsedDecisions.add(k));
+    renderCopy();
+  }
+
   function applyDecision(blockId, vid){
     versionOverrides[blockId] = vid;
     renderCopy();
@@ -2102,6 +2146,7 @@
       const head = document.createElement('div');
       head.className = 'dc-head';
       head.textContent = '\u26A0 Decision needed';
+      card.appendChild(closeButton('Decide later', () => { collapsedDecisions.add(d.key); renderCopy(); }));
       const q = document.createElement('p');
       q.className = 'dc-q';
       q.textContent = what + ' is new. How should ' + name + ' handle it?';

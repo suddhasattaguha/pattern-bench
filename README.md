@@ -62,7 +62,7 @@ Single HTML file, zero dependencies, zero build step. Open
   gets an outer frame behind the tiles, labelled with its type. Click the
   label to set platform and asset name. End applications (target API, SFTP
   folders) have a dashed frame.
-- **Click to version**: click a connector (API, process, topic, queue,
+- **Click to version** (in versioning mode — the Versioned Artifacts tab): click a connector (API, process, topic, queue,
   file) to highlight the versions that change it; for a connector on a join,
   choose upstream or downstream in the card, then drag a highlighted version
   anywhere onto the canvas.

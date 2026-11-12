@@ -45,6 +45,12 @@ with sync_playwright() as p:
     check('block stays marked pending', pg.locator('#vworld .cblock.pending').count() == 1 and len(dec()) == 1)
     pg.click('#vworld .decision-pill')
     check('pill reopens the question', pg.locator('#vworld .decision-card').count() == 1)
+    pg.click('#vworld .decision-card .dc-close')
+    check('the × also leaves the decision open as a pill', pg.locator('#vworld .decision-pill').count() == 1 and pg.locator('#vworld .decision-card').count() == 0)
+    pg.click('#vworld .decision-pill')
+    pg.mouse.click(1300, 110)
+    check('clicking empty canvas closes the card to a pill', pg.locator('#vworld .decision-pill').count() == 1 and len(dec()) == 1)
+    pg.click('#vworld .decision-pill')
 
     # show in library
     pg.click('#tabBaseFlow')
