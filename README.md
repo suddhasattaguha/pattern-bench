@@ -54,6 +54,14 @@ Single HTML file, zero dependencies, zero build step. Open
   that actually changed; dashed violet outline + outlined `v2` badge =
   versioned as a side-effect; grey dotted link = retired v1 link. A legend
   sits in the copy pane.
+- **Dependencies**: neighbouring blocks share a connector, so a version
+  that brings a new version of it (e.g. Process v2) opens a decision on the
+  direct neighbour, upstream or downstream. The neighbour turns amber in the
+  copy, a card next to it asks how it should handle the change and offers
+  the matching versioned blocks, and the library marks them Suggested.
+  Suggestions are the neighbour's versions in which that new connector
+  version is the changed object. "Decide later" keeps it as a pending mark.
+  The chain beyond the direct neighbour is deliberately not followed yet.
 - **Independent panes**: the base flow and the versioned copy pan and zoom
   separately (drag or scroll inside either one). The toolbar's zoom buttons
   act on the pane touched last; Reset view re-aligns both.
@@ -139,6 +147,8 @@ and rejection of bad files: `python3 tests/test_history_io.py`.
 `tests/test_versioning.py` covers the versioned palette and copy (create,
 replace, mirror on rename/move/delete, undo, export/import, in-app confirm):
 `python3 tests/test_versioning.py`.
+`tests/test_dependency.py` covers the dependency decisions:
+`python3 tests/test_dependency.py`.
 `tests/test_layout.py` covers independent pane pan/zoom and the resizable
 library: `python3 tests/test_layout.py`.
 

@@ -58,7 +58,7 @@ with sync_playwright() as p:
     check('base drag moves copy', ev("document.querySelector('#vworld .versioned').style.left === window.__debug.chainOrder()[0].style.left"))
 
     # export -> clear (in-app confirm, no browser dialog) -> import
-    copyHtml = lambda: __import__('re').sub(r'data-(base-id|seq|left-linked|right-linked|id)="[^"]*"', '', ev("document.getElementById('vworld').innerHTML")).replace(' selected', '')
+    copyHtml = lambda: __import__('re').sub(r'data-(base-id|seq|left-linked|right-linked|id|key)="[^"]*"', '', ev("document.getElementById('vworld').innerHTML")).replace(' selected', '')
     pg.mouse.click(700, 840); pg.wait_for_timeout(400); before = copyHtml()
     with pg.expect_download() as dl: pg.click('#exportBtn')
     dl.value.save_as(D + 'f.json'); f = json.load(open(D + 'f.json'))

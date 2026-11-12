@@ -198,3 +198,13 @@ one logical change each with a real diff behind them.
   no dual publishing.
 - Fix: platform band labels no longer collide when a versioned block has
   two platform bands.
+- Dependency between versioned blocks. When a versioned block brings a new
+  version of the connector it shares with a neighbour (e.g. Process v2), the
+  neighbour is marked "decision needed" in the versioned copy, a question
+  card appears next to it with the matching options, and the library
+  highlights those options as Suggested (others dimmed; the Versioned tab
+  shows the number of open decisions). Works upstream and downstream, only
+  for the direct neighbour. "Decide later" leaves the decision open as a
+  "Decision pending" pill. Picking an option, or dropping a matching
+  versioned block, resolves it.
+- Added `tests/test_dependency.py` (30 checks).

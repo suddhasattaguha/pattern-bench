@@ -450,6 +450,55 @@
   .pb-sub{ font-family:var(--font-ui); font-size:10.5px; text-align:center; color:var(--text-muted); margin-top:-2px; }
   .palette-block.version-card:hover{ border-color:var(--accent-version); }
 
+  /* ---------- Dependencies between versioned blocks ---------- */
+  /* A neighbour that must decide how to handle a new version on its shared connector */
+  .cblock.copy-block.pending{ opacity:1; }
+  .cblock.copy-block.pending .tile-rim{ fill:var(--accent-amber); stroke:var(--accent-amber); stroke-width:10.5; }
+  .decision-card{
+    position:absolute; z-index:40; width:260px; box-sizing:border-box; cursor:default;
+    background:var(--panel); border:1.5px solid var(--accent-amber); border-radius:10px;
+    padding:10px 12px 12px; color:var(--text-primary); font-family:var(--font-ui);
+    box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  }
+  .decision-card::before{
+    content:''; position:absolute; top:-7px; left:var(--arrow-x, 22px); width:12px; height:12px;
+    background:var(--panel); border-left:1.5px solid var(--accent-amber); border-top:1.5px solid var(--accent-amber);
+    transform:rotate(45deg);
+  }
+  .dc-head{ display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:10px; font-weight:700;
+    letter-spacing:0.08em; text-transform:uppercase; color:var(--accent-amber); }
+  .dc-q{ font-size:13px; line-height:1.4; margin:6px 0 4px; }
+  .dc-note{ font-size:11.5px; line-height:1.4; color:var(--text-muted); margin:0 0 4px; }
+  .dc-opt{
+    display:block; width:100%; box-sizing:border-box; text-align:left; margin-top:6px; padding:8px 10px; min-height:36px;
+    border-radius:8px; border:1px solid var(--accent-version); background:transparent; color:var(--text-primary);
+    font-family:var(--font-ui); font-size:12.5px; line-height:1.3; cursor:pointer;
+  }
+  .dc-opt:hover, .dc-opt:focus-visible{ background:var(--block-bg); outline:none; border-width:2px; padding:7px 9px; }
+  .dc-actions{ display:flex; gap:14px; margin-top:8px; }
+  .dc-link{ background:none; border:none; padding:6px 0; color:var(--text-muted); font-family:var(--font-ui); font-size:12px;
+    text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+  .dc-link:hover{ color:var(--text-primary); }
+  .decision-pill{
+    position:absolute; z-index:40; display:flex; align-items:center; gap:6px; height:28px; padding:0 12px; white-space:nowrap;
+    border-radius:14px; border:none; background:var(--accent-amber); color:#1b1306; cursor:pointer;
+    font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:0.04em;
+    box-shadow:0 4px 12px rgba(0,0,0,0.3);
+  }
+  .version-card.suggested{ border-color:var(--accent-amber); box-shadow:0 0 0 1px var(--accent-amber); }
+  .version-card.suggested::before{
+    content:'Suggested'; align-self:flex-start; font-family:var(--font-mono); font-size:9.5px; font-weight:700;
+    letter-spacing:0.06em; text-transform:uppercase; color:#1b1306; background:var(--accent-amber);
+    border-radius:4px; padding:1px 5px;
+  }
+  .version-card.not-suggested{ opacity:0.4; }
+  .version-card.flash{ animation:cardflash 1.2s ease-out; }
+  @keyframes cardflash{ 0%{ box-shadow:0 0 0 6px var(--accent-amber); } 100%{ box-shadow:0 0 0 1px var(--accent-amber); } }
+  .palette-tab[data-pending]::after{
+    content:attr(data-pending); display:inline-block; margin-left:6px; min-width:16px; padding:0 4px; border-radius:8px;
+    background:var(--accent-amber); color:#1b1306; font-weight:700; font-size:10px; line-height:16px; text-align:center;
+  }
+
   /* in-app confirmation (browser confirm() is blocked in sandboxed viewers) */
   .confirm-box{
     position:absolute; top:16px; left:50%; transform:translateX(-50%); z-index:40;
@@ -634,13 +683,14 @@
   //   blocks: [{ left, top, w, tpl, variant }]  (variant = versioned-block id or null)
   //   dimUnversioned: in the versioned copy, everything that isn't part of a
   //   versioned block is drawn dimmed.
-  function buildFlowModel(blocks, dimUnversioned){
+  function buildFlowModel(blocks, dimUnversioned, pendingIdx){
+    const pending = pendingIdx || new Set();
     const sets = [];      // connector positions along the flow; a versioned block can put two lanes at one position
     const links = [];
     // Links are worked out after the loop: a versioned block splits the seam it
     // shares with its upstream neighbour into lanes, and the neighbour's links
     // must reach those lanes, not the single connector that was there before.
-    const pending = [];
+    const deferred = [];
     blocks.forEach((b, i) => {
       const spec = NODE_SPECS[b.tpl];
       const v = b.variant ? variantsById[b.variant] : null;
@@ -649,7 +699,7 @@
         .map(n => ({ type:end.type, owner:end.owner, dy:LANE_DY[n.lane], role:n.role, ver:n.ver, key:n.k }));
       let entry;
       if(i === 0){
-        entry = { x:b.left + SEAM_X, cy, nodes:[{ type:spec.entry.type, owner:spec.entry.owner, dy:0 }], strong:!!spec.entry.strong, vblock:null };
+        entry = { x:b.left + SEAM_X, cy, nodes:[{ type:spec.entry.type, owner:spec.entry.owner, dy:0 }], strong:!!spec.entry.strong, vblock:null, bi:i };
         sets.push(entry);
       } else {
         entry = sets[sets.length - 1];   // the seam shared with the upstream block
@@ -659,18 +709,18 @@
       const segs = [];
       let last = entry;
       spec.mid.forEach(m => {
-        const st = { x:b.left + SEAM_X + m.at*b.w, cy, nodes:[{ type:m.type, owner:m.owner, dy:0 }], strong:true, vblock: v ? i : null };
+        const st = { x:b.left + SEAM_X + m.at*b.w, cy, nodes:[{ type:m.type, owner:m.owner, dy:0 }], strong:true, vblock: v ? i : null, bi:i };
         sets.push(st); segs.push([last, st]); last = st;
       });
       const exit = { x:b.left + b.w + SEAM_X, cy,
         nodes: v ? laneNodes(spec.exit) : [{ type:spec.exit.type, owner:spec.exit.owner, dy:0 }],
-        strong:!!spec.exit.strong, vblock: v ? i : null };
+        strong:!!spec.exit.strong, vblock: v ? i : null, bi:i };
       sets.push(exit); segs.push([last, exit]);
 
-      pending.push({ segs, v, dim: dimUnversioned && !v });
+      deferred.push({ segs, v, dim: dimUnversioned && !v && !pending.has(i) });
     });
 
-    pending.forEach(({ segs, v, dim }) => {
+    deferred.forEach(({ segs, v, dim }) => {
       if(v && segs.length === 1){
         // a versioned block says exactly which lane connects to which
         const at = (k) => {
@@ -705,7 +755,7 @@
             y1: first.cy + Math.min(...dys) - BAND_R, y2: first.cy + Math.max(...dys) + BAND_R,
             squareLeft: fs.edge, squareRight: ls.edge,
             atStart: first === sets[0], atEnd: last === sets[sets.length - 1],
-            owner: first.nodes[0].owner, dim: dimUnversioned && first.vblock === null,
+            owner: first.nodes[0].owner, dim: dimUnversioned && first.vblock === null && !pending.has(first.bi),
             // a versioned block's band can start on its upstream seam; keep the label inside its tile
             labelMinX: first.vblock === null ? null : blocks[first.vblock].left + SEAM_X + TILE_D + 24
           });
@@ -723,7 +773,7 @@
     const nodes = [];
     sets.forEach(st => st.nodes.forEach(n => nodes.push({
       x:st.x, y:st.cy + n.dy, type:n.type, owner:n.owner, role:n.role || null, ver:n.ver || null,
-      dim: dimUnversioned && st.vblock === null
+      dim: dimUnversioned && st.vblock === null && !pending.has(st.bi)
     })));
     return { bands, links, nodes };
   }
@@ -1626,14 +1676,16 @@
     canvasWrap.classList.toggle('split', active);
     vworld.innerHTML = '';
     selectedCopy = null;
-    if(!active){ if(wasActive) setActivePane('base'); return; }
+    if(!active){ highlightSuggestions([]); if(wasActive) setActivePane('base'); return; }
+    const decisions = computeDecisions();
+    const pendingIdx = new Set(decisions.map(d => d.index));
 
     chainOrder.forEach((b) => {
       const vid = versionOverrides[b.dataset.id];
       const w = parseFloat(b.style.width);
       const h = vid ? VH : BLOCK_H;
       const el = document.createElement('div');
-      el.className = 'cblock copy-block' + (vid ? ' versioned' : '');
+      el.className = 'cblock copy-block' + (vid ? ' versioned' : '') + (decisions.some(d => d.blockId === b.dataset.id) ? ' pending' : '');
       el.style.left = b.style.left;
       el.style.top = (parseFloat(b.style.top) - (h - BLOCK_H)/2) + 'px';
       el.style.width = w + 'px';
@@ -1666,8 +1718,179 @@
       vworld.appendChild(el);
       if(keepSelected && keepSelected === b.dataset.id && vid){ el.classList.add('selected'); selectedCopy = el; }
     });
-    renderFlowLayer(vworld, buildFlowModel(chainGeometry(true), true));
+    renderFlowLayer(vworld, buildFlowModel(chainGeometry(true), true, pendingIdx));
+    const fresh = renderDecisions(decisions);
+    highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
+    revealDecisions(fresh);
+  }
+
+  // ---------------------------------------------------------------
+  // Dependencies between versioned blocks
+  // Neighbours share the connector on their join. When a versioned block
+  // brings a new version of that connector (e.g. Process v2), the neighbour
+  // has to decide how to handle it. Only the direct neighbour is checked —
+  // the chain beyond it is deliberately parked for now.
+  // ---------------------------------------------------------------
+  const CONNECTOR_LABEL = { api:'API', process:'Process', topic:'Topic', queue:'Queue', file:'File' };
+  const DECISION_W = 260;                 // keep in step with .decision-card's width
+  const collapsedDecisions = new Set();   // decisions the user chose to leave open ("Decide later")
+  let shownDecisions = new Set();         // decisions already on screen, so only new ones pull the view
+  const newNodeOf = (v, type) => v.nodes.find(n => n.type === type && n.ver !== 'v1' && n.role !== 'retired');
+
+  function computeDecisions(){
+    const out = [];
+    chainOrder.forEach((b, i) => {
+      const v = variantsById[versionOverrides[b.dataset.id]];
+      if(!v) return;
+      const spec = NODE_SPECS[b.dataset.tpl];
+      [['upstream', i - 1, spec.entry.type], ['downstream', i + 1, spec.exit.type]].forEach(([side, j, type]) => {
+        const n = chainOrder[j];
+        const nn = n && newNodeOf(v, type);
+        if(!nn) return;
+        const nspec = NODE_SPECS[n.dataset.tpl];
+        if((side === 'upstream' ? nspec.exit.type : nspec.entry.type) !== type) return;
+        const nv = variantsById[versionOverrides[n.dataset.id]];
+        if(nv && newNodeOf(nv, type)) return;   // the neighbour already carries the new version: consistent
+        // Suggest the neighbour's versioned blocks in which that new version is
+        // the object that changed — i.e. the change reaches it through the shared connector.
+        const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl &&
+          x.nodes.some(m => m.type === type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
+        out.push({ key: n.dataset.id + '|' + side, blockId: n.dataset.id, index: j, sourceId: b.dataset.id,
+          side, type, ver: nn.ver, options, current: nv ? nv.id : null });
+      });
+    });
+    return out;
+  }
+
+  function applyDecision(blockId, vid){
+    versionOverrides[blockId] = vid;
+    renderCopy();
+    recordHistory();
+    showToast('Version applied: ' + variantsById[vid].label + '.');
+  }
+
+  function showSuggestionsInLibrary(){
+    document.getElementById('tabVersioned').click();
+    const first = versionGrid.querySelector('.version-card.suggested');
+    if(!first) return;
+    first.scrollIntoView({ block:'nearest', behavior:'smooth' });
+    versionGrid.querySelectorAll('.version-card.suggested').forEach(c => {
+      c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+    });
+  }
+
+  // Returns the keys of decisions that weren't on screen before.
+  function renderDecisions(decisions){
+    const live = new Set(decisions.map(d => d.key));
+    [...collapsedDecisions].forEach(k => { if(!live.has(k)) collapsedDecisions.delete(k); });
+    const fresh = [...live].filter(k => !shownDecisions.has(k));
+    shownDecisions = live;
+    const nextY = {};
+    decisions.forEach(d => {
+      const b = chainOrder[d.index];
+      // Right under the impacted block, extending away from the versioned
+      // neighbour (whose taller tile would otherwise sit behind the card).
+      const bw = parseFloat(b.style.width);
+      const x = d.side === 'upstream' ? parseFloat(b.style.left) + bw - DECISION_W - 4 : parseFloat(b.style.left) + TILE_D + 4;
+      const y = nextY[d.blockId] ?? (parseFloat(b.style.top) + BLOCK_H + 14);
+      const what = CONNECTOR_LABEL[d.type] + ' ' + d.ver;
+      const name = b.querySelector('.cblock-label').textContent;
+      if(collapsedDecisions.has(d.key)){
+        const pill = document.createElement('button');
+        pill.className = 'decision-pill';
+        pill.dataset.key = d.key;
+        pill.style.left = (d.side === 'upstream' ? x + DECISION_W - 150 : x) + 'px'; pill.style.top = y + 'px';
+        pill.textContent = '\u26A0 Decision pending';
+        pill.title = what + ' is new. How should ' + name + ' handle it?';
+        pill.addEventListener('pointerdown', e => e.stopPropagation());
+        pill.addEventListener('click', () => { collapsedDecisions.delete(d.key); renderCopy(); });
+        vworld.appendChild(pill);
+        nextY[d.blockId] = y + 38;
+        return;
+      }
+      const card = document.createElement('div');
+      card.className = 'decision-card';
+      card.dataset.key = d.key;
+      card.style.left = x + 'px'; card.style.top = y + 'px';
+      card.style.setProperty('--arrow-x', (d.side === 'upstream' ? DECISION_W - 40 : 22) + 'px');
+      card.addEventListener('pointerdown', e => e.stopPropagation());
+      const head = document.createElement('div');
+      head.className = 'dc-head';
+      head.textContent = '\u26A0 Decision needed';
+      const q = document.createElement('p');
+      q.className = 'dc-q';
+      q.textContent = what + ' is new. How should ' + name + ' handle it?';
+      card.append(head, q);
+      if(d.current){
+        const note = document.createElement('p');
+        note.className = 'dc-note';
+        note.textContent = 'Its current version, \u201C' + variantsById[d.current].label + '\u201D, keeps ' + CONNECTOR_LABEL[d.type] + ' unchanged.';
+        card.appendChild(note);
+      }
+      if(d.options.length === 0){
+        const note = document.createElement('p');
+        note.className = 'dc-note';
+        note.textContent = 'No versioned blocks are defined for ' + templatesById[b.dataset.tpl].label + ' yet.';
+        card.appendChild(note);
+      }
+      d.options.forEach(vid => {
+        const btn = document.createElement('button');
+        btn.className = 'dc-opt';
+        btn.dataset.variant = vid;
+        btn.textContent = variantsById[vid].label;
+        btn.title = variantsById[vid].purpose;
+        btn.addEventListener('click', () => applyDecision(d.blockId, vid));
+        card.appendChild(btn);
+      });
+      const actions = document.createElement('div');
+      actions.className = 'dc-actions';
+      if(d.options.length){
+        const lib = document.createElement('button');
+        lib.className = 'dc-link'; lib.dataset.action = 'library';
+        lib.textContent = 'Show in library';
+        lib.addEventListener('click', showSuggestionsInLibrary);
+        actions.appendChild(lib);
+      }
+      const later = document.createElement('button');
+      later.className = 'dc-link'; later.dataset.action = 'later';
+      later.textContent = 'Decide later';
+      later.addEventListener('click', () => { collapsedDecisions.add(d.key); renderCopy(); });
+      actions.appendChild(later);
+      card.appendChild(actions);
+      vworld.appendChild(card);
+      nextY[d.blockId] = y + card.offsetHeight + 12;
+    });
+    return fresh;
+  }
+
+  // A new question must be readable: if its card runs off the bottom of the
+  // copy pane, scroll the copy up — but never so far that the block leaves the view.
+  function revealDecisions(keys){
+    if(!keys.length) return;
+    const pane = versionPane.getBoundingClientRect();
+    let need = 0, room = Infinity;
+    keys.forEach(k => {
+      const card = vworld.querySelector('.decision-card[data-key="' + CSS.escape(k) + '"]');
+      if(!card) return;
+      need = Math.max(need, card.getBoundingClientRect().bottom - (pane.bottom - 8));
+    });
+    vworld.querySelectorAll('.cblock').forEach(b => { room = Math.min(room, b.getBoundingClientRect().top - (pane.top + 36)); });
+    const shift = Math.min(need, room);
+    if(shift > 0){ vPanY -= shift; applyTransform(); }
+  }
+
+  function highlightSuggestions(decisions){
+    const suggested = new Set(decisions.flatMap(d => d.options));
+    const any = suggested.size > 0;
+    VERSION_VARIANTS.forEach(v => {
+      const el = paletteItemsByVariantId[v.id];
+      if(!el) return;
+      el.classList.toggle('suggested', suggested.has(v.id));
+      el.classList.toggle('not-suggested', any && !suggested.has(v.id));
+    });
+    const tab = document.getElementById('tabVersioned');
+    if(decisions.length) tab.dataset.pending = decisions.length; else delete tab.dataset.pending;
   }
 
   // When the split first opens: centre the base flow in the top half and start
@@ -2020,7 +2243,7 @@
   window.__debug = { templatesById, attachToChain, removeChainBlock, recordHistory,
     serializeFlow, validateFlow, loadFlow, undo, redo, chainOrder: () => chainOrder,
     dropVersion: (vid, x, y) => dropVersion(variantsById[vid], x, y), removeVersion,
-    versionOverrides: () => versionOverrides, variantsById,
+    versionOverrides: () => versionOverrides, variantsById, decisions: computeDecisions,
     views: () => ({ base:{ panX, panY, zoom }, copy:{ panX:vPanX, panY:vPanY, zoom:vZoom }, active:activePane }) };
 })();
 </script>
