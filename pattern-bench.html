@@ -745,7 +745,12 @@
         // a label wider than its band grows inwards at either end of the flow, so it never runs off the last block
         let nx = b.atEnd && !b.atStart ? b.x2 - 6 : (b.atStart && !b.atEnd ? b.x1 + 6 : b.x1 + w/2);
         let anchor = b.atEnd && !b.atStart ? 'end' : (b.atStart && !b.atEnd ? 'start' : 'middle');
-        if(b.labelMinX !== null && b.labelMinX !== undefined){ nx = b.labelMinX; anchor = 'start'; }
+        // only move a label that would otherwise cross a versioned tile's left edge
+        if(b.labelMinX !== null && b.labelMinX !== undefined){
+          const textW = label.length*7.5;
+          const left = anchor === 'start' ? nx : (anchor === 'end' ? nx - textW : nx - textW/2);
+          if(left < b.labelMinX){ nx = b.labelMinX; anchor = 'start'; }
+        }
         out += narrow
           ? '<text class="band-label ' + cls + '" x="' + nx + '" y="' + (b.y1 - 6) + '" text-anchor="' + anchor + '">' + label + '</text>'
           : '<text class="band-label ' + cls + '" x="' + Math.max(b.x1 + (b.squareLeft ? 38 : 20), b.labelMinX || -Infinity) + '" y="' + (b.y1 - 6) + '">' + label + '</text>';
@@ -1065,7 +1070,33 @@
       nodes:[ {k:'p1', type:'process', lane:'top', ver:'v1', role:'retired'},
               {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'},
               {k:'f',  type:'file', lane:'mid', ver:'v1', role:'unchanged'} ],
-      links:[ ['p1','f','dotted'], ['p2','f','solid'] ] }
+      links:[ ['p1','f','dotted'], ['p2','f','solid'] ] },
+
+    // Process-to-Publish (Exit-Route): an internal process change never forces
+    // a new topic contract, and a new topic version is a switch — no dual
+    // publishing to v1 and v2.
+    { id:'p2t-contract-parallel', base:'process-to-publish', route:'exit', change:'contract',
+      label:'New Topic v2 · own Process v2',
+      purpose:'New topic version: Process v1 keeps publishing to Topic v1; a new Process v2 publishes to Topic v2.',
+      nodes:[ {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'t1', type:'topic', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'side'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['p1','t1','solid'], ['p2','t2','solid'] ] },
+    { id:'p2t-contract-switch', base:'process-to-publish', route:'exit', change:'contract',
+      label:'New Topic v2 · same Process',
+      purpose:'New topic version: the one process switches from Topic v1 to Topic v2 (no dual publishing). Its link to Topic v1 is retired.',
+      nodes:[ {k:'p',  type:'process', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'t1', type:'topic', lane:'top', ver:'v1', role:'retired'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['p','t1','dotted'], ['p','t2','solid'] ] },
+    { id:'p2t-process-shared', base:'process-to-publish', route:'exit', change:'process',
+      label:'New Process v2 · same Topic',
+      purpose:'Internal process change: Process v2 takes over publishing to the unchanged topic. Process v1’s link is retired.',
+      nodes:[ {k:'p1', type:'process', lane:'top', ver:'v1', role:'retired'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'},
+              {k:'t',  type:'topic', lane:'mid', ver:'v1', role:'unchanged'} ],
+      links:[ ['p1','t','dotted'], ['p2','t','solid'] ] }
   ];
   const variantsById = {};
   VERSION_VARIANTS.forEach(v => variantsById[v.id] = v);

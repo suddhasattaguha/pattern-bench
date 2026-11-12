@@ -193,3 +193,8 @@ one logical change each with a real diff behind them.
   Rule: whoever owns a contract can command its change — integration owns
   the inbound file contract (4 options), the downstream owns the outbound
   file contract (3 options).
+- Versioned blocks for Process-to-Publish (3): an internal process change
+  never forces a new topic contract; a new topic version is a switch, with
+  no dual publishing.
+- Fix: platform band labels no longer collide when a versioned block has
+  two platform bands.

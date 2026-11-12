@@ -23,14 +23,14 @@ with sync_playwright() as p:
     ov = lambda: ev("Object.values(window.__debug.versionOverrides())")
     split = lambda: ev("document.getElementById('canvasWrap').classList.contains('split')")
     pg.click('#tabVersioned')
-    check('version cards unavailable with empty flow', pg.locator('.version-card.unavailable').count() == 14)
+    check('version cards unavailable with empty flow', pg.locator('.version-card.unavailable').count() == 17)
     check('every quadrant has versioned blocks', pg.locator('#versionGrid .quad-empty').count() == 0)
-    check('exit quadrants hold the Process-to-API and Process-to-File blocks', pg.locator('#versionGrid .quad:nth-child(3) .version-card').count() == 2 and pg.locator('#versionGrid .quad:nth-child(4) .version-card').count() == 4)
+    check('exit quadrants hold the Process-to-API, -File and -Publish blocks', pg.locator('#versionGrid .quad:nth-child(3) .version-card').count() == 3 and pg.locator('#versionGrid .quad:nth-child(4) .version-card').count() == 6)
     check('entry quadrants hold the API-to-Process and File-to-Process blocks', pg.locator('#versionGrid .quad:nth-child(1) .version-card').count() == 4 and pg.locator('#versionGrid .quad:nth-child(2) .version-card').count() == 4)
 
     for t in ['api-to-process', 'process-to-publish', 'consume-to-api']:
         ev(f"(()=>{{const d=window.__debug; d.attachToChain(d.templatesById['{t}'],560,240); d.recordHistory();}})()")
-    check('only API-to-Process versions available in this flow', pg.locator('.version-card.unavailable').count() == 10)
+    check('only versions of blocks in the flow are available', pg.locator('.version-card.unavailable').count() == 10)
     check('no split before first version', not split())
 
     # real drag-and-drop from the palette card onto the base block
@@ -113,7 +113,7 @@ with sync_playwright() as p:
     pg.click('#clearCanvas'); pg.click('#confirmOk')
     for t in ['api-to-process', 'process-to-api']:
         ev(f"(()=>{{const d=window.__debug; d.attachToChain(d.templatesById['{t}'],470,240); d.recordHistory();}})()")
-    check('Process-to-API versions available once it is in the flow', pg.locator('.version-card.unavailable').count() == 7)
+    check('Process-to-API versions available once it is in the flow', pg.locator('.version-card.unavailable').count() == 10)
     for vid in ['p2a-contract-parallel', 'p2a-contract-switch', 'p2a-process-shared']:
         ev(f"window.__debug.dropVersion('{vid}',10,10)")
         check(vid + ' applies to Process-to-API', ov() == [vid])
