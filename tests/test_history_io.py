@@ -18,7 +18,7 @@ def same(a,b):
     return int((d>0).sum()) < 600 and int((d>150).sum()) == 0
 def worldstate(pg):
     h=pg.evaluate("document.getElementById('world').innerHTML")
-    return re.sub(r'(data-id|data-seq|data-left-linked|data-right-linked)="[^"]*"','',h).replace(' selected','')
+    return re.sub(r'(data-id|data-seq|data-left-linked|data-right-linked|data-skey|data-blocks)="[^"]*"','',h).replace(' selected','')
 with sync_playwright() as p:
     b=p.chromium.launch(); pg=b.new_page(viewport={'width':1400,'height':800}, accept_downloads=True)
     errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
@@ -27,7 +27,7 @@ with sync_playwright() as p:
     check('undo/redo disabled at start', pg.is_disabled('#undoBtn') and pg.is_disabled('#redoBtn'))
     # build with mixed append/prepend
     for t in ['consume-to-process','process-to-api','process-to-publish','api-to-process']:
-        pg.evaluate(f"(()=>{{const d=window.__debug; d.attachToChain(d.templatesById['{t}'],500,300); d.recordHistory();}})()")
+        pg.evaluate(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
     order=pg.evaluate("window.__debug.chainOrder().map(b=>b.dataset.tpl)")
     check('chain order (mixed prepend/append)', order==['process-to-publish','consume-to-process','process-to-api','api-to-process'])
     pg.mouse.click(1300,700); pg.wait_for_timeout(400)

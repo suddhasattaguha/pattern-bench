@@ -30,7 +30,7 @@
     --grid-dot:rgba(94,149,219,0.30);
     --ipaas:#3CC8B4; --ipaas-fill:#12403F; --ipaas-glyph:#7FE3D3; --ipaas-band:rgba(60,200,180,0.13); --ipaas-label:#3CC8B4;
     --broker:#F0A94A; --broker-fill:#4A3618; --broker-glyph:#F8CE94; --broker-band:rgba(240,169,74,0.13); --broker-label:#F0A94A;
-    --ext:#93A4B8; --ext-fill:#22364D; --ext-glyph:#D5DEE9;
+    --ext:#93A4B8; --ext-fill:#22364D; --ext-glyph:#D5DEE9; --ext-band:rgba(147,164,184,0.07);
     --font-mono:'JetBrains Mono', ui-monospace, monospace;
     --font-ui:'Inter', system-ui, sans-serif;
   }
@@ -57,7 +57,7 @@
     --grid-dot:rgba(47,90,143,0.24);
     --ipaas:#0F8F7E; --ipaas-fill:#D8F3EF; --ipaas-glyph:#0B6F62; --ipaas-band:rgba(15,143,126,0.11); --ipaas-label:#0B6F62;
     --broker:#B86E0B; --broker-fill:#FBEACF; --broker-glyph:#8A5207; --broker-band:rgba(184,110,11,0.11); --broker-label:#8A5207;
-    --ext:#64748B; --ext-fill:#E8EDF3; --ext-glyph:#334155;
+    --ext:#64748B; --ext-fill:#E8EDF3; --ext-glyph:#334155; --ext-band:rgba(100,116,139,0.06);
   }
   *{box-sizing:border-box;}
   html,body{
@@ -373,11 +373,33 @@
      that belongs to the flow rather than to a single block — the line, the
      connector symbols on the seams, and the platform bands. */
   .flow-layer{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; z-index:60; }
-  .band.own-ipaas{ fill:var(--ipaas-band); }
-  .band.own-broker{ fill:var(--broker-band); }
-  .band-label{ font-family:var(--font-ui); font-size:10px; font-weight:700; letter-spacing:0.1em; }
-  .band-label.own-ipaas{ fill:var(--ipaas-label); }
-  .band-label.own-broker{ fill:var(--broker-label); }
+  /* Platform containers: drawn behind the tiles, so they read as an outer frame */
+  .container-layer{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; z-index:1; }
+  .pcont{ stroke-width:1.5; }
+  .pcont.own-ipaas{ fill:var(--ipaas-band); stroke:var(--ipaas); stroke-opacity:0.6; }
+  .pcont.own-broker{ fill:var(--broker-band); stroke:var(--broker); stroke-opacity:0.6; }
+  .pcont.own-external{ fill:var(--ext-band); stroke:var(--ext); stroke-dasharray:7 4; }
+  .pcont.dim, .pcont-label.dim{ opacity:0.45; }
+  .pcont-type{ font-family:var(--font-ui); font-size:10px; font-weight:700; letter-spacing:0.1em; }
+  .pcont-label.own-ipaas .pcont-type{ fill:var(--ipaas-label); }
+  .pcont-label.own-broker .pcont-type{ fill:var(--broker-label); }
+  .pcont-label.own-external .pcont-type{ fill:var(--ext); }
+  .pcont-name{ font-family:var(--font-ui); font-size:11.5px; font-weight:600; fill:var(--text-primary); }
+  .pcont-name.empty{ fill:var(--text-muted); font-weight:500; }
+  .pcont-label.editable{ pointer-events:all; cursor:pointer; }
+  .pcont-hit{ fill:transparent; }
+  .pcont-label.editable:hover .pcont-name{ text-decoration:underline; }
+  .label-editor{
+    position:absolute; z-index:70; width:240px; box-sizing:border-box; padding:10px 12px 12px;
+    background:var(--panel); border:1.5px solid var(--panel-border); border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.35); font-family:var(--font-ui); color:var(--text-primary);
+  }
+  .label-editor .le-head{ font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
+  .label-editor label{ display:block; font-size:11.5px; color:var(--text-muted); margin-top:6px; }
+  .label-editor input{ display:block; width:100%; box-sizing:border-box; margin-top:3px; padding:7px 8px; border-radius:6px;
+    border:1px solid var(--panel-border); background:var(--block-bg); color:var(--text-primary); font-family:var(--font-ui); font-size:13px; }
+  .label-editor input:focus{ outline:2px solid var(--accent-teal); outline-offset:0; }
+  .label-editor .le-actions{ display:flex; gap:8px; margin-top:10px; justify-content:flex-end; }
   .link{ stroke:var(--flow-line); stroke-width:3; fill:none; stroke-linecap:round; }
   .link.retired{ stroke:var(--text-muted); stroke-dasharray:1 8; }
   .link-mark{ stroke:var(--flow-mark); stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
@@ -449,6 +471,23 @@
   .version-pane .pane-tag.active{ color:var(--accent-version); box-shadow:0 0 0 1px var(--accent-version); }
   .pb-sub{ font-family:var(--font-ui); font-size:10.5px; text-align:center; color:var(--text-muted); margin-top:-2px; }
   .palette-block.version-card:hover{ border-color:var(--accent-version); }
+
+  .end-hint{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 12px 0;
+    padding:6px 10px; border:1px solid var(--accent-amber); border-radius:8px; font-size:12px; line-height:1.35; color:var(--text-primary); }
+  .end-hint[hidden]{ display:none; }
+
+  /* Click a connector to version it */
+  .flow-layer .node[data-skey]{ pointer-events:all; cursor:pointer; }
+  .flow-layer .node[data-skey]:hover{ filter:brightness(1.18); }
+  .flow-layer .node.targeted{ filter:drop-shadow(0 0 1.5px var(--accent-amber)) drop-shadow(0 0 5px var(--accent-amber)); }
+  .decision-card.target-card{ width:250px; border-color:var(--accent-version); }
+  .decision-card.target-card .dc-head{ color:var(--accent-version); }
+  .decision-card.target-card::before{ border-color:var(--accent-version); }
+  .dc-side{ display:flex; gap:6px; margin-top:8px; }
+  .dc-side button{ flex:1; min-height:36px; padding:6px 8px; border-radius:8px; border:1px solid var(--panel-border);
+    background:transparent; color:var(--text-primary); font-family:var(--font-ui); font-size:12px; line-height:1.25; cursor:pointer; text-align:left; }
+  .dc-side button .ds-dir{ display:block; font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted); }
+  .dc-side button.on{ border-color:var(--accent-version); border-width:2px; padding:5px 7px; }
 
   /* ---------- Dependencies between versioned blocks ---------- */
   /* A neighbour that must decide how to handle a new version on its shared connector */
@@ -554,6 +593,7 @@
       <button class="palette-tab active" id="tabBaseFlow" data-tab="base">Base Flow Design</button>
       <button class="palette-tab" id="tabVersioned" data-tab="versioned">Versioned Artifacts</button>
     </div>
+    <div class="end-hint" id="endHint" hidden><span id="endHintText"></span><button class="dc-link" id="endHintClear">Show all</button></div>
     <div class="quadrant-grid two-col" id="quadrantGrid"></div>
     <div class="quadrant-grid" id="versionGrid" style="display:none;"></div>
     <div class="palette-resizer" id="paletteResizer" title="Drag to resize the library. Double-click to reset."></div>
@@ -597,11 +637,13 @@
   // itself is never stored — it's re-derived from the base flow + these
   // overrides, so base edits flow straight through and the link can't break.
   let versionOverrides = {};
+  // Platform / asset names the user gave containers, keyed by a connector key ('block-3:out').
+  let containerLabels = {};
+  let baseContainers = [];
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
   const VH = 220;      // height of a versioned tile (base tiles are BLOCK_H)
-  const BAND_R = 32;   // half-height of a platform band
   const LANE_DY = { top:-LANE, mid:0, bot:LANE };
 
   // Who owns a connector. Colour follows the owner; the label names the band.
@@ -660,7 +702,7 @@
     'process-to-publish': { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'topic', owner:'broker'} },
     'consume-to-process': { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.40}], exit:{type:'process', owner:'ipaas', strong:true} },
     'process-to-api':     { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'api', owner:'external'} },
-    'file-to-process':    { entry:{type:'file', owner:'ipaas', strong:true},    mid:[], exit:{type:'process', owner:'ipaas', strong:true} },
+    'file-to-process':    { entry:{type:'file', owner:'external', strong:true},    mid:[], exit:{type:'process', owner:'ipaas', strong:true} },
     'process-to-file':    { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'file', owner:'external'} },
     'consume-to-api':     { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.50}], exit:{type:'api', owner:'external'} },
     'consume-to-publish': { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.50}], exit:{type:'topic', owner:'broker2'} },
@@ -699,32 +741,35 @@
         .map(n => ({ type:end.type, owner:end.owner, dy:LANE_DY[n.lane], role:n.role, ver:n.ver, key:n.k }));
       let entry;
       if(i === 0){
-        entry = { x:b.left + SEAM_X, cy, nodes:[{ type:spec.entry.type, owner:spec.entry.owner, dy:0 }], strong:!!spec.entry.strong, vblock:null, bi:i };
+        entry = { x:b.left + SEAM_X, cy, nodes:[{ type:spec.entry.type, owner:spec.entry.owner, dy:0 }], strong:!!spec.entry.strong, vblock:null, bi:i, key:b.id + ':in' };
         sets.push(entry);
       } else {
         entry = sets[sets.length - 1];   // the seam shared with the upstream block
+        entry.bis = (entry.bis || [entry.bi]).concat(i);
         if(entry.vblock === null && (spec.entry.strong || !entry.strong)) entry.nodes[0].owner = spec.entry.owner;
       }
       if(v && entry.vblock === null){ entry.nodes = laneNodes(spec.entry); entry.vblock = i; }
       const segs = [];
       let last = entry;
-      spec.mid.forEach(m => {
-        const st = { x:b.left + SEAM_X + m.at*b.w, cy, nodes:[{ type:m.type, owner:m.owner, dy:0 }], strong:true, vblock: v ? i : null, bi:i };
+      spec.mid.forEach((m, mk) => {
+        const lanes = v ? laneNodes(m) : [];
+        const st = { x:b.left + SEAM_X + m.at*b.w, cy, nodes: lanes.length ? lanes : [{ type:m.type, owner:m.owner, dy:0 }], strong:true, vblock: v ? i : null, bi:i, key:b.id + ':m' + mk };
         sets.push(st); segs.push([last, st]); last = st;
       });
       const exit = { x:b.left + b.w + SEAM_X, cy,
         nodes: v ? laneNodes(spec.exit) : [{ type:spec.exit.type, owner:spec.exit.owner, dy:0 }],
-        strong:!!spec.exit.strong, vblock: v ? i : null, bi:i };
+        strong:!!spec.exit.strong, vblock: v ? i : null, bi:i, key:b.id + ':out' };
       sets.push(exit); segs.push([last, exit]);
 
       deferred.push({ segs, v, dim: dimUnversioned && !v && !pending.has(i) });
     });
 
     deferred.forEach(({ segs, v, dim }) => {
-      if(v && segs.length === 1){
+      if(v){
         // a versioned block says exactly which lane connects to which
+        const stations = [segs[0][0], ...segs.map(sg => sg[1])];
         const at = (k) => {
-          for(const st of segs[0]){ const n = st.nodes.find(n => n.key === k); if(n) return { x:st.x, y:st.cy + n.dy }; }
+          for(const st of stations){ const n = st.nodes.find(n => n.key === k); if(n) return { x:st.x, y:st.cy + n.dy }; }
           return null;
         };
         v.links.forEach(([from, to, style]) => {
@@ -739,73 +784,48 @@
       }
     });
 
-    // Platform bands: consecutive connectors with the same owner share one band.
-    // A versioned block keeps a band of its own.
-    const bands = [];
-    const bandKey = (st) => { const o = st.nodes[0].owner; return o === 'external' ? null : o + '|' + (st.vblock === null ? '' : st.vblock); };
-    let run = [];
-    const flush = () => {
-      if(run.length){
-        const first = run[0], last = run[run.length - 1];
-        const fs = SYMBOLS[first.nodes[0].type], ls = SYMBOLS[last.nodes[0].type];
-        if(!(run.length === 1 && fs.edge)){
-          const dys = run.flatMap(st => st.nodes.map(n => n.dy));
-          bands.push({
-            x1: first.x - (fs.edge ? 0 : fs.half + 12), x2: last.x + (ls.edge ? 0 : ls.half + 12),
-            y1: first.cy + Math.min(...dys) - BAND_R, y2: first.cy + Math.max(...dys) + BAND_R,
-            squareLeft: fs.edge, squareRight: ls.edge,
-            atStart: first === sets[0], atEnd: last === sets[sets.length - 1],
-            owner: first.nodes[0].owner, dim: dimUnversioned && first.vblock === null && !pending.has(first.bi),
-            // a versioned block's band can start on its upstream seam; keep the label inside its tile
-            labelMinX: first.vblock === null ? null : blocks[first.vblock].left + SEAM_X + TILE_D + 24
-          });
-        }
-      }
-      run = [];
-    };
-    sets.forEach(st => {
-      const k = bandKey(st);
-      if(run.length && bandKey(run[0]) !== k) flush();
-      if(k !== null) run.push(st); else flush();
-    });
-    flush();
+    // Platform containers: consecutive connectors with the same owner form one
+    // asset, framed outside the tiles (the joins stay where they are). Each
+    // run is a separate asset, even on the same platform. End applications
+    // (target API, SFTP folders) get their own containers.
+    const containers = [];
+    if(blocks.length && blocks[0].id){
+      const tiles = blocks.map(b => {
+        const h = b.variant ? VH : BLOCK_H, top = b.top - (h - BLOCK_H)/2;
+        return { x1:b.left, x2:b.left + b.w + TILE_D, y1:top, y2:top + h };
+      });
+      let run = [];
+      const flush = () => {
+        if(!run.length) return;
+        const first = run[0], last = run[run.length - 1], owner = first.nodes[0].owner;
+        const x1 = first.x - SYMBOLS[first.nodes[0].type].half - 16;
+        const x2 = last.x + SYMBOLS[last.nodes[0].type].half + 16;
+        const over = tiles.filter(t => t.x2 > x1 + 6 && t.x1 < x2 - 6);
+        const active = run.some(st => st.vblock !== null || pending.has(st.bi));
+        containers.push({
+          x1, x2, y1: Math.min(...over.map(t => t.y1)) - 46, y2: Math.max(...over.map(t => t.y2)) + 12,
+          owner, keys: run.map(st => st.key), dim: dimUnversioned && !active
+        });
+        run = [];
+      };
+      sets.forEach(st => {
+        if(run.length && run[0].nodes[0].owner !== st.nodes[0].owner) flush();
+        run.push(st);
+      });
+      flush();
+    }
 
     const nodes = [];
     sets.forEach(st => st.nodes.forEach(n => nodes.push({
       x:st.x, y:st.cy + n.dy, type:n.type, owner:n.owner, role:n.role || null, ver:n.ver || null,
-      dim: dimUnversioned && st.vblock === null && !pending.has(st.bi)
+      dim: dimUnversioned && st.vblock === null && !pending.has(st.bi),
+      skey: st.key, bis: (st.bis || [st.bi]).map(bi => blocks[bi].id).filter(Boolean)
     })));
-    return { bands, links, nodes };
+    return { containers, links, nodes };
   }
 
   function flowMarkup(model){
     let out = '';
-    model.bands.forEach(b => {
-      const r = BAND_R, w = b.x2 - b.x1, h = b.y2 - b.y1;
-      const rl = b.squareLeft ? 0 : r, rr = b.squareRight ? 0 : r;
-      const d = 'M' + (b.x1+rl) + ' ' + b.y1 + 'H' + (b.x2-rr) +
-        (rr ? 'a' + rr + ' ' + rr + ' 0 0 1 ' + rr + ' ' + rr + 'V' + (b.y2-rr) + 'a' + rr + ' ' + rr + ' 0 0 1 ' + (-rr) + ' ' + rr : 'V' + b.y2) +
-        'H' + (b.x1+rl) +
-        (rl ? 'a' + rl + ' ' + rl + ' 0 0 1 ' + (-rl) + ' ' + (-rl) + 'V' + (b.y1+rl) + 'a' + rl + ' ' + rl + ' 0 0 1 ' + rl + ' ' + (-rl) : 'V' + b.y1) + 'Z';
-      const cls = OWNERS[b.owner].cls + (b.dim ? ' dim' : '');
-      out += '<path class="band ' + cls + '" d="' + d + '"></path>';
-      const label = OWNERS[b.owner].label.toUpperCase();
-      if(label){
-        const narrow = w < label.length*7.5 + 44;
-        // a label wider than its band grows inwards at either end of the flow, so it never runs off the last block
-        let nx = b.atEnd && !b.atStart ? b.x2 - 6 : (b.atStart && !b.atEnd ? b.x1 + 6 : b.x1 + w/2);
-        let anchor = b.atEnd && !b.atStart ? 'end' : (b.atStart && !b.atEnd ? 'start' : 'middle');
-        // only move a label that would otherwise cross a versioned tile's left edge
-        if(b.labelMinX !== null && b.labelMinX !== undefined){
-          const textW = label.length*7.5;
-          const left = anchor === 'start' ? nx : (anchor === 'end' ? nx - textW : nx - textW/2);
-          if(left < b.labelMinX){ nx = b.labelMinX; anchor = 'start'; }
-        }
-        out += narrow
-          ? '<text class="band-label ' + cls + '" x="' + nx + '" y="' + (b.y1 - 6) + '" text-anchor="' + anchor + '">' + label + '</text>'
-          : '<text class="band-label ' + cls + '" x="' + Math.max(b.x1 + (b.squareLeft ? 38 : 20), b.labelMinX || -Infinity) + '" y="' + (b.y1 - 6) + '">' + label + '</text>';
-      }
-    });
     model.links.forEach(l => {
       const cls = 'link' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '');
       if(l.y1 === l.y2){
@@ -822,6 +842,7 @@
     model.nodes.forEach(n => {
       const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '');
       out += '<g class="node ' + cls + '" data-type="' + n.type + '"' + (n.role ? ' data-role="' + n.role + '"' : '') +
+        (n.skey ? ' data-skey="' + n.skey + '" data-blocks="' + n.bis.join(',') + '"' : '') +
         ' transform="translate(' + n.x + ',' + n.y + ')">' + symbolMarkup(n.type) + '</g>';
       if(n.ver){
         const bx = n.x + (n.type === 'api' ? 32 : SYMBOLS[n.type].half + 6), by = n.y - (n.type === 'api' ? 25 : 29);
@@ -832,8 +853,51 @@
     return out;
   }
 
+  const escXml = (t) => String(t).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+  // A container's label is stored under one of its connectors' keys, so it
+  // survives blocks being added at either end of the flow.
+  function containerLabel(keys){
+    for(const k of keys) if(containerLabels[k]) return containerLabels[k];
+    return null;
+  }
+  function containerMarkup(model, editable){
+    let out = '';
+    model.containers.forEach((c, ci) => {
+      const ext = c.owner === 'external';
+      const cls = OWNERS[c.owner].cls + (c.dim ? ' dim' : '');
+      out += '<rect class="pcont ' + cls + '" x="' + c.x1 + '" y="' + c.y1 + '" width="' + (c.x2 - c.x1) + '" height="' + (c.y2 - c.y1) + '" rx="' + (ext ? 5 : 18) + '"></rect>';
+      const type = ext ? 'END APPLICATION' : OWNERS[c.owner].label.toUpperCase();
+      const lab = containerLabel(c.keys);
+      const name = lab ? [lab.platform, lab.asset].filter(Boolean).join(' \u00B7 ') : '';
+      const shown = name || (editable ? '+ name' : '');
+      // Type on the first line, name on the second. A narrow container centres
+      // its label so it spills evenly instead of running into the next one.
+      const textW = Math.max(type.length*7.3, shown.length*6.6);
+      const fits = textW + 24 <= c.x2 - c.x1;
+      const lx = fits ? c.x1 + 12 : (c.x1 + c.x2)/2, anchor = fits ? 'start' : 'middle';
+      out += '<g class="pcont-label ' + cls + (editable ? ' editable' : '') + '" data-ci="' + ci + '" transform="translate(' + lx + ',' + (c.y1 + 16) + ')" text-anchor="' + anchor + '">' +
+        '<title>' + escXml(type + (name ? ': ' + name : '') + (editable ? ' (click to name it)' : '')) + '</title>' +
+        '<rect class="pcont-hit" x="' + (fits ? -4 : -textW/2 - 4) + '" y="-12" width="' + (textW + 8) + '" height="30"></rect>' +
+        '<text class="pcont-type">' + type + '</text>' +
+        (shown ? '<text class="pcont-name' + (name ? '' : ' empty') + '" y="15">' + escXml(shown) + '</text>' : '') +
+        '</g>';
+    });
+    return out;
+  }
+
   const SVG_NS = 'http://www.w3.org/2000/svg';
   function renderFlowLayer(worldEl, model){
+    let back = worldEl.querySelector(':scope > svg.container-layer');
+    if(!back){
+      back = document.createElementNS(SVG_NS, 'svg');
+      back.setAttribute('class', 'container-layer');
+      back.setAttribute('width', '1');
+      back.setAttribute('height', '1');
+      worldEl.insertBefore(back, worldEl.firstChild);
+    }
+    const editable = worldEl === world;
+    back.innerHTML = containerMarkup(model, editable);
+    if(editable) baseContainers = model.containers;
     let layer = worldEl.querySelector(':scope > svg.flow-layer');
     if(!layer){
       layer = document.createElementNS(SVG_NS, 'svg');
@@ -843,6 +907,8 @@
       worldEl.appendChild(layer);
     }
     layer.innerHTML = flowMarkup(model);
+    if(versionTarget && versionTarget.pane === (worldEl === world ? 'base' : 'copy'))
+      layer.querySelectorAll('.node[data-skey="' + versionTarget.skey + '"]').forEach(n => n.classList.add('targeted'));
   }
 
   // Standalone pictures of a single block, for the library cards.
@@ -974,17 +1040,38 @@
   }
 
   // Returns 'right' (append downstream), 'left' (prepend upstream), or null.
-  // Downstream is preferred when a template could technically fit either end.
-  function chainAttachSide(tpl){
+  //   end   — the end the user selected ('left' | 'right'), which wins;
+  //   dropX — where it was dropped (world x): when the template fits both
+  //           ends, it goes to the nearer one.
+  function chainAttachSide(tpl, end, dropX){
     const req = getChainOpenRequirements();
     if(!req) return 'start';
-    if(tpl.entryType === req.rightRequiredType) return 'right';
-    if(tpl.exitType === req.leftRequiredType) return 'left';
+    const fitsRight = tpl.entryType === req.rightRequiredType;
+    const fitsLeft = tpl.exitType === req.leftRequiredType;
+    if(end === 'left') return fitsLeft ? 'left' : null;
+    if(end === 'right') return fitsRight ? 'right' : null;
+    if(fitsLeft && fitsRight && dropX !== undefined){
+      const first = chainOrder[0], last = chainOrder[chainOrder.length - 1];
+      const leftX = parseFloat(first.style.left);
+      const rightX = parseFloat(last.style.left) + parseFloat(last.style.width);
+      return Math.abs(dropX - leftX) < Math.abs(dropX - rightX) ? 'left' : 'right';
+    }
+    if(fitsRight) return 'right';
+    if(fitsLeft) return 'left';
     return null;
   }
 
+  // The end of the flow the user is building on: set when they click the
+  // first or last block (not when a new block is auto-selected after adding).
+  let endSelected = false;
+  function selectedEnd(){
+    if(!endSelected || !selectedBlock || chainOrder.length < 2) return null;
+    const i = chainOrder.indexOf(selectedBlock);
+    return i === 0 ? 'left' : (i === chainOrder.length - 1 ? 'right' : null);
+  }
+
   function isTemplateCompatible(tpl){
-    return chainAttachSide(tpl) !== null;
+    return chainAttachSide(tpl, selectedEnd()) !== null;
   }
 
   const routes = [
@@ -1146,7 +1233,54 @@
       nodes:[ {k:'p1', type:'process', lane:'top', ver:'v1', role:'retired'},
               {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'},
               {k:'t',  type:'topic', lane:'mid', ver:'v1', role:'unchanged'} ],
-      links:[ ['p1','t','dotted'], ['p2','t','solid'] ] }
+      links:[ ['p1','t','dotted'], ['p2','t','solid'] ] },
+
+    // Consume-to-Process (Entry-Route): the publisher owns the topic. A queue
+    // always belongs to one process (one-to-one) — two queues never feed one
+    // process — but one queue can subscribe to several topics or switch topic.
+    { id:'c2p-contract-parallel', base:'consume-to-process', route:'entry', change:'contract',
+      label:'Topic v2 · own Queue + Process v2',
+      purpose:'New topic version: Topic v2 gets its own queue and its own Process v2, running in parallel with v1.',
+      nodes:[ {k:'t1', type:'topic', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'q1', type:'queue', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'},
+              {k:'q2', type:'queue', lane:'bot', ver:'v2', role:'side'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'side'} ],
+      links:[ ['t1','q1','solid'], ['q1','p1','solid'], ['t2','q2','solid'], ['q2','p2','solid'] ] },
+    { id:'c2p-contract-dual', base:'consume-to-process', route:'entry', change:'contract',
+      label:'Topic v2 · same Queue subscribes to both',
+      purpose:'New topic version: the existing queue subscribes to Topic v1 and Topic v2. Only works if the process is backward/forward compatible.',
+      nodes:[ {k:'t1', type:'topic', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'},
+              {k:'q',  type:'queue', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'p',  type:'process', lane:'mid', ver:'v1', role:'unchanged'} ],
+      links:[ ['t1','q','solid'], ['t2','q','solid'], ['q','p','solid'] ] },
+    { id:'c2p-contract-switch', base:'consume-to-process', route:'entry', change:'contract',
+      label:'Topic v2 · same Queue switches',
+      purpose:'New topic version: the existing queue switches its subscription from Topic v1 to Topic v2. The link to Topic v1 is retired.',
+      nodes:[ {k:'t1', type:'topic', lane:'top', ver:'v1', role:'retired'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'},
+              {k:'q',  type:'queue', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'p',  type:'process', lane:'mid', ver:'v1', role:'unchanged'} ],
+      links:[ ['t1','q','dotted'], ['t2','q','solid'], ['q','p','solid'] ] },
+    { id:'c2p-process-switch', base:'consume-to-process', route:'entry', change:'process',
+      label:'New Process v2 · same Queue',
+      purpose:'Process change: the existing queue switches to the new Process v2. The link to Process v1 is retired.',
+      nodes:[ {k:'t',  type:'topic', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'q',  type:'queue', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'p1', type:'process', lane:'top', ver:'v1', role:'retired'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['t','q','solid'], ['q','p1','dotted'], ['q','p2','solid'] ] },
+    { id:'c2p-process-parallel', base:'consume-to-process', route:'entry', change:'process',
+      label:'New Process v2 · own Queue v2',
+      purpose:'Process change with parallel processing: a new Queue v2 on the same topic feeds the new Process v2, next to Queue v1 and Process v1.',
+      nodes:[ {k:'t',  type:'topic', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'q1', type:'queue', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'q2', type:'queue', lane:'bot', ver:'v2', role:'side'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['t','q1','solid'], ['q1','p1','solid'], ['t','q2','solid'], ['q2','p2','solid'] ] }
   ];
   const variantsById = {};
   VERSION_VARIANTS.forEach(v => variantsById[v.id] = v);
@@ -1304,6 +1438,14 @@
   // patterns that can actually extend the current end-to-end flow (at its
   // open entry or open exit) stay draggable — everything else greys out.
   function refreshPaletteAvailability(){
+    refreshLibrary();
+    renderFlows();
+  }
+
+  function refreshLibrary(){
+    const end = selectedEnd();
+    endHint.hidden = !end;
+    if(end) endHintText.textContent = 'Showing blocks that fit the ' + (end === 'left' ? 'start (left end)' : 'end (right end)') + ' of the flow.';
     templates.forEach(tpl => {
       const item = paletteItemsByTemplateId[tpl.id];
       if(!item) return;
@@ -1324,7 +1466,6 @@
       item.draggable = ok;
       item.title = ok ? v.purpose : 'Add a ' + templatesById[v.base].label + ' block to the base flow first';
     });
-    renderFlows();
   }
 
   // ---------------------------------------------------------------
@@ -1336,6 +1477,9 @@
   const vworld = document.getElementById('vworld');
   let selectedCopy = null;
   const staticHint = document.getElementById('staticHint');
+  const endHint = document.getElementById('endHint');
+  const endHintText = document.getElementById('endHintText');
+  document.getElementById('endHintClear').addEventListener('click', () => deselectAll());
   const coordX = document.getElementById('coordX');
   const coordY = document.getElementById('coordY');
   const coordZoom = document.getElementById('coordZoom');
@@ -1477,6 +1621,7 @@
     vworld.querySelectorAll('.cblock.selected').forEach(b => b.classList.remove('selected'));
     selectedBlock = null;
     selectedCopy = null;
+    if(endSelected){ endSelected = false; refreshLibrary(); }
   }
 
   // ---------------------------------------------------------------
@@ -1513,7 +1658,7 @@
     isPanning = false;
     canvasWrap.classList.remove('panning');
     if(canvasWrap.hasPointerCapture(e.pointerId)) canvasWrap.releasePointerCapture(e.pointerId);
-    if(!movedDuringPan) deselectAll();
+    if(!movedDuringPan){ deselectAll(); clearVersionTarget(); }
   });
   canvasWrap.addEventListener('pointercancel', () => {
     isPanning = false;
@@ -1551,7 +1696,8 @@
       refreshPaletteAvailability();
       return;
     }
-    const side = chainAttachSide(tpl);
+    const end = selectedEnd();
+    const side = chainAttachSide(tpl, end, dropX);
     if(!side || side === 'start') return;
 
     if(side === 'right'){
@@ -1569,6 +1715,7 @@
       commitDock(el, 'right', anchor, 'left');
       chainOrder.unshift(el);
     }
+    endSelected = !!end;   // keep building on the end the user chose
     refreshPaletteAvailability();
   }
 
@@ -1600,10 +1747,12 @@
     return el;
   }
 
-  function selectBlock(el){
+  function selectBlock(el, byUser){
     deselectAll();
     el.classList.add('selected');
     selectedBlock = el;
+    endSelected = !!byUser;
+    refreshLibrary();
   }
 
   // Only the end blocks of the single chain can be removed individually
@@ -1642,6 +1791,8 @@
     chainOrder.forEach(b => b.remove());
     chainOrder = [];
     versionOverrides = {};
+    containerLabels = {};
+    closeLabelEditor();
     selectedBlock = null;
     updateEmptyHint();
     refreshPaletteAvailability();
@@ -1656,15 +1807,18 @@
   // base block drops its version too.
   function chainGeometry(withVersions){
     return chainOrder.map(b => ({
-      left: parseFloat(b.style.left), top: parseFloat(b.style.top), w: parseFloat(b.style.width),
+      id: b.dataset.id, left: parseFloat(b.style.left), top: parseFloat(b.style.top), w: parseFloat(b.style.width),
       tpl: b.dataset.tpl, variant: withVersions ? (versionOverrides[b.dataset.id] || null) : null
     }));
   }
 
   // Redraws both panes' flow layers (and the copy's tiles).
   function renderFlows(){
+    if(versionTarget && !versionTarget.blocks.every(id => chainOrder.some(b => b.dataset.id === id))) versionTarget = null;
     renderFlowLayer(world, buildFlowModel(chainGeometry(false), false));
+    renderTargetCard(world);
     renderCopy();
+    if(!canvasWrap.classList.contains('split')) highlightSuggestions([]);
   }
 
   function renderCopy(){
@@ -1720,10 +1874,140 @@
     });
     renderFlowLayer(vworld, buildFlowModel(chainGeometry(true), true, pendingIdx));
     const fresh = renderDecisions(decisions);
+    renderTargetCard(vworld);
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
     revealDecisions(fresh);
   }
+
+  // ---------------------------------------------------------------
+  // Click a connector to version it
+  // Clicking a symbol says "version here": the library highlights the
+  // versioned blocks that change that connector, for every block that shares
+  // it (a connector on a join belongs to both). A small card lets the user
+  // narrow it to the upstream or downstream block. A highlighted version
+  // dropped anywhere then lands on that block.
+  // ---------------------------------------------------------------
+  let versionTarget = null;   // { pane, skey, type, x, y, blocks:[ids], only:id|null }
+  const changesConnector = (v, type, role) => v.nodes.some(n => n.type === type && n.ver !== 'v1' && n.role === role);
+  function targetOptions(t){
+    const ids = t.only ? [t.only] : t.blocks;
+    const tpls = ids.map(id => chainOrder.find(b => b.dataset.id === id)).filter(Boolean).map(b => b.dataset.tpl);
+    let opts = VERSION_VARIANTS.filter(v => tpls.includes(v.base) && changesConnector(v, t.type, 'primary'));
+    // A queue never changes on its own (it follows its process), so fall back to
+    // the versions where it is versioned as a side-effect.
+    if(!opts.length) opts = VERSION_VARIANTS.filter(v => tpls.includes(v.base) && changesConnector(v, t.type, 'side'));
+    return opts.map(v => v.id);
+  }
+  function setVersionTarget(t){
+    versionTarget = t;
+    if(t) document.getElementById('tabVersioned').click();
+    renderFlows();
+    const first = t && versionGrid.querySelector('.version-card.suggested');
+    if(first) first.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  }
+  function clearVersionTarget(){ if(versionTarget){ versionTarget = null; renderFlows(); } }
+  [world, vworld].forEach(w => w.addEventListener('click', (e) => {
+    const n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
+    if(!n) return;
+    e.stopPropagation();
+    const pane = w === world ? 'base' : 'copy';
+    const tr = n.transform.baseVal.consolidate();
+    const m = tr ? tr.matrix : { e:0, f:0 };
+    const blocks = n.dataset.blocks.split(',').filter(Boolean);
+    if(versionTarget && versionTarget.skey === n.dataset.skey && versionTarget.pane === pane){ clearVersionTarget(); return; }
+    setVersionTarget({ pane, skey:n.dataset.skey, type:n.dataset.type, x:m.e, y:m.f, blocks, only:null });
+  }));
+
+  function renderTargetCard(worldEl){
+    worldEl.querySelectorAll(':scope > .target-card').forEach(c => c.remove());
+    const t = versionTarget;
+    if(!t || (worldEl === world) !== (t.pane === 'base')) return;
+    const card = document.createElement('div');
+    card.className = 'decision-card target-card';
+    card.style.left = (t.x - 34) + 'px';
+    card.style.top = (t.y + 44) + 'px';
+    card.addEventListener('pointerdown', e => e.stopPropagation());
+    const head = document.createElement('div');
+    head.className = 'dc-head';
+    head.textContent = 'Version this ' + CONNECTOR_LABEL[t.type];
+    const q = document.createElement('p');
+    q.className = 'dc-q';
+    const n = targetOptions(t).length;
+    q.textContent = n ? n + ' matching version' + (n === 1 ? ' is' : 's are') + ' highlighted in the library. Drag one anywhere onto the canvas.'
+                      : 'No versioned blocks are defined for this yet.';
+    card.append(head, q);
+    if(t.blocks.length > 1){
+      const row = document.createElement('div');
+      row.className = 'dc-side';
+      t.blocks.forEach((id, k) => {
+        const b = chainOrder.find(x => x.dataset.id === id);
+        if(!b) return;
+        const btn = document.createElement('button');
+        btn.dataset.block = id;
+        btn.className = t.only === id ? 'on' : '';
+        btn.innerHTML = '<span class="ds-dir">' + (k === 0 ? 'Upstream' : 'Downstream') + '</span>';
+        btn.appendChild(document.createTextNode(b.querySelector('.cblock-label').textContent));
+        btn.addEventListener('click', () => { t.only = t.only === id ? null : id; renderFlows(); });
+        row.appendChild(btn);
+      });
+      card.appendChild(row);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'dc-actions';
+    const clear = document.createElement('button');
+    clear.className = 'dc-link'; clear.dataset.action = 'clear';
+    clear.textContent = 'Clear';
+    clear.addEventListener('click', clearVersionTarget);
+    actions.appendChild(clear);
+    card.appendChild(actions);
+    worldEl.appendChild(card);
+  }
+
+  // ---------------------------------------------------------------
+  // Naming a platform container (in the base flow; the copy shows the same names)
+  // ---------------------------------------------------------------
+  let labelEditor = null;
+  function closeLabelEditor(){ if(labelEditor){ labelEditor.remove(); labelEditor = null; } }
+  function openLabelEditor(c){
+    closeLabelEditor();
+    const cur = containerLabel(c.keys) || {};
+    const ed = document.createElement('div');
+    ed.className = 'label-editor';
+    ed.style.left = (c.x1 + 4) + 'px';
+    ed.style.top = (c.y1 + 40) + 'px';
+    ed.innerHTML = '<div class="le-head"></div>' +
+      '<label>Platform<input name="platform" maxlength="80" placeholder="e.g. SAP BTP, Azure"></label>' +
+      '<label>Asset name<input name="asset" maxlength="80" placeholder="e.g. order-intake"></label>' +
+      '<div class="le-actions"><button class="btn" data-a="cancel">Cancel</button><button class="btn" data-a="save">Save</button></div>';
+    ed.querySelector('.le-head').textContent = c.owner === 'external' ? 'End application' : OWNERS[c.owner].label;
+    const [pIn, aIn] = ed.querySelectorAll('input');
+    pIn.value = cur.platform || '';
+    aIn.value = cur.asset || '';
+    const save = () => {
+      const platform = pIn.value.trim(), asset = aIn.value.trim();
+      c.keys.forEach(k => delete containerLabels[k]);
+      if(platform || asset) containerLabels[c.keys[0]] = { platform, asset };
+      closeLabelEditor();
+      renderFlows();
+      recordHistory();
+    };
+    ed.addEventListener('pointerdown', e => e.stopPropagation());
+    ed.addEventListener('keydown', e => {
+      e.stopPropagation();   // typing must not trigger canvas shortcuts (Delete, Ctrl+Z…)
+      if(e.key === 'Enter'){ e.preventDefault(); save(); }
+      if(e.key === 'Escape') closeLabelEditor();
+    });
+    ed.querySelector('[data-a=save]').addEventListener('click', save);
+    ed.querySelector('[data-a=cancel]').addEventListener('click', closeLabelEditor);
+    world.appendChild(ed);
+    labelEditor = ed;
+    pIn.focus();
+  }
+  world.addEventListener('click', (e) => {
+    const g = e.target.closest && e.target.closest('.pcont-label.editable');
+    if(g && baseContainers[+g.dataset.ci]) openLabelEditor(baseContainers[+g.dataset.ci]);
+  });
 
   // ---------------------------------------------------------------
   // Dependencies between versioned blocks
@@ -1881,8 +2165,9 @@
   }
 
   function highlightSuggestions(decisions){
-    const suggested = new Set(decisions.flatMap(d => d.options));
-    const any = suggested.size > 0;
+    // a connector the user clicked takes over the highlight until it's cleared
+    const suggested = new Set(versionTarget ? targetOptions(versionTarget) : decisions.flatMap(d => d.options));
+    const any = suggested.size > 0 || !!versionTarget;
     VERSION_VARIANTS.forEach(v => {
       const el = paletteItemsByVariantId[v.id];
       if(!el) return;
@@ -1918,7 +2203,13 @@
   function dropVersion(v, clientX, clientY){
     if(!v) return;
     const baseLabel = templatesById[v.base].label;
-    let target = blockAtPoint(clientX, clientY);
+    let target = null;
+    if(versionTarget && targetOptions(versionTarget).includes(v.id)){
+      const ids = versionTarget.only ? [versionTarget.only] : versionTarget.blocks;
+      target = ids.map(id => chainOrder.find(b => b.dataset.id === id)).find(b => b && b.dataset.tpl === v.base) || null;
+      versionTarget = null;
+    }
+    if(!target) target = blockAtPoint(clientX, clientY);
     if(target && target.dataset.tpl !== v.base) target = null;
     if(!target){
       const matches = chainOrder.filter(b => b.dataset.tpl === v.base);
@@ -1966,7 +2257,12 @@
       buildOrder: byCreation,
       versions: chainOrder
         .map((b, i) => versionOverrides[b.dataset.id] ? { block: i, variant: versionOverrides[b.dataset.id] } : null)
-        .filter(Boolean)
+        .filter(Boolean),
+      containers: Object.entries(containerLabels).map(([k, v]) => {
+        const [id, at] = k.split(':');
+        const i = chainOrder.findIndex(b => b.dataset.id === id);
+        return i < 0 ? null : { block: i, at, platform: v.platform || '', asset: v.asset || '' };
+      }).filter(Boolean)
     };
   }
 
@@ -2013,6 +2309,14 @@
         seen.add(ver.block);
       }
     }
+    if(f.containers !== undefined){
+      if(!Array.isArray(f.containers)) return 'Flow file has an invalid container list.';
+      for(const c of f.containers){
+        if(!c || !Number.isInteger(c.block) || c.block < 0 || c.block >= f.blocks.length || !/^(in|out|m\d)$/.test(c.at) ||
+           typeof c.platform !== 'string' || typeof c.asset !== 'string' || c.platform.length > 80 || c.asset.length > 80)
+          return 'Flow file has an invalid container label.';
+      }
+    }
     return null;
   }
 
@@ -2046,6 +2350,7 @@
       el.querySelector('.cblock-label').textContent = String(f.blocks[idx].label ?? tpl.label);
     });
     (f.versions || []).forEach(ver => { versionOverrides[chainOrder[ver.block].dataset.id] = ver.variant; });
+    (f.containers || []).forEach(c => { containerLabels[chainOrder[c.block].dataset.id + ':' + c.at] = { platform: c.platform, asset: c.asset }; });
     deselectAll();
     updateEmptyHint();
     refreshPaletteAvailability();
@@ -2144,7 +2449,7 @@
       if(e.target.classList.contains('delete-x')) return;
       if(e.target.classList.contains('cblock-label') && e.target.isContentEditable) return;
       e.stopPropagation();
-      selectBlock(el);
+      selectBlock(el, true);
       setActivePane('base');
       dragging = true;
       el.setPointerCapture(e.pointerId);
@@ -2216,6 +2521,7 @@
       if(k === 'y' || (k === 'z' && e.shiftKey)){ e.preventDefault(); redo(); return; }
     }
     if(e.key === 'Escape' && confirmBox.classList.contains('show')){ closeConfirm(); return; }
+    if(e.key === 'Escape' && versionTarget){ clearVersionTarget(); return; }
     if((e.key === 'Delete' || e.key === 'Backspace') && selectedCopy){
       e.preventDefault();
       removeVersion(selectedCopy.dataset.baseId);
@@ -2244,6 +2550,12 @@
     serializeFlow, validateFlow, loadFlow, undo, redo, chainOrder: () => chainOrder,
     dropVersion: (vid, x, y) => dropVersion(variantsById[vid], x, y), removeVersion,
     versionOverrides: () => versionOverrides, variantsById, decisions: computeDecisions,
+    versionTarget: () => versionTarget, targetOptions: () => versionTarget ? targetOptions(versionTarget) : [],
+    // append a pattern at the flow's right end (tests build flows left to right)
+    append: (id) => {
+      const c = chainOrder, last = c[c.length - 1];
+      attachToChain(templatesById[id], last ? parseFloat(last.style.left) + parseFloat(last.style.width) + 80 : 470, 240);
+    },
     views: () => ({ base:{ panX, panY, zoom }, copy:{ panX:vPanX, panY:vPanY, zoom:vZoom }, active:activePane }) };
 })();
 </script>

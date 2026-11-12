@@ -16,7 +16,7 @@ with sync_playwright() as p:
     def flow(*tpls):
         pg.goto(URL)
         for t in tpls:
-            ev(f"(()=>{{const d=window.__debug; d.attachToChain(d.templatesById['{t}'],520,240); d.recordHistory();}})()")
+            ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
     def drop(vid, idx):
         r = ev(f"(()=>{{const r=window.__debug.chainOrder()[{idx}].getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]}})()")
         ev(f"window.__debug.dropVersion('{vid}',{r[0]},{r[1]})")
@@ -89,14 +89,14 @@ with sync_playwright() as p:
     check('the block two steps away is not asked (no chain)', [x['index'] for x in dec()] == [1])
 
     # --- neighbour without defined versions ---
-    flow('consume-to-process', 'process-to-api')
-    drop('p2a-process-shared', 1)
+    flow('process-to-publish', 'consume-to-api')
+    drop('p2t-contract-switch', 0)
     d = dec()
     check('neighbour without versions is still marked pending', len(d) == 1 and d[0]['options'] == [])
-    check('card says no versions are defined yet', 'No versioned blocks are defined for Consume-to-Process' in pg.inner_text('#vworld .decision-card'))
+    check('card says no versions are defined yet', 'No versioned blocks are defined for Consume-to-API' in pg.inner_text('#vworld .decision-card'))
 
     # --- removing the source version clears the decision ---
-    ev("window.__debug.removeVersion(window.__debug.chainOrder()[1].dataset.id)")
+    ev("window.__debug.removeVersion(window.__debug.chainOrder()[0].dataset.id)")
     check('removing the version clears the decision and the split', len(dec()) == 0 and pg.locator('#vworld .decision-card').count() == 0)
 
     check('no page errors', not errs); print(errs)

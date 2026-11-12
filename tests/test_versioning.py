@@ -23,14 +23,14 @@ with sync_playwright() as p:
     ov = lambda: ev("Object.values(window.__debug.versionOverrides())")
     split = lambda: ev("document.getElementById('canvasWrap').classList.contains('split')")
     pg.click('#tabVersioned')
-    check('version cards unavailable with empty flow', pg.locator('.version-card.unavailable').count() == 17)
+    check('version cards unavailable with empty flow', pg.locator('.version-card.unavailable').count() == 22)
     check('every quadrant has versioned blocks', pg.locator('#versionGrid .quad-empty').count() == 0)
     check('exit quadrants hold the Process-to-API, -File and -Publish blocks', pg.locator('#versionGrid .quad:nth-child(3) .version-card').count() == 3 and pg.locator('#versionGrid .quad:nth-child(4) .version-card').count() == 6)
-    check('entry quadrants hold the API-to-Process and File-to-Process blocks', pg.locator('#versionGrid .quad:nth-child(1) .version-card').count() == 4 and pg.locator('#versionGrid .quad:nth-child(2) .version-card').count() == 4)
+    check('entry quadrants hold the API-, File- and Consume-to-Process blocks', pg.locator('#versionGrid .quad:nth-child(1) .version-card').count() == 6 and pg.locator('#versionGrid .quad:nth-child(2) .version-card').count() == 7)
 
     for t in ['api-to-process', 'process-to-publish', 'consume-to-api']:
-        ev(f"(()=>{{const d=window.__debug; d.attachToChain(d.templatesById['{t}'],560,240); d.recordHistory();}})()")
-    check('only versions of blocks in the flow are available', pg.locator('.version-card.unavailable').count() == 10)
+        ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
+    check('only versions of blocks in the flow are available', pg.locator('.version-card.unavailable').count() == 15)
     check('no split before first version', not split())
 
     # real drag-and-drop from the palette card onto the base block
@@ -58,7 +58,7 @@ with sync_playwright() as p:
     check('base drag moves copy', ev("document.querySelector('#vworld .versioned').style.left === window.__debug.chainOrder()[0].style.left"))
 
     # export -> clear (in-app confirm, no browser dialog) -> import
-    copyHtml = lambda: __import__('re').sub(r'data-(base-id|seq|left-linked|right-linked|id|key)="[^"]*"', '', ev("document.getElementById('vworld').innerHTML")).replace(' selected', '')
+    copyHtml = lambda: __import__('re').sub(r'data-(base-id|seq|left-linked|right-linked|id|key|skey|blocks)="[^"]*"', '', ev("document.getElementById('vworld').innerHTML")).replace(' selected', '')
     pg.mouse.click(700, 840); pg.wait_for_timeout(400); before = copyHtml()
     with pg.expect_download() as dl: pg.click('#exportBtn')
     dl.value.save_as(D + 'f.json'); f = json.load(open(D + 'f.json'))
@@ -112,8 +112,8 @@ with sync_playwright() as p:
     # Process-to-API versions, with an upstream neighbour (links must reach both lanes)
     pg.click('#clearCanvas'); pg.click('#confirmOk')
     for t in ['api-to-process', 'process-to-api']:
-        ev(f"(()=>{{const d=window.__debug; d.attachToChain(d.templatesById['{t}'],470,240); d.recordHistory();}})()")
-    check('Process-to-API versions available once it is in the flow', pg.locator('.version-card.unavailable').count() == 10)
+        ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
+    check('Process-to-API versions available once it is in the flow', pg.locator('.version-card.unavailable').count() == 15)
     for vid in ['p2a-contract-parallel', 'p2a-contract-switch', 'p2a-process-shared']:
         ev(f"window.__debug.dropVersion('{vid}',10,10)")
         check(vid + ' applies to Process-to-API', ov() == [vid])

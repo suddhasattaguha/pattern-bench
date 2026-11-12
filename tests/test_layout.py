@@ -16,7 +16,7 @@ with sync_playwright() as p:
     ev = pg.evaluate
     views = lambda: ev("window.__debug.views()")
     for t in ['api-to-process', 'process-to-publish', 'consume-to-api']:
-        ev(f"(()=>{{const d=window.__debug; d.attachToChain(d.templatesById['{t}'],470,240); d.recordHistory();}})()")
+        ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
     ev("window.__debug.dropVersion('a2p-contract-parallel',10,10)")
     pg.wait_for_timeout(200)
     v0 = views()

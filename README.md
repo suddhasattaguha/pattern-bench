@@ -38,9 +38,9 @@ Single HTML file, zero dependencies, zero build step. Open
   blocks that don't fit together are rejected with a message.
 - A second palette, **Versioned Artifacts**, is a 2×2 grid: rows are
   Entry-Route / Exit-Route, columns are Internal / process change and
-  External / contract change. It holds versioned blocks for API-to-Process and
-  File-to-Process (Entry quadrants), and Process-to-API, Process-to-File and
-  Process-to-Publish (Exit quadrants).
+  External / contract change. It holds versioned blocks for API-to-Process,
+  File-to-Process and Consume-to-Process (Entry quadrants), and
+  Process-to-API, Process-to-File and Process-to-Publish (Exit quadrants).
 - **Versioned copy.** Dropping a versioned block onto its base block splits
   the canvas: base flow on top, a versioned copy in the bottom half,
   block-for-block aligned. The copy is linked, not cloned — it's re-derived
@@ -54,6 +54,18 @@ Single HTML file, zero dependencies, zero build step. Open
   that actually changed; dashed violet outline + outlined `v2` badge =
   versioned as a side-effect; grey dotted link = retired v1 link. A legend
   sits in the copy pane.
+- **Building at either end**: a block that fits both open ends goes to the
+  end you drop it nearer. Or select the first or last block first: the
+  library then shows only what fits that end, and dropped blocks attach
+  there.
+- **Platform containers**: each asset (a run of connectors on one platform)
+  gets an outer frame behind the tiles, labelled with its type. Click the
+  label to set platform and asset name. End applications (target API, SFTP
+  folders) have a dashed frame.
+- **Click to version**: click a connector (API, process, topic, queue,
+  file) to highlight the versions that change it; for a connector on a join,
+  choose upstream or downstream in the card, then drag a highlighted version
+  anywhere onto the canvas.
 - **Dependencies**: neighbouring blocks share a connector, so a version
   that brings a new version of it (e.g. Process v2) opens a decision on the
   direct neighbour, upstream or downstream. The neighbour turns amber in the
@@ -135,6 +147,8 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
 - `buildOrder` (optional) is the order blocks were added, as indices into
   `blocks`. It's replayed on load so merged seam icons come out exactly as
   they were. If omitted, blocks are added left to right.
+- `containers` (optional) lists container names: `block` index, `at`
+  (`in`, `out` or `m0`… for the connector), `platform`, `asset`.
 - `versions` (optional) lists the versioned blocks applied in the copy:
   `block` is an index into `blocks`, `variant` must belong to that block's
   pattern.
@@ -149,6 +163,8 @@ replace, mirror on rename/move/delete, undo, export/import, in-app confirm):
 `python3 tests/test_versioning.py`.
 `tests/test_dependency.py` covers the dependency decisions:
 `python3 tests/test_dependency.py`.
+`tests/test_canvas_tools.py` covers building at either end, containers,
+click-to-version and the Consume-to-Process versions.
 `tests/test_layout.py` covers independent pane pan/zoom and the resizable
 library: `python3 tests/test_layout.py`.
 

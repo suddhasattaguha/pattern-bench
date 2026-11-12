@@ -208,3 +208,26 @@ one logical change each with a real diff behind them.
   "Decision pending" pill. Picking an option, or dropping a matching
   versioned block, resolves it.
 - Added `tests/test_dependency.py` (30 checks).
+- Consume-to-Process versioned blocks (5). A queue belongs to one process
+  (one-to-one); one queue can subscribe to two topic versions (needs a
+  compatible process) or switch. Topic change: own Queue + Process v2 /
+  same Queue subscribes to both / same Queue switches. Process change: same
+  Queue switches to Process v2 / own Queue v2 + Process v2 (parallel).
+  The renderer now splits a middle connector (queue) into lanes.
+- Fix: a block that fits both open ends always attached downstream; it now
+  attaches to the end it is dropped nearer.
+- Select an end block first: the library shows only what fits that end
+  (with a hint and "Show all"), and a dragged block attaches there, then
+  building continues on that end. Middle blocks don't filter.
+- Platform containers replace the in-tile bands: one outer frame per asset
+  (each run is its own asset, even on the same platform), drawn behind the
+  tiles with a label above them. Click a label in the base flow to set
+  platform and asset name (no defaults). End applications — target API and
+  SFTP folders at either end — get a dashed, squarer frame. Names are kept
+  in undo/redo and export/import (`containers`). The inbound file of
+  File-to-Process is now an end application.
+- Click a connector to version it: the library highlights the versions that
+  change it, from every block sharing it; a card lets you narrow to the
+  upstream or downstream block; a highlighted version dropped anywhere lands
+  on that block. Escape, Clear or an empty-canvas click clears it.
+- Added `tests/test_canvas_tools.py` (41 checks).
