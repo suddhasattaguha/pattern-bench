@@ -11,6 +11,8 @@ Single HTML file, zero dependencies, zero build step. Open
 ## What it does today
 
 - An infinite, pannable, zoomable canvas (SVG + HTML hybrid).
+- A dark/light theme toggle in the toolbar (in-memory only — resets to dark
+  on reload, since artifacts can't use localStorage).
 - A **Base Flow Design** component library, organized into two columns:
   Entry-Route and Exit-Route. Dragging a compatible block onto the canvas
   auto-docks it to the correct open end of the flow — no manual positioning.
@@ -18,29 +20,127 @@ Single HTML file, zero dependencies, zero build step. Open
   that can actually extend one of its two open ends stay draggable; every
   other block greys out. The canvas is deliberately restricted to composing
   **one** end-to-end flow at a time.
-- Blocks dock via interlocking puzzle-piece silhouettes. When two blocks
-  share a connector type at the touching ports (e.g. both have a "process"
-  icon there), the icons fuse into one shared icon instead of showing two.
-- Dashed **asset-boundary** rectangles show which platform/asset owns which
-  part of the flow. API and File connectors are modeled as fixed, permanent
-  thresholds (they sit at the edge of their box); Process and Topic
-  connectors are modeled as genuinely internal/shared, so their boundary
-  extends into the neighboring block to fully enclose the icon once merged.
+- Blocks are arrow-shaped tiles (notch on the entry side, point on the exit
+  side) that nest into each other, so the shape itself shows the flow
+  direction. The connector two blocks share sits once, on the join.
+- **Symbol shape = connector type**: API (tapered plate), Process (cog in a
+  hexagon), Topic (one-to-many fan-out), Queue (pipe with waiting
+  messages), File (folder with a file).
+- **Colour = platform owner**: teal for iPaaS, amber for Message Broker,
+  grey for external. A soft band in the owner's colour sits behind
+  everything that platform owns (this replaces the dashed boundary boxes).
+- One solid flow line runs through the whole flow.
 - Dragging any block moves the whole assembled flow together.
-- A second palette, **Versioned Artifacts**, is scaffolded (empty, axes
-  marked "TBD") — this is where the actual versioning-impact evaluation
-  workflow will live once we design it.
+- **Undo / Redo** (toolbar, or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z) covers every
+  flow change: add, delete, move, rename, clear and import.
+- **Export / Import** saves the flow as a small JSON file and loads it back
+  (see *Flow file format* below). Imports are validated: unknown patterns or
+  blocks that don't fit together are rejected with a message.
+- **Start from a description**: type e.g. "file to API" or "API to API via
+  event" above the library. Plain keyword rules (no AI at runtime) find every
+  end-to-end route between the two end applications; the library shows only
+  the blocks on those routes, and if exactly one block can start them it is
+  placed on an empty canvas. Unrecognised text changes nothing and offers
+  clickable end-to-end examples; a topic is never a start or an end.
+- A second palette, **Versioned Artifacts**, is a real 2×2 grid with its
+  axes labelled: rows Entry route / Exit route, columns Internal (process
+  change) / External (contract change). Only the versions of blocks in the
+  flow are shown, and selecting a connector (or a side) hides everything that
+  doesn't match — non-relevant cards are never greyed. The axis headers stay
+  in place while the quadrants scroll; bold axis lines split the quadrants.
+  Cards show the picture and the base pattern name; the version's name and
+  description appear on hover. An
+  empty quadrant says so. All 9 base blocks have versions (31 in total).
+- **Versioned copy.** Dropping a versioned block onto its base block creates
+  a versioned copy, block-for-block aligned with the base. The mode decides
+  which view gets the whole canvas: in versioning mode (Versioned Artifacts
+  tab) the copy is big and the base is a small reference window at the top
+  right; in Base Flow Design the base is big and the copy sits in a small
+  window at the bottom right. Clicking the small window swaps the views (and
+  the library tab). The copy is linked, not cloned — it's re-derived
+  from the base flow plus the applied versions, so renaming, moving or
+  deleting a base block is mirrored in the copy (deleting a base block also
+  drops its version). Select a versioned block in the copy and press
+  Delete (or ×) to remove that version; with no versions left the copy
+  and its small window close.
+- **Version roles** inside a versioned block (violet is used for
+  versioning only): solid violet symbol + filled `v2` badge = the object
+  that actually changed; dashed violet outline + outlined `v2` badge =
+  versioned as a side-effect; grey dotted link = retired v1 link. A legend
+  sits in the copy pane.
+- **Building at either end**: a block that fits both open ends goes to the
+  end you drop it nearer. Or select the first or last block first: the
+  library then shows only what fits that end, and dropped blocks attach
+  there.
+- **Platform containers**: each asset (a run of connectors on one platform)
+  gets an outer frame behind the tiles, labelled with its type. Click the
+  label to set platform and asset name. End applications (target API, SFTP
+  folders, a calling application) have a dashed frame and are named with an
+  application name plus an optional business process.
+- **Click to version** (in versioning mode — the Versioned Artifacts tab): click a connector (API, process, topic, queue,
+  file) to highlight the versions that change it; for a connector on a join,
+  choose upstream or downstream in the card, then drag a highlighted version
+  anywhere onto the canvas.
+- **Dependencies**: neighbouring blocks share a connector, so a version
+  that brings a new version of it (e.g. Process v2) opens a decision on the
+  direct neighbour, upstream or downstream. The neighbour turns amber in the
+  copy, a card next to it asks how it should handle the change and offers
+  the matching versioned blocks, and the library marks them Suggested.
+  Suggestions are the neighbour's versions in which that new connector
+  version is the changed object. "Decide later" keeps it as a pending mark.
+  The chain beyond the direct neighbour is deliberately not followed yet.
+- **Ripple of a contract change**: a contract version that keeps a shared,
+  unchanged process (e.g. "New API v2 · shared Process", "same Queue
+  subscribes to both", "Target API v2 · same Process") hands the new schema
+  to that process. The neighbour sharing it is asked, in either direction:
+  **Absorb here** (a code change in the same version, marked `v1 Δ`; the
+  ripple stops) or **Pass it on**, followed by "does the process need a code
+  change?". Passed on, the change lands on what lies beyond: an end
+  application's API or folder gets **⚠ dependent logic**, an exposed API
+  flags its callers, and a topic opens a version decision on that block.
+  One step at a time; answered questions show as a pill (click to change).
+- **Calling application**: placing an exposed API (API-to-Process /
+  API-to-Publish) at the start asks whether an end application calls it.
+  Yes adds a CALLER container joined to the API; a new version of the API,
+  or a ripple reaching it, flags the caller. Answered No? Click the API's
+  open left side to add it later. Adding a block in front removes it.
+- **Non-breaking change mark**: in versioning mode, the version card of any
+  connector offers "Non-breaking change · mark v1 Δ" — a change in the same
+  version, no parallel version. Click the connector again to remove it.
+- **API boundary**: an API joined by two blocks is the boundary between two
+  iPaaS assets — it belongs to the downstream iPaaS, in its own container
+  (never an end application in the middle, never one merged iPaaS). A ripple
+  passed on to such an API asks for that API's version.
+- **Print**: opens a one-page preview (A4 landscape) with the base flow, the
+  versioned copy, the versions, decisions, Δ / ⚠ marks and asset names.
+  "Print / Save as PDF" uses the browser; "Download sheet" saves a standalone
+  page for viewers that block printing.
+- **Independent panes**: the base flow and the versioned copy pan and zoom
+  separately (drag or scroll inside either one). The toolbar's zoom buttons
+  act on the pane touched last; Reset view re-aligns both.
+- **Resizable library**: drag the library's right edge to widen it. Cards
+  keep their size and wrap, so a wider library shows more cards per row;
+  double-click the edge to reset.
 
 ## Current base patterns
 
-| Block | Route | Connector |
-|---|---|---|
-| API-to-Process | Entry | API |
-| File-to-Process | Entry | File (SFTP-style folder pickup) |
-| Consume-to-Process | Entry | Topic/Queue |
-| Process-to-Publish | Exit | Topic |
-| Process-to-API | Exit | API |
-| Process-to-File | Exit | File |
+| Block | Route | Entry connector | Exit connector |
+|---|---|---|---|
+| API-to-Process | Entry | API | Process |
+| File-to-Process | Entry | File (SFTP-style folder pickup) | Process |
+| Consume-to-Process | Entry | Topic/Queue | Process |
+| API-to-Publish | Entry | API | Topic |
+| API-to-API | Entry | API (front, iPaaS A) | API (backend, next iPaaS) |
+| Process-to-Publish | Exit | Process | Topic |
+| Process-to-API | Exit | Process | API |
+| Process-to-File | Exit | Process | File |
+| Consume-to-API | Exit | Topic/Queue | API |
+
+The bridge patterns (API-to-Publish, Consume-to-API, API-to-API)
+connect two real-world touchpoints directly, with no separate processing
+step called out. Route classification (Entry vs. Exit) is a purely visual
+grouping in the palette — it doesn't affect docking compatibility, which is
+always driven by `entryType`/`exitType` matching regardless of `route`.
 
 ## Architecture notes (for whoever picks this up next)
 
@@ -48,46 +148,84 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
 
 - **Templates**: each block is a plain object — `id`, `label`, `route`
   (`entry`/`exit`), `entryType`/`exitType` (the connector type at each
-  port — `api`, `file`, `topic`, `process`), `size`, `color`, and a
-  `diagram(w, h, color)` function that returns the block's inner SVG markup.
-- **Rendering**: a block's outer shape is a puzzle-piece path
-  (`puzzlePath` — concave notch on the entry edge, convex tab on the exit
-  edge) with the template's `diagram` output layered inside it
-  (`buildBlockMarkup`).
-- **Merging** (`tryMergeIcons`): when two blocks dock and share an icon type
-  at the touching ports, one side is chosen as the "owner" (survives,
-  permanent) and the other fades entirely. API/File types are anchor-based
-  (entry side always owns); Process/Topic types use a `data-boundary`
-  ownership flag baked into specific templates (e.g. API-to-Process owns
-  the shared "process" icon over Process-to-Publish).
-- **Edge-fixed vs. sliding icons**: API/File icons (`data-fixed="true"`)
-  always sit exactly at the block's physical edge and never move — their
-  asset-boundary box is a fixed, permanent rectangle. Process/Topic icons
-  live inset by default and slide to straddle the seam on merge
-  (`data-half-x`/`data-half-y` give each icon's own geometry for that
-  calculation); their owning box extends past the block's true edge by
-  that icon's half-width so it still fully encloses the icon post-merge.
-- **z-boost**: whichever block currently owns a merged icon gets a
-  temporary `z-boost` class (higher z-index) so its icon/box can never be
-  visually covered by whichever neighboring block happens to paint later in
-  DOM order. This was a real, verified bug (see Development History) —
-  don't remove this without re-testing the occlusion case.
+  port — `api`, `file`, `topic`, `process`) and `size`.
+- **Rendering**: a block element is only its tile (`tilePath`) and label.
+  Everything on top — the flow line, connector symbols, platform bands,
+  version badges — is drawn by one flow-level renderer:
+  `buildFlowModel()` turns the chain into stations (one per connector,
+  shared connectors appear once) and `renderFlowLayer()` draws them into a
+  single SVG layer per pane. There is no per-block icon merging or z-order
+  juggling any more; the layer is simply re-rendered after every change.
+- **Templates** describe their connectors as data (`entry`, optional
+  `mid`, `exit`, each with a `type` and an `owner` platform) instead of a
+  drawing function.
 - **Chain model**: `chainOrder` is the single flow's blocks, left to right.
   `getChainOpenRequirements()` reads the two open ends' required connector
   types; `isTemplateCompatible()` / `refreshPaletteAvailability()` drive the
   palette greying; `attachToChain()` docks a dropped block onto the correct
   end regardless of where it's dropped.
 
+## Flow file format (v1)
+
+```json
+{
+  "format": "pattern-bench-flow",
+  "version": 1,
+  "origin": { "x": 150, "y": 260 },
+  "blocks": [
+    { "pattern": "api-to-process",     "label": "Order API" },
+    { "pattern": "process-to-publish", "label": "Process-to-Publish" }
+  ],
+  "buildOrder": [0, 1],
+  "versions": [ { "block": 0, "variant": "a2p-process-switch" } ],
+  "savedAt": "2026-11-03T21:30:00.000Z"
+}
+```
+
+- `blocks` are in left-to-right flow order; `pattern` is a template id.
+- `origin` is the leftmost block's position; every other position follows
+  from docking.
+- `buildOrder` (optional) is the order blocks were added, as indices into
+  `blocks`. It's replayed on load so merged seam icons come out exactly as
+  they were. If omitted, blocks are added left to right.
+- `containers` (optional) lists container names: `block` index, `at`
+  (`in`, `out` or `m0`… for the connector), `platform`, `asset`.
+- `versions` (optional) lists the versioned blocks applied in the copy:
+  `block` is an index into `blocks`, `variant` must belong to that block's
+  pattern.
+- `caller` (optional, boolean): the first block's exposed API has a calling
+  application (its name is a `containers` entry with `at: "caller"`).
+- `ripples` (optional): answered ripple questions — `block` (the source
+  version's block), `choice` (`absorb` | `pass`), `code` (true | false | null).
+- `marks` (optional): connectors marked as a non-breaking change (v1 Δ):
+  `block` index and `at` (`in`, `out`, `m0`…).
+
+## Tests
+
+`tests/test_history_io.py` (Python Playwright) builds a flow and checks
+undo/redo, drag, rename, delete, export → clear → import (pixel-identical),
+and rejection of bad files: `python3 tests/test_history_io.py`.
+`tests/test_versioning.py` covers the versioned palette and copy (create,
+replace, mirror on rename/move/delete, undo, export/import, in-app confirm):
+`python3 tests/test_versioning.py`.
+`tests/test_dependency.py` covers the dependency decisions:
+`python3 tests/test_dependency.py`.
+`tests/test_canvas_tools.py` covers building at either end, containers,
+click-to-version and the Consume-to-Process versions.
+`tests/test_layout.py` covers independent pane pan/zoom and the resizable
+library: `python3 tests/test_layout.py`.
+`tests/test_ripple.py` covers the ripple questions and markers, the calling
+application, v1 Δ marks, the one-page print and starting from a description:
+`python3 tests/test_ripple.py`.
+`tests/test_boundary.py` covers the API boundary rule, API-to-API and the new
+versions, and the library's narrowing, compact cards and sticky axes.
+
 ## Known scope / next steps
 
-- **Versioned Artifacts palette** is an empty shell (`versionGrid` in the
-  HTML). Still to design: its axes, its block set, and — most
-  importantly — the interaction model for how a versioned-artifact block
-  actually attaches to (replaces? sits alongside for comparison? annotates?)
-  a block already in the base flow.
-- **No persistence** yet. The canvas resets on reload. Worth considering a
-  simple export/import of `chainOrder` state to JSON, or `window.storage`
-  if this ends up hosted as a Claude artifact.
+- **Versioned blocks** exist only for API-to-Process so far; the other
+  base blocks' versions are still to be defined. One versioned copy only.
+- **Persistence is file-based** (Export / Import). Nothing is saved
+  automatically; the canvas still resets on reload.
 - **Deletion is end-only** by design: removing a block from the middle of
   the chain would split one flow into two, which the tool intentionally
   doesn't support, so it prompts to reset the whole flow instead.
