@@ -271,3 +271,11 @@ one logical change each with a real diff behind them.
 - v1 Δ mark for a non-breaking change on any connector.
 - One-page PDF print of the assessment.
 - Ripple forecast removed.
+- Print opens an in-app one-page preview with Print / Save as PDF, Download
+  sheet (standalone HTML that prints anywhere) and Close.
+- The v1 Δ badge is clickable: remove a manual mark, or change the ripple
+  answer for a ripple Δ.
+- Version cards show the base pattern name again (version details on hover).
+- End applications and callers are labelled with an application name and an
+  optional business process.
+- Every link ends in a clear arrowhead right before the receiving symbol.

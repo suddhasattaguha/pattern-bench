@@ -48,7 +48,8 @@ Single HTML file, zero dependencies, zero build step. Open
   flow are shown, and selecting a connector (or a side) hides everything that
   doesn't match — non-relevant cards are never greyed. The axis headers stay
   in place while the quadrants scroll; bold axis lines split the quadrants.
-  Cards show the picture only; name and description appear on hover. An
+  Cards show the picture and the base pattern name; the version's name and
+  description appear on hover. An
   empty quadrant says so. All 9 base blocks have versions (31 in total).
 - **Versioned copy.** Dropping a versioned block onto its base block creates
   a versioned copy, block-for-block aligned with the base. The mode decides
@@ -74,7 +75,8 @@ Single HTML file, zero dependencies, zero build step. Open
 - **Platform containers**: each asset (a run of connectors on one platform)
   gets an outer frame behind the tiles, labelled with its type. Click the
   label to set platform and asset name. End applications (target API, SFTP
-  folders) have a dashed frame.
+  folders, a calling application) have a dashed frame and are named with an
+  application name plus an optional business process.
 - **Click to version** (in versioning mode — the Versioned Artifacts tab): click a connector (API, process, topic, queue,
   file) to highlight the versions that change it; for a connector on a join,
   choose upstream or downstream in the card, then drag a highlighted version
@@ -109,8 +111,10 @@ Single HTML file, zero dependencies, zero build step. Open
   iPaaS assets — it belongs to the downstream iPaaS, in its own container
   (never an end application in the middle, never one merged iPaaS). A ripple
   passed on to such an API asks for that API's version.
-- **Print**: one A4 landscape page (save as PDF) with the base flow, the
+- **Print**: opens a one-page preview (A4 landscape) with the base flow, the
   versioned copy, the versions, decisions, Δ / ⚠ marks and asset names.
+  "Print / Save as PDF" uses the browser; "Download sheet" saves a standalone
+  page for viewers that block printing.
 - **Independent panes**: the base flow and the versioned copy pan and zoom
   separately (drag or scroll inside either one). The toolbar's zoom buttons
   act on the pane touched last; Reset view re-aligns both.

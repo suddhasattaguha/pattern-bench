@@ -408,6 +408,7 @@
   .pcont-label.own-external .pcont-type{ fill:var(--ext); }
   .pcont-name{ font-family:var(--font-ui); font-size:11.5px; font-weight:600; fill:var(--text-primary); }
   .pcont-name.empty{ fill:var(--text-muted); font-weight:500; }
+  .pcont-proc{ font-family:var(--font-ui); font-size:10px; font-style:italic; fill:var(--text-muted); }
   .pcont-label.editable{ pointer-events:all; cursor:pointer; }
   .pcont-hit{ fill:transparent; }
   .pcont-label.editable:hover .pcont-name{ text-decoration:underline; }
@@ -416,6 +417,7 @@
     background:var(--panel); border:1.5px solid var(--panel-border); border-radius:10px;
     box-shadow:0 8px 24px rgba(0,0,0,0.35); font-family:var(--font-ui); color:var(--text-primary);
   }
+  .label-editor .le-opt{ font-weight:400; color:var(--text-muted); }
   .label-editor .le-head{ font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
   .label-editor label{ display:block; font-size:11.5px; color:var(--text-muted); margin-top:6px; }
   .label-editor input{ display:block; width:100%; box-sizing:border-box; margin-top:3px; padding:7px 8px; border-radius:6px;
@@ -424,7 +426,8 @@
   .label-editor .le-actions{ display:flex; gap:8px; margin-top:10px; justify-content:flex-end; }
   .link{ stroke:var(--flow-line); stroke-width:3; fill:none; stroke-linecap:round; }
   .link.retired{ stroke:var(--text-muted); stroke-dasharray:1 8; }
-  .link-mark{ stroke:var(--flow-mark); stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+  .link-arrow{ fill:var(--flow-line); stroke:none; }
+  .link-arrow.retired{ fill:var(--text-muted); opacity:0.75; }
   .dim{ opacity:0.5; }
 
   /* Connector symbols. Shape = connector type; colour = owning platform. */
@@ -558,6 +561,8 @@
   /* ---------- Ripple of contract changes ---------- */
   .dbadge rect{ fill:var(--panel); stroke:var(--accent-teal); stroke-width:1.5; }
   .dbadge text{ fill:var(--accent-teal); font-family:var(--font-mono); font-size:10.5px; font-weight:700; }
+  .canvas-wrap.versioning .flow-layer .dbadge[data-skey]{ pointer-events:all; cursor:pointer; }
+  .canvas-wrap.versioning .flow-layer .dbadge[data-skey]:hover rect{ stroke-width:2.5; }
   .ibadge rect{ fill:var(--accent-amber); stroke:none; }
   .ibadge text{ fill:#1b1306; font-family:var(--font-ui); font-size:10.5px; font-weight:700; }
   .pcont.impact{ stroke:var(--accent-amber); stroke-width:2.5; stroke-opacity:1; }
@@ -579,10 +584,19 @@
   @page{ size:A4 landscape; margin:9mm; }
   @media print{
     body > *:not(.print-host){ display:none !important; }
-    .print-host{ display:block !important; }
+    .print-host{ display:block !important; position:static !important; background:#fff !important; padding:0 !important; overflow:visible !important; }
+    .print-host .pp-bar, .print-host .pp-note{ display:none !important; }
+    .print-host .pp-frame{ transform:none !important; box-shadow:none !important; margin:0 !important; }
     html, body{ background:#fff !important; height:auto !important; overflow:visible !important; }
   }
-  .print-host{ display:none; }
+  /* on screen the print sheet opens as a preview over the app */
+  .print-host{ display:none; position:fixed; inset:0; z-index:300; background:rgba(8,14,22,0.62); overflow:auto; padding:18px; box-sizing:border-box; }
+  .print-host.open{ display:block; }
+  .pp-bar{ display:flex; align-items:center; gap:8px; max-width:1060px; margin:0 auto 8px; color:#fff; font-family:var(--font-ui); font-size:13px; }
+  .pp-bar .pp-title{ font-weight:700; margin-right:auto; }
+  .pp-bar .btn{ background:#fff; color:#1b2430; border-color:#fff; }
+  .pp-note{ max-width:1060px; margin:0 auto 10px; color:#dfe7ef; font-family:var(--font-ui); font-size:12px; }
+  .pp-frame{ width:277mm; margin:0 auto; background:#fff; box-shadow:0 10px 40px rgba(0,0,0,0.45); transform-origin:top center; }
   .print-host .print-sheet{ display:block; width:277mm; height:190mm; overflow:hidden; box-sizing:border-box;
     font-family:var(--font-ui); color:#1b2430; background:#fff; }
   .ps-head{ display:flex; justify-content:space-between; align-items:baseline; border-bottom:2px solid #1b2430; padding-bottom:4px; margin-bottom:6px; }
@@ -998,19 +1012,24 @@
 
   function flowMarkup(model){
     let out = '';
+    let arrows = '';
     model.links.forEach(l => {
       const cls = 'link' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '');
       if(l.y1 === l.y2){
         out += '<line class="' + cls + '" x1="' + l.x1 + '" y1="' + l.y1 + '" x2="' + l.x2 + '" y2="' + l.y2 + '"></line>';
-        if(!l.retired && l.x2 - l.x1 >= 120){
-          const mx = (l.x1 + l.x2)/2;
-          out += '<path class="link-mark' + (l.dim ? ' dim' : '') + '" d="M' + (mx-2.5) + ' ' + (l.y1-4.5) + 'L' + (mx+2.5) + ' ' + l.y1 + 'L' + (mx-2.5) + ' ' + (l.y1+4.5) + '"></path>';
-        }
       } else {
         const mx = (l.x1 + l.x2)/2;
         out += '<path class="' + cls + '" d="M' + l.x1 + ' ' + l.y1 + 'C' + mx + ' ' + l.y1 + ' ' + mx + ' ' + l.y2 + ' ' + l.x2 + ' ' + l.y2 + '"></path>';
       }
+      // a clear arrowhead right before the receiving symbol (links always end horizontally)
+      const to = model.nodes.find(n => Math.abs(n.x - l.x2) < 0.5 && Math.abs(n.y - l.y2) < 0.5);
+      const half = to ? SYMBOLS[to.type].half : 20;
+      const tx = l.x2 - half - 3;
+      if(tx - 12 > l.x1 + (to ? 0 : 0)){
+        arrows += '<path class="link-arrow' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '') + '" d="M' + tx + ' ' + l.y2 + 'L' + (tx-11) + ' ' + (l.y2-6) + 'L' + (tx-11) + ' ' + (l.y2+6) + 'Z"></path>';
+      }
     });
+    out += arrows;
     model.nodes.forEach(n => {
       const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '') +
         (n.caller ? ' caller-node' : '') + (n.impact ? ' impact' : '') + (n.delta ? ' delta' : '');
@@ -1025,7 +1044,7 @@
       if(n.delta){
         // a code change in the same version: not a new version
         const bx = n.x + SYMBOLS[n.type].half + 6, by = n.y + 9;
-        out += '<g class="dbadge"><title>Code change in the same version (not a new version)</title><rect x="' + bx + '" y="' + by + '" width="50" height="18" rx="6"></rect>' +
+        out += '<g class="dbadge"' + (n.skey ? ' data-skey="' + n.skey + '"' : '') + '><title>Code change in the same version (not a new version) \u2014 click to change</title><rect x="' + bx + '" y="' + by + '" width="50" height="18" rx="6"></rect>' +
           '<text x="' + (bx+25) + '" y="' + (by+13) + '" text-anchor="middle">v1 Δ</text></g>';
       }
       if(n.impact){
@@ -1053,7 +1072,10 @@
       out += '<rect class="pcont ' + cls + '" x="' + c.x1 + '" y="' + c.y1 + '" width="' + (c.x2 - c.x1) + '" height="' + (c.y2 - c.y1) + '" rx="' + (ext ? 5 : 18) + '"></rect>';
       const type = c.owner === 'caller' ? 'CALLER' : ext ? 'END APPLICATION' : OWNERS[c.owner].label.toUpperCase();
       const lab = containerLabel(c.keys);
-      const name = lab ? [lab.platform, lab.asset].filter(Boolean).join(' \u00B7 ') : '';
+      // end applications: application name + optional business process; assets: platform · asset name
+      const name = !lab ? '' : ext ? (lab.name || '') : [lab.platform, lab.asset].filter(Boolean).join(' \u00B7 ');
+      const proc = ext && lab && lab.process ? lab.process : '';
+      const procShown = proc.length > 26 ? proc.slice(0, 25) + '\u2026' : proc;
       const shown = name || (editable ? '+ name' : '');
       // Type on the first line, name on the second. A narrow container centres
       // its label so it spills evenly instead of running into the next one.
@@ -1061,10 +1083,11 @@
       const fits = textW + 24 <= c.x2 - c.x1;
       const lx = fits ? c.x1 + 12 : (c.x1 + c.x2)/2, anchor = fits ? 'start' : 'middle';
       out += '<g class="pcont-label ' + cls + (editable ? ' editable' : '') + '" data-ci="' + ci + '" transform="translate(' + lx + ',' + (c.y1 + 16) + ')" text-anchor="' + anchor + '">' +
-        '<title>' + escXml(type + (name ? ': ' + name : '') + (editable ? ' (click to name it)' : '')) + '</title>' +
+        '<title>' + escXml(type + (name ? ': ' + name : '') + (proc ? '\n' + proc : '') + (editable ? ' (click to name it)' : '')) + '</title>' +
         '<rect class="pcont-hit" x="' + (fits ? -4 : -textW/2 - 4) + '" y="-12" width="' + (textW + 8) + '" height="30"></rect>' +
         '<text class="pcont-type">' + type + '</text>' +
         (shown ? '<text class="pcont-name' + (name ? '' : ' empty') + '" y="15">' + escXml(shown) + '</text>' : '') +
+        (procShown ? '<text class="pcont-proc" y="28">' + escXml(procShown) + '</text>' : '') +
         '</g>';
     });
     return out;
@@ -1640,7 +1663,7 @@
       item.setAttribute('aria-label', v.label + ' (' + tpl.label + ')');
       // compact card: the picture only; name and description show on hover
       item.innerHTML = versionPreviewSvg(v) +
-        '<div class="pb-label vc-hidden">' + v.label + '</div><div class="pb-sub vc-hidden">' + tpl.label + '</div>';
+        '<div class="pb-label vc-hidden">' + v.label + '</div><div class="pb-sub">' + tpl.label + '</div>';
       item.addEventListener('dragstart', (e) => {
         if(item.classList.contains('unavailable')){ e.preventDefault(); return; }
         e.dataTransfer.setData('application/json', JSON.stringify({ versionId: v.id }));
@@ -1793,10 +1816,15 @@
     renderFlows();
     let host = document.querySelector('.print-host');
     if(!host){ host = document.createElement('div'); host.className = 'print-host'; document.body.appendChild(host); }
-    host.innerHTML = '';
+    host.innerHTML = '<div class="pp-bar"><span class="pp-title">Print preview \u00B7 one page</span>' +
+      '<button class="btn" data-pp="print">Print / Save as PDF</button><button class="btn" data-pp="download">Download sheet</button>' +
+      '<button class="btn" data-pp="close">Close</button></div>' +
+      '<div class="pp-note">If no print dialog opens (some previews block printing), use Download sheet and open the file in your browser to print or save it as PDF.</div>' +
+      '<div class="pp-frame"></div>';
+    host.classList.add('open');
     const sheet = document.createElement('div');
     sheet.className = 'print-sheet';
-    host.appendChild(sheet);
+    host.querySelector('.pp-frame').appendChild(sheet);
     const name = (b) => b.querySelector('.cblock-label').textContent;
     const esc = (t) => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' })[c]);
     const list = (items) => items.length ? '<ul>' + items.map(t => '<li>' + t + '</li>').join('') + '</ul>' : '<div class="ps-none">None</div>';
@@ -1837,7 +1865,10 @@
     };
     const marks = [...new Set([...r.delta, ...manualDeltas])].map(k => '\u0394 ' + esc(keyName(k)) + (manualDeltas.has(k) ? ' (non-breaking change, marked)' : ''));
     const impacts = [...r.impact].map(k => '\u26A0 ' + esc(keyName(k)) + ': dependent logic may be impacted');
-    const names = Object.entries(containerLabels).filter(([k, v]) => v.platform || v.asset).map(([k, v]) => esc(keyName(k)) + ': <b>' + esc([v.platform, v.asset].filter(Boolean).join(' \u00B7 ')) + '</b>');
+    const names = Object.entries(containerLabels).filter(([k, v]) => v.platform || v.asset || v.name || v.process).map(([k, v]) =>
+      v.name !== undefined || v.process !== undefined
+        ? 'End application at ' + esc(keyName(k)) + ': <b>' + esc(v.name || '(unnamed)') + '</b>' + (v.process ? ' \u2014 ' + esc(v.process) : '')
+        : esc(keyName(k)) + ': <b>' + esc([v.platform, v.asset].filter(Boolean).join(' \u00B7 ')) + '</b>');
     const cols = document.createElement('div');
     cols.className = 'ps-cols';
     cols.innerHTML =
@@ -1847,13 +1878,38 @@
       '<div><h2>Assets (containers)</h2>' + list(names) + '</div>';
     sheet.appendChild(cols);
     const restore = () => {
-      window.removeEventListener('afterprint', restore);
+      document.removeEventListener('keydown', onKey, true);
+      host.classList.remove('open');
       host.innerHTML = '';
       if(wasDark){ document.body.classList.remove('light-theme'); renderFlows(); }
     };
-    if(prepareOnly) return restore;   // tests: build the sheet, print to PDF themselves
-    window.addEventListener('afterprint', restore);
-    window.print();
+    const onKey = (e) => { if(e.key === 'Escape'){ e.stopPropagation(); restore(); } };
+    document.addEventListener('keydown', onKey, true);
+    // fit the page preview to the window (the printout itself is not scaled)
+    const frame = host.querySelector('.pp-frame');
+    const scale = Math.min(1, (window.innerWidth - 40) / frame.offsetWidth);
+    if(scale < 1) frame.style.transform = 'scale(' + scale + ')';
+    host.querySelector('[data-pp=close]').addEventListener('click', restore);
+    host.querySelector('[data-pp=print]').addEventListener('click', () => {
+      try { window.print(); } catch(err) { showToast('Printing is blocked here \u2014 use Download sheet.', true); }
+    });
+    host.querySelector('[data-pp=download]').addEventListener('click', () => {
+      // a standalone page: the app's styles plus the sheet, printing on open
+      const css = [...document.querySelectorAll('style')].map(st => st.textContent).join('\n');
+      const html = '<!doctype html><html><head><meta charset="utf-8"><title>Pattern Bench \u00B7 Versioning assessment</title>' +
+        '<style>' + css + '\nbody{background:#fff;margin:0;overflow:visible;height:auto}.print-host{display:block;position:static;background:#fff;padding:0}' +
+        '.print-host .pp-frame{margin:10mm auto;box-shadow:none;transform:none}</style></head>' +
+        '<body class="light-theme"><div class="print-host"><div class="pp-frame">' + sheet.outerHTML + '</div></div>' +
+        '<script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},300)})<\/script></body></html>';
+      const url = URL.createObjectURL(new Blob([html], { type:'text/html' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pattern-bench-assessment-' + new Date().toISOString().slice(0, 10) + '.html';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      showToast('Sheet downloaded \u2014 open it in your browser to print or save as PDF.');
+    });
+    return restore;
   }
   document.getElementById('printBtn').addEventListener('click', () => printAssessment());
 
@@ -2509,7 +2565,9 @@
   });
   [world, vworld].forEach(w => w.addEventListener('click', (e) => {
     if(!canvasWrap.classList.contains('versioning')) return;
-    const n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
+    let n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
+    const badge = !n && e.target.closest && e.target.closest('.flow-layer .dbadge[data-skey]');
+    if(badge) n = [...w.querySelectorAll('.flow-layer .node[data-skey]')].find(x => x.dataset.skey === badge.dataset.skey && !/role-(retired)/.test(x.getAttribute('class')));
     if(!n) return;
     e.stopPropagation();
     const pane = w === world ? 'base' : 'copy';
@@ -2570,6 +2628,16 @@
       });
       card.appendChild(row);
     }
+    // a Δ that came from a ripple answer is changed through that answer
+    const rippleAsk = computeRipples().asks.find(a => a.resolved && a.skey === t.skey && (a.choice.choice === 'absorb' || a.choice.code));
+    if(rippleAsk){
+      const again = document.createElement('button');
+      again.className = 'dc-opt dc-mark';
+      again.dataset.action = 'ripple-again';
+      again.textContent = 'Change the ripple answer (absorb / pass on)';
+      again.addEventListener('click', () => { versionTarget = null; renderFlows(); setRipple(rippleAsk.sourceId, null); });
+      card.appendChild(again);
+    }
     // a non-breaking change: mark the connector v1 Δ instead of adding a parallel version
     const marked = manualDeltas.has(t.skey);
     const mark = document.createElement('button');
@@ -2608,18 +2676,21 @@
     ed.className = 'label-editor';
     ed.style.left = (c.x1 + 4) + 'px';
     ed.style.top = (c.y1 + 40) + 'px';
-    ed.innerHTML = '<div class="le-head"></div>' +
-      '<label>Platform<input name="platform" maxlength="80" placeholder="e.g. SAP BTP, Azure"></label>' +
-      '<label>Asset name<input name="asset" maxlength="80" placeholder="e.g. order-intake"></label>' +
+    const app = c.owner === 'external' || c.owner === 'caller';
+    ed.innerHTML = '<div class="le-head"></div>' + (app
+      ? '<label>Application name<input name="name" maxlength="80" placeholder="e.g. S/4HANA, Salesforce"></label>' +
+        '<label>Business process <span class="le-opt">(optional)</span><input name="process" maxlength="120" placeholder="e.g. Sales order creation"></label>'
+      : '<label>Platform<input name="platform" maxlength="80" placeholder="e.g. SAP BTP, Azure"></label>' +
+        '<label>Asset name<input name="asset" maxlength="80" placeholder="e.g. order-intake"></label>') +
       '<div class="le-actions"><button class="btn" data-a="cancel">Cancel</button><button class="btn" data-a="save">Save</button></div>';
     ed.querySelector('.le-head').textContent = c.owner === 'caller' ? 'Calling application' : c.owner === 'external' ? 'End application' : OWNERS[c.owner].label;
     const [pIn, aIn] = ed.querySelectorAll('input');
-    pIn.value = cur.platform || '';
-    aIn.value = cur.asset || '';
+    pIn.value = (app ? cur.name : cur.platform) || '';
+    aIn.value = (app ? cur.process : cur.asset) || '';
     const save = () => {
-      const platform = pIn.value.trim(), asset = aIn.value.trim();
+      const first = pIn.value.trim(), second = aIn.value.trim();
       c.keys.forEach(k => delete containerLabels[k]);
-      if(platform || asset) containerLabels[c.keys[0]] = { platform, asset };
+      if(first || second) containerLabels[c.keys[0]] = app ? { name: first, process: second } : { platform: first, asset: second };
       closeLabelEditor();
       renderFlows();
       recordHistory();
@@ -3100,7 +3171,10 @@
       containers: Object.entries(containerLabels).map(([k, v]) => {
         const [id, at] = k.split(':');
         const i = chainOrder.findIndex(b => b.dataset.id === id);
-        return i < 0 ? null : { block: i, at, platform: v.platform || '', asset: v.asset || '' };
+        if(i < 0) return null;
+        return v.name !== undefined || v.process !== undefined
+          ? { block: i, at, name: v.name || '', process: v.process || '' }
+          : { block: i, at, platform: v.platform || '', asset: v.asset || '' };
       }).filter(Boolean),
       caller: !!(first && callers[first.dataset.id]),
       ripples: chainOrder.map((b, i) => {
@@ -3162,7 +3236,8 @@
       if(!Array.isArray(f.containers)) return 'Flow file has an invalid container list.';
       for(const c of f.containers){
         if(!c || !Number.isInteger(c.block) || c.block < 0 || c.block >= f.blocks.length || !/^(in|out|m\d|caller)$/.test(c.at) ||
-           typeof c.platform !== 'string' || typeof c.asset !== 'string' || c.platform.length > 80 || c.asset.length > 80)
+           !((typeof c.platform === 'string' && typeof c.asset === 'string' && c.platform.length <= 80 && c.asset.length <= 80) ||
+            (typeof c.name === 'string' && typeof c.process === 'string' && c.name.length <= 80 && c.process.length <= 120)))
           return 'Flow file has an invalid container label.';
       }
     }
@@ -3216,7 +3291,9 @@
       el.querySelector('.cblock-label').textContent = String(f.blocks[idx].label ?? tpl.label);
     });
     (f.versions || []).forEach(ver => { versionOverrides[chainOrder[ver.block].dataset.id] = ver.variant; });
-    (f.containers || []).forEach(c => { containerLabels[chainOrder[c.block].dataset.id + ':' + c.at] = { platform: c.platform, asset: c.asset }; });
+    (f.containers || []).forEach(c => {
+      containerLabels[chainOrder[c.block].dataset.id + ':' + c.at] = typeof c.name === 'string' ? { name: c.name, process: c.process } : { platform: c.platform, asset: c.asset };
+    });
     if(f.caller){ callers[chainOrder[0].dataset.id] = true; callerAsked.add(chainOrder[0].dataset.id); }
     chainOrder.forEach(b => callerAsked.add(b.dataset.id));   // loading never asks again
     (f.ripples || []).forEach(r => {

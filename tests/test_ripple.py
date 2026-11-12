@@ -111,10 +111,10 @@ with sync_playwright() as p:
           and 'CALLER' in ev("[...document.querySelectorAll('#world .pcont-type')].map(t=>t.textContent)"))
     check('the caller is joined to the API by a link', ev("(()=>{const c=document.querySelector('#world .caller-node').transform.baseVal.consolidate().matrix.e; return [...document.querySelectorAll('#world .flow-layer .link')].some(l=>+l.getAttribute('x1')===c)})()"))
     pg.locator('#world .pcont-label.editable').first.click()
-    pg.fill('.label-editor input[name=platform]', 'Salesforce'); pg.keyboard.press('Enter')
+    pg.fill('.label-editor input[name=name]', 'Salesforce'); pg.keyboard.press('Enter')
     with pg.expect_download() as dl: pg.click('#exportBtn')
     dl.value.save_as(D + 'c.json'); f = json.load(open(D + 'c.json'))
-    check('export keeps the caller and its name', f['caller'] is True and {'block': 0, 'at': 'caller', 'platform': 'Salesforce', 'asset': ''} in f['containers'])
+    check('export keeps the caller and its name', f['caller'] is True and {'block': 0, 'at': 'caller', 'name': 'Salesforce', 'process': ''} in f['containers'])
     pg.click('#tabVersioned')
     drop('a2p-contract-parallel', 0)
     check('a new version of the exposed API flags the calling application', impacts() == 1
