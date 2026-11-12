@@ -86,7 +86,7 @@ with sync_playwright() as p:
     drop('a2p-contract-parallel', 0)
     d = dec()
     check('impact also runs downstream', len(d) == 1 and d[0]['index'] == 1 and d[0]['side'] == 'downstream')
-    check('downstream suggestion is Process-to-Publish’s process change', d[0]['options'] == ['p2t-process-shared'])
+    check('downstream suggestion is Process-to-Publish’s process change', d[0]['options'] == ['p2t-process-shared', 'p2t-process-topic'])
 
     # --- stops at the direct neighbour ---
     flow('api-to-process', 'process-to-api', 'api-to-process')

@@ -201,18 +201,25 @@
      Only versions of blocks in the flow are shown, so each quadrant stays compact. */
   #versionGrid{ grid-template-columns:22px 1fr 1fr; grid-template-rows:auto max-content max-content; align-content:start; overflow-y:auto;
     background:var(--panel); gap:0; padding:0 8px 10px 4px; }
-  #versionGrid .vg-corner{ border-bottom:1px solid var(--panel-border); }
-  #versionGrid .vg-col{ padding:9px 6px 7px; text-align:center; font-family:var(--font-mono); font-size:9.5px; font-weight:700;
-    letter-spacing:0.06em; text-transform:uppercase; line-height:1.35; border-bottom:2px solid currentColor; }
+  #versionGrid .vg-corner{ position:sticky; top:0; z-index:3; background:var(--panel); border-bottom:3px solid var(--text-primary); }
+  #versionGrid .vg-col{ position:sticky; top:0; z-index:3; background:var(--panel);
+    padding:9px 6px 7px; text-align:center; font-family:var(--font-mono); font-size:9.5px; font-weight:700;
+    letter-spacing:0.06em; text-transform:uppercase; line-height:1.35; border-bottom:3px solid currentColor; }
+  .version-card .vc-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  #versionGrid .version-card{ padding:6px; }
+  #versionGrid .version-card.suggested::before{ top:-9px; }
   #versionGrid .vg-col small{ display:block; font-weight:500; letter-spacing:0.02em; text-transform:none; font-family:var(--font-ui); font-size:10px; color:var(--text-muted); }
   #versionGrid .vg-row{ writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; font-family:var(--font-mono); font-size:10px;
-    font-weight:700; letter-spacing:0.1em; text-transform:uppercase; border-left:2px solid currentColor; padding:0 3px; }
-  #versionGrid .quad{ overflow:visible; min-height:150px; padding:8px 6px; box-sizing:border-box;
+    font-weight:700; letter-spacing:0.1em; text-transform:uppercase; border-left:3px solid currentColor; padding:0 3px; }
+  #versionGrid .vg-row span{ position:sticky; bottom:0; }
+  #versionGrid .quad{ overflow:visible; min-height:130px; padding:12px 6px 8px; box-sizing:border-box;
     display:grid; grid-template-columns:repeat(auto-fill, minmax(min(var(--card-w), 100%), var(--card-w))); justify-content:center; align-content:start; gap:8px;
-    border:1px solid var(--panel-border); border-top:none; border-left:none; }
+    border:none; }
   #versionGrid .quad:has(.quad-empty:not([hidden])){ align-content:center; }
   #versionGrid .quad .palette-block{ width:100%; }
-  #versionGrid .quad[data-q$=process]{ border-left:1px solid var(--panel-border); }
+  /* the axes: bold lines between the four quadrants */
+  #versionGrid .quad[data-q$=process]{ border-right:3px solid var(--text-primary); }
+  #versionGrid .quad[data-q^=entry]{ border-bottom:3px solid var(--text-primary); }
   #versionGrid .quad-empty{ grid-column:1 / -1; }
   #versionGrid .quad-empty[hidden]{ display:none; }
   .palette-block.version-card.off-flow{ display:none; }
@@ -561,33 +568,34 @@
     font-family:var(--font-ui); font-size:11.5px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,0.25);
   }
   .ripple-pill:hover{ background:var(--block-bg); }
-  .fc-band{
-    position:absolute; z-index:30; height:26px; box-sizing:border-box; display:flex; align-items:center; gap:8px;
-    padding:0 6px 0 12px; border-radius:13px; white-space:nowrap; overflow:visible;
-    font-family:var(--font-ui); font-size:11.5px; font-weight:600; color:var(--text-primary);
-  }
-  .fc-band.best{ background:color-mix(in srgb, var(--accent-teal) 16%, transparent); border:1.5px solid var(--accent-teal); }
-  .fc-band.worst{ background:color-mix(in srgb, var(--accent-amber) 14%, transparent); border:1.5px dashed var(--accent-amber); }
-  .fc-band .fc-kind{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.06em; text-transform:uppercase; }
-  .fc-band.best .fc-kind{ color:var(--accent-teal); }
-  .fc-band.worst .fc-kind{ color:var(--accent-amber); }
-  .fc-dismiss{ border:none; background:transparent; color:var(--text-muted); font-family:var(--font-ui); font-size:11px;
-    text-decoration:underline; cursor:pointer; padding:2px 4px; }
-  .fc-dismiss:hover{ color:var(--text-primary); }
-  .forecast-toggle{
-    display:none; position:absolute; top:40px; left:12px; z-index:13; align-items:center; gap:4px;
-    background:var(--panel); border:1px solid var(--panel-border); border-radius:8px; padding:3px 4px 3px 9px;
-    font-family:var(--font-mono); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted);
-  }
-  .forecast-toggle.show{ display:flex; }
-  .forecast-toggle button{ border:1px solid transparent; background:transparent; color:var(--text-primary); border-radius:6px;
-    font-family:var(--font-ui); font-size:12px; padding:4px 9px; cursor:pointer; text-transform:none; letter-spacing:0; }
-  .forecast-toggle button.on{ border-color:var(--accent-amber); background:var(--block-bg); font-weight:600; }
-  .forecast-toggle button[data-mode=best].on{ border-color:var(--accent-teal); }
+  .decision-card .dc-opt.dc-mark{ border-color:var(--accent-teal); margin-top:8px; }
   .decision-card.caller-card{ border-color:var(--ext); }
   .decision-card.caller-card::before{ border-color:var(--ext); }
   .decision-card.caller-card .dc-head{ color:var(--text-primary); }
   .decision-card.ripple-card .dc-opt[data-ripple], .decision-card.ripple-card .dc-opt[data-code]{ border-color:var(--accent-teal); }
+
+  /* ---------- One-page print (save as PDF) ---------- */
+  .print-sheet{ display:none; }
+  @page{ size:A4 landscape; margin:9mm; }
+  @media print{
+    body > *:not(.print-host){ display:none !important; }
+    .print-host{ display:block !important; }
+    html, body{ background:#fff !important; height:auto !important; overflow:visible !important; }
+  }
+  .print-host{ display:none; }
+  .print-host .print-sheet{ display:block; width:277mm; height:190mm; overflow:hidden; box-sizing:border-box;
+    font-family:var(--font-ui); color:#1b2430; background:#fff; }
+  .ps-head{ display:flex; justify-content:space-between; align-items:baseline; border-bottom:2px solid #1b2430; padding-bottom:4px; margin-bottom:6px; }
+  .ps-head h1{ font-size:15px; margin:0; letter-spacing:0.02em; }
+  .ps-head span{ font-family:var(--font-mono); font-size:9px; color:#566; }
+  .ps-pic{ position:relative; height:52mm; border:1px solid #cfd6de; border-radius:6px; overflow:hidden; margin-bottom:5px; background:#f7f9fb; }
+  .ps-pic .ps-tag{ position:absolute; left:6px; top:4px; z-index:2; font-family:var(--font-mono); font-size:8px; letter-spacing:0.08em; text-transform:uppercase; color:#566; }
+  .ps-pic .ps-stage{ position:absolute; left:0; top:0; transform-origin:0 0; }
+  .ps-cols{ display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; font-size:9px; line-height:1.35; }
+  .ps-cols h2{ font-size:9.5px; margin:0 0 3px; text-transform:uppercase; letter-spacing:0.06em; font-family:var(--font-mono); }
+  .ps-cols ul{ margin:0; padding-left:12px; }
+  .ps-cols li{ margin-bottom:2px; }
+  .ps-none{ color:#789; font-style:italic; }
 
   /* ---------- Start from a description ---------- */
   .flow-prompt{ padding:9px 12px 8px; border-bottom:1px solid var(--panel-border); }
@@ -644,7 +652,7 @@
     letter-spacing:0.06em; text-transform:uppercase; color:#1b1306; background:var(--accent-amber);
     border-radius:4px; padding:1px 5px;
   }
-  .version-card.not-suggested{ opacity:0.4; }
+  .version-card.not-suggested{ display:none; }   /* non-relevant cards are hidden, never greyed */
   .version-card.flash{ animation:cardflash 1.2s ease-out; }
   @keyframes cardflash{ 0%{ box-shadow:0 0 0 6px var(--accent-amber); } 100%{ box-shadow:0 0 0 1px var(--accent-amber); } }
   .palette-tab[data-pending]::after{
@@ -692,6 +700,7 @@
       <div class="divider"></div>
       <button class="btn" id="exportBtn" title="Save the current flow as a JSON file">Export</button>
       <button class="btn" id="importBtn" title="Load a flow from a JSON file">Import</button>
+      <button class="btn" id="printBtn" title="Print the versioning assessment on one page (save as PDF)">Print</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
       <div class="divider"></div>
       <button class="btn danger" id="clearCanvas" title="Remove all blocks">Clear canvas</button>
@@ -732,7 +741,6 @@
         <span class="legend-item"><svg width="22" height="14"><rect x="1" y="1" width="20" height="12" rx="4" fill="none" stroke="var(--accent-teal)" stroke-width="1.5"/><text x="11" y="10.5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-teal)">Δ</text></svg>Code change</span>
         <span class="legend-item"><svg width="14" height="14"><rect x="0" y="0" width="14" height="14" rx="4" fill="var(--accent-amber)"/><text x="7" y="11" text-anchor="middle" font-size="10" font-weight="700" fill="#1b1306">!</text></svg>Impact</span>
       </div>
-      <div class="forecast-toggle" id="forecastToggle"><span>Ripple forecast</span><button data-mode="best" class="on">Best case</button><button data-mode="worst">Worst case</button></div>
     </div>
     <div class="mini-view" id="miniView" title="Click to swap the two views">
       <div class="mini-stage" id="miniStage"></div>
@@ -775,8 +783,8 @@
   // Ripple of a contract change through a shared process: source block id ->
   // { vid, choice:'absorb'|'pass', code:true|false|null } (vid = the version it answers).
   let rippleChoices = {};
-  let forecastMode = 'best';        // ripple forecast shown: 'best' | 'worst'
-  let forecastDismissed = {};       // source block id -> vid: worst case validated as not happening
+  // A non-breaking change marked by hand on any connector: v1 Δ, no parallel version.
+  let manualDeltas = new Set();     // connector keys (blockId:in|out|mN)
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
@@ -848,7 +856,10 @@
     'file-to-process':    { entry:{type:'file', owner:'external', strong:true},    mid:[], exit:{type:'process', owner:'ipaas', strong:true} },
     'process-to-file':    { entry:{type:'process', owner:'ipaas'},              mid:[], exit:{type:'file', owner:'external'} },
     'consume-to-api':     { entry:{type:'topic', owner:'broker', strong:true},  mid:[{type:'queue', owner:'broker', at:0.50}], exit:{type:'api', owner:'external'} },
-    'api-to-publish':     { entry:{type:'api', owner:'external', strong:true},  mid:[], exit:{type:'topic', owner:'broker'} }
+    'api-to-publish':     { entry:{type:'api', owner:'external', strong:true},  mid:[], exit:{type:'topic', owner:'broker'} },
+    // An API is always a boundary: the front API (iPaaS A) calls the backend API,
+    // which belongs to the next, downstream iPaaS — a separate container.
+    'api-to-api':         { entry:{type:'api', owner:'ipaas', strong:true},     mid:[], exit:{type:'api', owner:'ipaas', strong:true, boundary:true} }
   };
 
   function tilePath(w, h){
@@ -895,8 +906,14 @@
         entry = sets[sets.length - 1];   // the seam shared with the upstream block
         entry.bis = (entry.bis || [entry.bi]).concat(i);
         if(entry.vblock === null && (spec.entry.strong || !entry.strong)) entry.nodes[0].owner = spec.entry.owner;
+        if(spec.entry.type === 'api'){
+          // an API joined by two blocks is a boundary: the upstream iPaaS calls the
+          // downstream iPaaS through it, and it belongs to the downstream one
+          entry.boundary = true;
+          entry.nodes.forEach(n => { n.owner = 'ipaas'; });
+        }
       }
-      if(v && entry.vblock === null){ entry.nodes = laneNodes(spec.entry); entry.vblock = i; }
+      if(v && entry.vblock === null){ entry.nodes = laneNodes(spec.entry); entry.vblock = i; if(entry.boundary) entry.nodes.forEach(n => { n.owner = 'ipaas'; }); }
       const segs = [];
       let last = entry;
       spec.mid.forEach((m, mk) => {
@@ -906,7 +923,7 @@
       });
       const exit = { x:b.left + b.w + SEAM_X, cy,
         nodes: v ? laneNodes(spec.exit) : [{ type:spec.exit.type, owner:spec.exit.owner, dy:0 }],
-        strong:!!spec.exit.strong, vblock: v ? i : null, bi:i, key:b.id + ':out' };
+        strong:!!spec.exit.strong, vblock: v ? i : null, bi:i, key:b.id + ':out', boundary: !!spec.exit.boundary };
       sets.push(exit); segs.push([last, exit]);
 
       deferred.push({ segs, v, dim: dimUnversioned && !v && !pending.has(i) });
@@ -963,7 +980,7 @@
         run = [];
       };
       sets.forEach(st => {
-        if(run.length && run[0].nodes[0].owner !== st.nodes[0].owner) flush();
+        if(run.length && (run[0].nodes[0].owner !== st.nodes[0].owner || st.boundary)) flush();
         run.push(st);
       });
       flush();
@@ -1175,6 +1192,16 @@
       color:'#4FB6AC',
       entryType:'api',
       exitType:'topic',
+    },
+    {
+      id:'api-to-api',
+      label:'API-to-API',
+      route:'entry',
+      purpose:'A front API exposed by one iPaaS calls a backend API of another iPaaS (API proxy / API management style). The API is the boundary: two separate assets, no processing step called out.',
+      size:'medium',
+      color:'#4FB6AC',
+      entryType:'api',
+      exitType:'api',
     }
   ];
   const templatesById = {};
@@ -1440,6 +1467,15 @@
               {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'} ],
       links:[ ['t','q1','solid'], ['q1','p1','solid'], ['t','q2','solid'], ['q2','p2','solid'] ] },
 
+    { id:'p2t-process-topic', base:'process-to-publish', route:'exit', change:'process',
+      label:'New Process v2 · own Topic v2',
+      purpose:'Process v2 publishes to a new Topic v2, in parallel to Process v1 → Topic v1. The topic is versioned as a side-effect of the process change.',
+      nodes:[ {k:'p1', type:'process', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'p2', type:'process', lane:'bot', ver:'v2', role:'primary'},
+              {k:'t1', type:'topic', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'side'} ],
+      links:[ ['p1','t1','solid'], ['p2','t2','solid'] ] },
+
     // Consume-to-API (Exit-Route): the broker pushes straight to a target API.
     // The publisher owns the topic and the downstream owns the API, so each
     // change is a switch of the one queue.
@@ -1459,6 +1495,33 @@
               {k:'a1', type:'api', lane:'top', ver:'v1', role:'retired'},
               {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
       links:[ ['t','q','solid'], ['q','a1','dotted'], ['q','a2','solid'] ] },
+
+    { id:'c2a-api-parallel', base:'consume-to-api', route:'exit', change:'contract',
+      label:'Target API v2 · own Queue v2 (parallel)',
+      purpose:'Target API v2 runs next to API v1: a dedicated Queue v2 subscribes to the same topic and pushes to API v2, while Queue v1 keeps pushing to API v1.',
+      nodes:[ {k:'t',  type:'topic', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'q1', type:'queue', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'q2', type:'queue', lane:'bot', ver:'v2', role:'side'},
+              {k:'a1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['t','q1','solid'], ['q1','a1','solid'], ['t','q2','solid'], ['q2','a2','solid'] ] },
+
+    // API-to-API (Entry-Route): the front API of one iPaaS calls the backend API of the next.
+    { id:'a2a-own-backend', base:'api-to-api', route:'entry', change:'contract',
+      label:'Backend API v2 · own front API v2',
+      purpose:'Each API its own: a new backend API v2 gets its own front API v2, in parallel to front API v1 → backend API v1.',
+      nodes:[ {k:'f1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'f2', type:'api', lane:'bot', ver:'v2', role:'side'},
+              {k:'b1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'b2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['f1','b1','solid'], ['f2','b2','solid'] ] },
+    { id:'a2a-backend-switch', base:'api-to-api', route:'entry', change:'contract',
+      label:'Backend API v2 · same front API switches',
+      purpose:'The front API stays as it is and switches its calls from backend API v1 to backend API v2. The link to backend API v1 is retired.',
+      nodes:[ {k:'f',  type:'api', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'b1', type:'api', lane:'top', ver:'v1', role:'retired'},
+              {k:'b2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['f','b1','dotted'], ['f','b2','solid'] ] },
 
     // API-to-Publish (Entry-Route): integration owns both the inbound API and
     // the topic it publishes to. A new topic version is a switch (no dual
@@ -1573,9 +1636,11 @@
       const item = document.createElement('div');
       item.className = 'palette-block version-card';
       item.draggable = true;
-      item.title = v.purpose;
+      item.title = v.label + '  (' + tpl.label + ')\n\n' + v.purpose;
+      item.setAttribute('aria-label', v.label + ' (' + tpl.label + ')');
+      // compact card: the picture only; name and description show on hover
       item.innerHTML = versionPreviewSvg(v) +
-        '<div class="pb-label">' + v.label + '</div><div class="pb-sub">' + tpl.label + '</div>';
+        '<div class="pb-label vc-hidden">' + v.label + '</div><div class="pb-sub vc-hidden">' + tpl.label + '</div>';
       item.addEventListener('dragstart', (e) => {
         if(item.classList.contains('unavailable')){ e.preventDefault(); return; }
         e.dataTransfer.setData('application/json', JSON.stringify({ versionId: v.id }));
@@ -1685,7 +1750,7 @@
       item.classList.toggle('off-flow', !ok);
       item.draggable = ok;
     });
-    quadEmpties.forEach(({ empty, items }) => { empty.hidden = items.some(v => chainOrder.some(b => b.dataset.tpl === v.base)); });
+    updateQuadEmpties();
     // A route described in the prompt narrows the base library to its blocks.
     routeHint.hidden = !routeFilter;
     if(routeFilter) routeHintText.textContent = 'Showing the blocks on routes from ' + routeFilter.label + '.';
@@ -1694,6 +1759,103 @@
       if(item) item.classList.toggle('off-route', !!routeFilter && !routeFilter.ids.has(tpl.id));
     });
   }
+
+  // ---------------------------------------------------------------
+  // One-page print of the versioning assessment (the browser saves it as PDF):
+  // the base flow, the versioned copy, the versions, decisions, Δ / ⚠ marks
+  // and container names. Printed in the light theme.
+  // ---------------------------------------------------------------
+  function fitClone(src, box, W, H){
+    const tiles = [...src.querySelectorAll(':scope > .cblock')];
+    if(!tiles.length) return;
+    const bb = tiles.reduce((a, t) => {
+      const l = parseFloat(t.style.left), tp = parseFloat(t.style.top);
+      return { l:Math.min(a.l, l), t:Math.min(a.t, tp), r:Math.max(a.r, l + parseFloat(t.style.width) + 20), b:Math.max(a.b, tp + parseFloat(t.style.height)) };
+    }, { l:Infinity, t:Infinity, r:-Infinity, b:-Infinity });
+    const callerPad = src.querySelector('.caller-node') ? 130 : 0;
+    bb.l -= 40 + callerPad; bb.r += 40; bb.t -= 104; bb.b += 64;
+    const sc = Math.min(W / (bb.r - bb.l), H / (bb.b - bb.t), 1);
+    const clone = src.cloneNode(true);
+    clone.querySelectorAll('.decision-card, .decision-pill, .ripple-pill, .label-editor, .delete-x, .target-card').forEach(n => n.remove());
+    clone.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+    clone.removeAttribute('id');
+    clone.style.transform = 'none';
+    const stage = document.createElement('div');
+    stage.className = 'ps-stage';
+    stage.appendChild(clone);
+    stage.style.transform = 'translate(' + ((W - (bb.r - bb.l)*sc)/2 - bb.l*sc) + 'px,' + ((H - (bb.b - bb.t)*sc)/2 - bb.t*sc) + 'px) scale(' + sc + ')';
+    box.appendChild(stage);
+  }
+  function printAssessment(prepareOnly){
+    if(!chainOrder.length){ showToast('Build a flow first, then print the assessment.', true); return; }
+    const wasDark = !document.body.classList.contains('light-theme');
+    if(wasDark) document.body.classList.add('light-theme');
+    renderFlows();
+    let host = document.querySelector('.print-host');
+    if(!host){ host = document.createElement('div'); host.className = 'print-host'; document.body.appendChild(host); }
+    host.innerHTML = '';
+    const sheet = document.createElement('div');
+    sheet.className = 'print-sheet';
+    host.appendChild(sheet);
+    const name = (b) => b.querySelector('.cblock-label').textContent;
+    const esc = (t) => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' })[c]);
+    const list = (items) => items.length ? '<ul>' + items.map(t => '<li>' + t + '</li>').join('') + '</ul>' : '<div class="ps-none">None</div>';
+    sheet.innerHTML = '<div class="ps-head"><h1>Pattern Bench \u00B7 Versioning assessment</h1><span>' +
+      esc(chainOrder.map(name).join(' \u2192 ')) + ' \u00B7 ' + new Date().toLocaleString() + '</span></div>';
+    const W = 1040, H = 196;
+    const pic = (tag, src) => {
+      const box = document.createElement('div');
+      box.className = 'ps-pic';
+      box.innerHTML = '<div class="ps-tag">' + tag + '</div>';
+      sheet.appendChild(box);
+      fitClone(src, box, W, H);
+    };
+    pic('Base flow', world);
+    const hasCopy = canvasWrap.classList.contains('split');
+    if(hasCopy) pic('Versioned copy', vworld);
+    const versions = chainOrder.filter(b => versionOverrides[b.dataset.id]).map(b => {
+      const v = variantsById[versionOverrides[b.dataset.id]];
+      return '<b>' + esc(name(b)) + '</b>: ' + esc(v.label) + ' <i>(' + (v.change === 'contract' ? 'contract' : 'process') + ' change)</i>';
+    });
+    const pending = computeDecisions().map(d => {
+      const b = chainOrder[d.index];
+      return '<b>' + esc(name(b)) + '</b>: ' + (d.kind === 'ripple' ? 'contract change reaches its process \u2014 absorb or pass on?' : esc(CONNECTOR_LABEL[d.type] + ' ' + d.ver) + ' is new \u2014 how to handle it?');
+    });
+    const r = computeRipples();
+    const answered = r.asks.filter(a => a.resolved).map(a => {
+      const b = chainOrder[a.index];
+      return '<b>' + esc(name(b)) + '</b>: ' + (a.choice.choice === 'absorb' ? 'absorbed (v1 \u0394)' : 'passed on' + (a.choice.code ? ' with a code change (v1 \u0394)' : ' untouched') + ' to ' + esc(farLabel(a.far)));
+    });
+    const keyName = (k) => {
+      const [id, at] = k.split(':');
+      const b = chainOrder.find(x => x.dataset.id === id);
+      if(!b) return k;
+      if(at === 'caller') return 'Calling application of ' + name(b);
+      const spec = NODE_SPECS[b.dataset.tpl];
+      const t = at === 'in' ? spec.entry.type : at === 'out' ? spec.exit.type : spec.mid[+at.slice(1)].type;
+      return CONNECTOR_LABEL[t] + ' ' + (at === 'in' ? 'into ' : at === 'out' ? 'out of ' : 'in ') + name(b);
+    };
+    const marks = [...new Set([...r.delta, ...manualDeltas])].map(k => '\u0394 ' + esc(keyName(k)) + (manualDeltas.has(k) ? ' (non-breaking change, marked)' : ''));
+    const impacts = [...r.impact].map(k => '\u26A0 ' + esc(keyName(k)) + ': dependent logic may be impacted');
+    const names = Object.entries(containerLabels).filter(([k, v]) => v.platform || v.asset).map(([k, v]) => esc(keyName(k)) + ': <b>' + esc([v.platform, v.asset].filter(Boolean).join(' \u00B7 ')) + '</b>');
+    const cols = document.createElement('div');
+    cols.className = 'ps-cols';
+    cols.innerHTML =
+      '<div><h2>Versions applied</h2>' + list(versions) + '</div>' +
+      '<div><h2>Decisions</h2>' + list([...answered, ...pending.map(t => t + ' <i>(pending)</i>')]) + '</div>' +
+      '<div><h2>Code changes &amp; impact</h2>' + list([...marks, ...impacts]) + '</div>' +
+      '<div><h2>Assets (containers)</h2>' + list(names) + '</div>';
+    sheet.appendChild(cols);
+    const restore = () => {
+      window.removeEventListener('afterprint', restore);
+      host.innerHTML = '';
+      if(wasDark){ document.body.classList.remove('light-theme'); renderFlows(); }
+    };
+    if(prepareOnly) return restore;   // tests: build the sheet, print to PDF themselves
+    window.addEventListener('afterprint', restore);
+    window.print();
+  }
+  document.getElementById('printBtn').addEventListener('click', () => printAssessment());
 
   // ---------------------------------------------------------------
   // Start from a description ("file to API", "API to file via event")
@@ -1709,6 +1871,7 @@
   const flowPromptInput = document.getElementById('flowPromptInput');
   const flowPromptMsg = document.getElementById('flowPromptMsg');
   let routeFilter = null;   // { ids:Set(template ids), label }
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
   const END_NAME = { file:'File', api:'API' };
   // Only true end-to-end scenarios: an end application at both ends; a topic is never a start or an end.
   const PROMPT_EXAMPLES = ['file to API', 'API to API', 'file to file', 'API to file', 'file to API via event', 'API to API via event'];
@@ -1744,10 +1907,10 @@
       const last = path[path.length - 1];
       if(last.exitType === tgt){
         const viaTopic = path.slice(0, -1).some(t => t.exitType === 'topic');
-        if(viaTopic === viaEvent) routes.push(path.map(t => t.id));
-        return;
+        if(viaTopic === viaEvent){ routes.push(path.map(t => t.id)); return; }
+        if(tgt !== 'api') return;   // an API reached too early can still be a boundary on the way
       }
-      if(path.length >= 4 || !['process', 'topic'].includes(last.exitType)) return;   // an API or file in the middle would be another end application
+      if(path.length >= 4 || last.exitType === 'file') return;   // a file in the middle would be another end application; an API is a boundary
       templates.filter(t => t.entryType === last.exitType && !path.includes(t)).forEach(t => walk([...path, t]));
     };
     templates.filter(t => t.entryType === src).forEach(t => walk([t]));
@@ -2198,7 +2361,7 @@
     callers = {};
     callerPrompt = null;
     rippleChoices = {};
-    forecastDismissed = {};
+    manualDeltas = new Set();
     closeLabelEditor();
     selectedBlock = null;
     updateEmptyHint();
@@ -2225,6 +2388,7 @@
     if(versionTarget && !versionTarget.blocks.every(id => chainOrder.some(b => b.dataset.id === id))) versionTarget = null;
     const firstId = chainOrder[0] ? chainOrder[0].dataset.id : null;
     Object.keys(callers).forEach(k => { if(k !== firstId) delete callers[k]; });   // a caller belongs to the start of the flow
+    [...manualDeltas].forEach(k => { if(!chainOrder.some(b => b.dataset.id === k.split(':')[0])) manualDeltas.delete(k); });
     renderFlowLayer(world, buildFlowModel(chainGeometry(false), false));
     // the first block's exposed API can be clicked to add a calling application later
     if(firstId && templatesById[chainOrder[0].dataset.tpl].entryType === 'api' && !callers[firstId]){
@@ -2241,14 +2405,14 @@
   function renderCopy(){
     const ids = new Set(chainOrder.map(b => b.dataset.id));
     Object.keys(versionOverrides).forEach(k => { if(!ids.has(k)) delete versionOverrides[k]; });
-    const active = Object.keys(versionOverrides).length > 0;
+    const active = Object.keys(versionOverrides).length > 0 || manualDeltas.size > 0;
     const wasActive = canvasWrap.classList.contains('split');
     const keepSelected = selectedCopy ? selectedCopy.dataset.baseId : null;
     canvasWrap.classList.toggle('split', active);
     vworld.innerHTML = '';
     selectedCopy = null;
     updateLayout();
-    if(!active){ highlightSuggestions([]); document.getElementById('forecastToggle').classList.remove('show'); return; }
+    if(!active){ highlightSuggestions([]); return; }
     const decisions = computeDecisions();
     const pendingIdx = new Set(decisions.map(d => d.index));
 
@@ -2294,12 +2458,12 @@
     const ripples = computeRipples();
     model.nodes.forEach(n => {
       if(n.type === 'process' && ripples.delta.has(n.skey) && n.role !== 'retired' && n.ver !== 'v2'){ n.delta = true; n.dim = false; }
+      if(manualDeltas.has(n.skey) && n.role !== 'retired' && n.ver !== 'v2'){ n.delta = true; n.dim = false; }
       if(ripples.impact.has(n.key) && n.role !== 'retired'){ n.impact = true; n.dim = false; }
     });
     model.containers.forEach(c => { if(c.keys.some(k => ripples.impact.has(k))){ c.impact = true; c.dim = false; } });
     renderFlowLayer(vworld, model);
     const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...decisions]);
-    renderForecasts();
     renderTargetCard(vworld);
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
@@ -2401,11 +2565,26 @@
         btn.className = t.only === id ? 'on' : '';
         btn.innerHTML = '<span class="ds-dir">' + (k === 0 ? 'Upstream' : 'Downstream') + '</span>';
         btn.appendChild(document.createTextNode(b.querySelector('.cblock-label').textContent));
-        btn.addEventListener('click', () => { t.only = t.only === id ? null : id; renderFlows(); });
+        btn.addEventListener('click', () => { t.only = t.only === id ? null : id; renderFlows(); revealSuggestions(); });
         row.appendChild(btn);
       });
       card.appendChild(row);
     }
+    // a non-breaking change: mark the connector v1 Δ instead of adding a parallel version
+    const marked = manualDeltas.has(t.skey);
+    const mark = document.createElement('button');
+    mark.className = 'dc-opt dc-mark';
+    mark.dataset.action = 'mark';
+    mark.textContent = marked ? 'Remove the v1 \u0394 mark' : 'Non-breaking change \u00B7 mark v1 \u0394 (no parallel version)';
+    mark.addEventListener('click', () => {
+      if(marked) manualDeltas.delete(t.skey); else manualDeltas.add(t.skey);
+      versionTarget = null;
+      renderFlows();
+      renderCopy();
+      recordHistory();
+      showToast(marked ? 'v1 \u0394 mark removed.' : CONNECTOR_LABEL[t.type] + ' marked: non-breaking change in the same version (v1 \u0394).');
+    });
+    card.appendChild(mark);
     const actions = document.createElement('div');
     actions.className = 'dc-actions';
     const clear = document.createElement('button');
@@ -2539,6 +2718,7 @@
       const far = dir === 'downstream' ? { type:nspec.exit.type, owner:nspec.exit.owner, key:n.dataset.id + ':out' }
                                        : { type:nspec.entry.type, owner:nspec.entry.owner, key:joinKey(j) };
       if(far.type === 'api' && far.owner !== 'external' && j === 0 && callers[n.dataset.id]) far.caller = n.dataset.id + ':caller';
+      far.boundary = far.type === 'api' && (dir === 'downstream' ? !!chainOrder[j+1] : j > 0);   // joined: the next iPaaS's API
       const st = rippleChoices[b.dataset.id];
       const choice = st && st.vid === v.id ? st : null;
       const ask = { key:'ripple|' + b.dataset.id, kind:'ripple', blockId:n.dataset.id, index:j, sourceId:b.dataset.id, vid:v.id,
@@ -2549,19 +2729,20 @@
       if(choice.choice === 'absorb' || choice.code) out.delta.add(skey);
       if(choice.choice === 'absorb') return;
       // passed on: what the change lands on beyond the process
-      if(far.type === 'api' || far.type === 'file') out.impact.add(far.caller || far.key);
-      else if(far.type === 'topic'){
+      if(far.type === 'topic' || far.boundary){
+        // a topic, or an API between two iPaaS assets: that contract needs a version decision
         const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && x.change === 'contract' &&
-          x.nodes.some(m => m.type === 'topic' && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
+          x.nodes.some(m => m.type === far.type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
         out.forced.push({ key:n.dataset.id + '|passed', blockId:n.dataset.id, index:j, sourceId:b.dataset.id, side:dir,
-          type:'topic', ver:'v2', options, current:null, passed:true });
-      }
+          type:far.type, ver:'v2', options, current:null, passed:true });
+      } else if(far.type === 'api' || far.type === 'file') out.impact.add(far.caller || far.key);
     });
     return out;
   }
   function farLabel(far){
     if(far.caller) return 'the calling application';
     if(far.type === 'topic') return 'the Topic';
+    if(far.boundary) return 'the API of the next iPaaS';
     if(far.owner === 'external') return far.type === 'file' ? 'the end application\u2019s folder' : 'the end application\u2019s API';
     return 'the API\u2019s callers';
   }
@@ -2574,98 +2755,6 @@
     renderCopy();
     recordHistory();
   }
-
-  // ---------------------------------------------------------------
-  // Ripple forecast: how far each contract change could travel.
-  // Best case = absorbed at the first process it reaches; worst case = passed on
-  // all the way to the end application (or the exposed API's caller).
-  // ---------------------------------------------------------------
-  function computeForecasts(){
-    const out = [];
-    if(!chainOrder.length) return out;
-    const stations = buildFlowModel(chainGeometry(false), false).nodes;   // left to right, one per connector
-    const blocks = chainGeometry(false);
-    chainOrder.forEach((b, i) => {
-      const v = variantsById[versionOverrides[b.dataset.id]];
-      if(!v || v.change !== 'contract') return;
-      const pn = primaryNode(v);
-      if(!pn) return;
-      const spec = NODE_SPECS[b.dataset.tpl];
-      let dir = null, startKey = null;
-      if(pn.type === spec.entry.type){ dir = 'down'; startKey = joinKey(i); }
-      else if(pn.type === spec.exit.type){ dir = pn.type === 'topic' ? 'down' : 'up'; startKey = b.dataset.id + ':out'; }
-      if(!dir) return;
-      const start = stations.findIndex(st => st.key === startKey);
-      if(start < 0) return;
-      const step = dir === 'down' ? 1 : -1, last = dir === 'down' ? stations.length - 1 : 0;
-      let best = last;
-      for(let k = start + step; dir === 'down' ? k <= last : k >= last; k += step){ if(stations[k].type === 'process'){ best = k; break; } }
-      const summary = (endK) => {
-        const lo = Math.min(start, endK), hi = Math.max(start, endK), range = stations.slice(lo, hi + 1);
-        // blocks the change travels through: those with at least two of its connectors in range
-        const seen = {}; range.forEach(st => st.bis.forEach(id => { seen[id] = (seen[id] || 0) + 1; }));
-        const bset = new Set(Object.keys(seen).filter(id => seen[id] >= 2));
-        let assets = 0, prev = null;
-        range.forEach(st => { const o = st.owner === 'broker2' ? 'broker2' : st.owner; if(o !== prev){ assets++; prev = o; } });
-        const end = stations[endK];
-        return { x1: stations[lo].x - 30, x2: stations[hi].x + 30, blocks: bset.size, assets, boundaries: assets - 1,
-          reachesEnd: end.owner === 'external' || end.owner === 'caller', endType: end.type, endCaller: end.caller, stopsAtProcess: end.type === 'process' };
-      };
-      out.push({ sourceId: b.dataset.id, vid: v.id, dir, changed: pn, best: summary(best), worst: summary(last),
-        dismissed: forecastDismissed[b.dataset.id] === v.id });
-    });
-    return out;
-  }
-  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
-  function renderForecasts(){
-    const toggle = document.getElementById('forecastToggle');
-    const list = computeForecasts();
-    toggle.classList.toggle('show', list.length > 0);
-    toggle.querySelectorAll('button').forEach(btn => btn.classList.toggle('on', btn.dataset.mode === forecastMode));
-    if(!list.length) return;
-    const tops = chainOrder.map(b => parseFloat(b.style.top));
-    const baseY = Math.min(...tops) - (VH - BLOCK_H)/2 - 46 - 36;   // above the containers' labels
-    list.forEach((f, k) => {
-      const worst = forecastMode === 'worst' && !f.dismissed;
-      const r = worst ? f.worst : f.best;
-      const band = document.createElement('div');
-      band.className = 'fc-band ' + (worst ? 'worst' : 'best');
-      band.dataset.source = f.sourceId;
-      band.style.left = r.x1 + 'px';
-      band.style.top = (baseY - k*34) + 'px';
-      band.style.minWidth = (r.x2 - r.x1) + 'px';
-      band.addEventListener('pointerdown', e => e.stopPropagation());
-      const what = CONNECTOR_LABEL[f.changed.type] + ' ' + f.changed.ver;
-      const arrow = f.dir === 'down' ? '\u2192' : '\u2190';
-      let text;
-      if(worst){
-        const endName = r.endCaller ? 'the calling application' : r.reachesEnd ? 'the end application' : 'the end of the flow';
-        text = arrow + ' ' + what + ' reaches ' + endName + ' \u00B7 ' + plural(r.blocks, 'block') + ' \u00B7 ' + plural(r.assets, 'asset') + ' \u00B7 ' + plural(r.boundaries, 'owner boundary').replace('boundarys', 'boundaries');
-      } else {
-        text = arrow + ' ' + what + (r.stopsAtProcess ? ' absorbed at the first process' : ' reaches ' + (r.reachesEnd ? 'the end application' : 'the end of the flow') + ' (no process to absorb it)') +
-          ' \u00B7 ' + plural(r.blocks, 'block') + ' \u00B7 ' + plural(r.assets, 'asset');
-      }
-      band.innerHTML = '<span class="fc-kind"></span><span class="fc-text"></span>';
-      band.querySelector('.fc-kind').textContent = worst ? 'Worst case' : (forecastMode === 'worst' && f.dismissed ? 'Best case (worst dismissed)' : 'Best case');
-      band.querySelector('.fc-text').textContent = text;
-      if(worst){
-        const x = document.createElement('button');
-        x.className = 'fc-dismiss';
-        x.textContent = 'Validated \u2014 won\u2019t happen';
-        x.title = 'Remove the worst case for this change; only the best case stays';
-        x.addEventListener('click', () => { forecastDismissed[f.sourceId] = f.vid; renderCopy(); recordHistory(); });
-        band.appendChild(x);
-      }
-      vworld.appendChild(band);
-    });
-  }
-  document.getElementById('forecastToggle').addEventListener('pointerdown', e => e.stopPropagation());
-  document.getElementById('forecastToggle').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-mode]');
-    if(!btn || btn.dataset.mode === forecastMode) return;
-    forecastMode = btn.dataset.mode;
-    renderCopy();
-  });
 
   // Collapse every open question to its pending pill (nothing is decided).
   function closeDecisionCards(){
@@ -2850,6 +2939,17 @@
     if(shift > 0){ vPanY -= shift; applyTransform(); }
   }
 
+  // An empty quadrant (nothing visible in it) says so; the 2×2 grid always stays.
+  function updateQuadEmpties(){
+    quadEmpties.forEach(({ empty, items }) => {
+      empty.hidden = items.some(v => { const el = paletteItemsByVariantId[v.id]; return el && !el.classList.contains('off-flow') && !el.classList.contains('not-suggested'); });
+      empty.textContent = versionTarget || versionGrid.querySelector('.version-card.suggested') ? 'Nothing here for this selection' : 'Nothing for this flow';
+    });
+  }
+  function revealSuggestions(){
+    const first = versionGrid.querySelector('.version-card.suggested');
+    if(first) first.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  }
   function highlightSuggestions(decisions){
     // a connector the user clicked takes over the highlight until it's cleared
     const suggested = new Set(versionTarget ? targetOptions(versionTarget) : decisions.flatMap(d => d.options || []));
@@ -2860,6 +2960,7 @@
       el.classList.toggle('suggested', suggested.has(v.id));
       el.classList.toggle('not-suggested', any && !suggested.has(v.id));
     });
+    updateQuadEmpties();
     const tab = document.getElementById('tabVersioned');
     if(decisions.length) tab.dataset.pending = decisions.length; else delete tab.dataset.pending;
   }
@@ -3006,7 +3107,11 @@
         const r = rippleChoices[b.dataset.id];
         return r && r.vid === versionOverrides[b.dataset.id] ? { block: i, choice: r.choice, code: r.code ?? null } : null;
       }).filter(Boolean),
-      dismissedWorstCase: chainOrder.map((b, i) => forecastDismissed[b.dataset.id] && forecastDismissed[b.dataset.id] === versionOverrides[b.dataset.id] ? i : -1).filter(i => i >= 0)
+      marks: [...manualDeltas].map(k => {
+        const [id, at] = k.split(':');
+        const i = chainOrder.findIndex(b => b.dataset.id === id);
+        return i < 0 ? null : { block: i, at };
+      }).filter(Boolean)
     };
   }
 
@@ -3074,7 +3179,10 @@
     }
     if(f.dismissedWorstCase !== undefined &&
        (!Array.isArray(f.dismissedWorstCase) || !f.dismissedWorstCase.every(i => Number.isInteger(i) && i >= 0 && i < f.blocks.length)))
-      return 'Flow file has an invalid forecast entry.';
+      return 'Flow file has an invalid forecast entry.';   // older files only; the field is ignored
+    if(f.marks !== undefined &&
+       (!Array.isArray(f.marks) || !f.marks.every(m => m && Number.isInteger(m.block) && m.block >= 0 && m.block < f.blocks.length && /^(in|out|m\d)$/.test(m.at))))
+      return 'Flow file has an invalid change mark.';
     return null;
   }
 
@@ -3115,10 +3223,7 @@
       const id = chainOrder[r.block].dataset.id;
       if(versionOverrides[id]) rippleChoices[id] = { vid: versionOverrides[id], choice: r.choice, code: r.code };
     });
-    (f.dismissedWorstCase || []).forEach(i => {
-      const id = chainOrder[i].dataset.id;
-      if(versionOverrides[id]) forecastDismissed[id] = versionOverrides[id];
-    });
+    (f.marks || []).forEach(m => manualDeltas.add(chainOrder[m.block].dataset.id + ':' + m.at));
     deselectAll();
     updateEmptyHint();
     refreshPaletteAvailability();
@@ -3319,7 +3424,7 @@
     dropVersion: (vid, x, y) => dropVersion(variantsById[vid], x, y), removeVersion,
     versionOverrides: () => versionOverrides, variantsById, decisions: computeDecisions,
     versionTarget: () => versionTarget, targetOptions: () => versionTarget ? targetOptions(versionTarget) : [],
-    ripples: computeRipples, forecasts: computeForecasts, callers: () => callers, parsePrompt: parseFlowPrompt, findRoutes,
+    ripples: computeRipples, marks: () => [...manualDeltas], printAssessment, callers: () => callers, parsePrompt: parseFlowPrompt, findRoutes,
     // append a pattern at the flow's right end (tests build flows left to right)
     append: (id) => {
       const c = chainOrder, last = c[c.length - 1];

@@ -45,7 +45,7 @@ with sync_playwright() as p:
     check('dragged block attaches to the selected end, wherever it is dropped', order()[0] == 'api-to-process')
     check('the new block stays the selected end, so building continues there', pg.is_visible('#endHint') and 'start' in pg.inner_text('#endHintText'))
     click_block(-1)
-    check('selecting the last block narrows to what fits the end', avail() == ['API-to-Process', 'API-to-Publish'])
+    check('selecting the last block narrows to what fits the end', avail() == ['API-to-Process', 'API-to-Publish', 'API-to-API'])
     click_block(1)
     check('selecting a middle block leaves the library unfiltered', not pg.is_visible('#endHint'))
     pg.mouse.click(1300, 860)

@@ -45,8 +45,11 @@ Single HTML file, zero dependencies, zero build step. Open
 - A second palette, **Versioned Artifacts**, is a real 2×2 grid with its
   axes labelled: rows Entry route / Exit route, columns Internal (process
   change) / External (contract change). Only the versions of blocks in the
-  flow are shown; an empty quadrant says "Nothing for this flow". All 8 base
-  blocks have versions (27 in total).
+  flow are shown, and selecting a connector (or a side) hides everything that
+  doesn't match — non-relevant cards are never greyed. The axis headers stay
+  in place while the quadrants scroll; bold axis lines split the quadrants.
+  Cards show the picture only; name and description appear on hover. An
+  empty quadrant says so. All 9 base blocks have versions (31 in total).
 - **Versioned copy.** Dropping a versioned block onto its base block creates
   a versioned copy, block-for-block aligned with the base. The mode decides
   which view gets the whole canvas: in versioning mode (Versioned Artifacts
@@ -99,12 +102,15 @@ Single HTML file, zero dependencies, zero build step. Open
   Yes adds a CALLER container joined to the API; a new version of the API,
   or a ripple reaching it, flags the caller. Answered No? Click the API's
   open left side to add it later. Adding a block in front removes it.
-- **Ripple forecast**: for every contract change, a band above the copy
-  shows how far it could travel. A toggle switches between **Best case**
-  (absorbed at the first process) and **Worst case** (reaches the end
-  application or caller), with blocks, assets and owner boundaries counted.
-  A worst case validated as not happening can be dismissed; then only the
-  best case stays.
+- **Non-breaking change mark**: in versioning mode, the version card of any
+  connector offers "Non-breaking change · mark v1 Δ" — a change in the same
+  version, no parallel version. Click the connector again to remove it.
+- **API boundary**: an API joined by two blocks is the boundary between two
+  iPaaS assets — it belongs to the downstream iPaaS, in its own container
+  (never an end application in the middle, never one merged iPaaS). A ripple
+  passed on to such an API asks for that API's version.
+- **Print**: one A4 landscape page (save as PDF) with the base flow, the
+  versioned copy, the versions, decisions, Δ / ⚠ marks and asset names.
 - **Independent panes**: the base flow and the versioned copy pan and zoom
   separately (drag or scroll inside either one). The toolbar's zoom buttons
   act on the pane touched last; Reset view re-aligns both.
@@ -120,12 +126,13 @@ Single HTML file, zero dependencies, zero build step. Open
 | File-to-Process | Entry | File (SFTP-style folder pickup) | Process |
 | Consume-to-Process | Entry | Topic/Queue | Process |
 | API-to-Publish | Entry | API | Topic |
+| API-to-API | Entry | API (front, iPaaS A) | API (backend, next iPaaS) |
 | Process-to-Publish | Exit | Process | Topic |
 | Process-to-API | Exit | Process | API |
 | Process-to-File | Exit | Process | File |
 | Consume-to-API | Exit | Topic/Queue | API |
 
-The bridge patterns (API-to-Publish, Consume-to-API)
+The bridge patterns (API-to-Publish, Consume-to-API, API-to-API)
 connect two real-world touchpoints directly, with no separate processing
 step called out. Route classification (Entry vs. Exit) is a purely visual
 grouping in the palette — it doesn't affect docking compatibility, which is
@@ -186,8 +193,8 @@ Everything lives in one `<script>` block inside `pattern-bench.html`.
   application (its name is a `containers` entry with `at: "caller"`).
 - `ripples` (optional): answered ripple questions — `block` (the source
   version's block), `choice` (`absorb` | `pass`), `code` (true | false | null).
-- `dismissedWorstCase` (optional): block indices whose worst-case forecast
-  was dismissed.
+- `marks` (optional): connectors marked as a non-breaking change (v1 Δ):
+  `block` index and `at` (`in`, `out`, `m0`…).
 
 ## Tests
 
@@ -204,8 +211,10 @@ click-to-version and the Consume-to-Process versions.
 `tests/test_layout.py` covers independent pane pan/zoom and the resizable
 library: `python3 tests/test_layout.py`.
 `tests/test_ripple.py` covers the ripple questions and markers, the calling
-application, the ripple forecast and starting from a description:
+application, v1 Δ marks, the one-page print and starting from a description:
 `python3 tests/test_ripple.py`.
+`tests/test_boundary.py` covers the API boundary rule, API-to-API and the new
+versions, and the library's narrowing, compact cards and sticky axes.
 
 ## Known scope / next steps
 

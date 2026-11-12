@@ -1,4 +1,4 @@
-"""Pattern Bench — ripple of contract changes, calling application, ripple forecast, start from a description.
+"""Pattern Bench — ripple of contract changes, calling application, v1 Δ marks, print, start from a description.
 Run: python3 tests/test_ripple.py"""
 import json, os, tempfile
 from playwright.sync_api import sync_playwright
@@ -133,33 +133,41 @@ with sync_playwright() as p:
     pg.mouse.click(1300, 860)
     check('clicking empty canvas closes the question (counts as no)', pg.locator('.caller-card').count() == 0 and pg.locator('#world .caller-node').count() == 0)
 
-    # ---------- ripple forecast ----------
-    flow('process-to-publish', 'consume-to-process', 'process-to-api')
-    check('no forecast before a contract change', not pg.is_visible('#forecastToggle'))
-    drop('c2p-contract-dual', 1)
-    check('a contract change shows the forecast toggle, best case first', pg.is_visible('#forecastToggle')
-          and 'on' in pg.get_attribute('#forecastToggle [data-mode=best]', 'class') and pg.locator('#vworld .fc-band.best').count() == 1)
-    fc = ev("window.__debug.forecasts()")[0]
-    check('best case: absorbed at the first process, 1 block', fc['best']['stopsAtProcess'] and fc['best']['blocks'] == 1)
-    check('worst case: reaches the end application, 2 blocks, 3 assets', fc['worst']['reachesEnd'] and fc['worst']['blocks'] == 2 and fc['worst']['assets'] == 3)
-    check('best-case band text', 'absorbed at the first process' in pg.inner_text('#vworld .fc-band'))
-    click('#forecastToggle [data-mode=worst]')
-    check('toggle: only the worst case shows', pg.locator('#vworld .fc-band.worst').count() == 1 and pg.locator('#vworld .fc-band.best').count() == 0
-          and 'reaches the end application' in pg.inner_text('#vworld .fc-band'))
-    check('the worst case reaches further than the best case', fc['worst']['x2'] > fc['best']['x2'])
-    click('#vworld .fc-band .fc-dismiss')
-    check('worst case validated as not happening: only the best case stays', pg.locator('#vworld .fc-band.worst').count() == 0
-          and 'worst dismissed' in pg.inner_text('#vworld .fc-band .fc-kind').lower())
-    with pg.expect_download() as dl: pg.click('#exportBtn')
-    dl.value.save_as(D + 'fc.json'); f = json.load(open(D + 'fc.json'))
-    check('export keeps the dismissal', f['dismissedWorstCase'] == [1])
-    pg.keyboard.press('Control+z')
-    check('undo brings the worst case back', pg.locator('#vworld .fc-band.worst').count() == 1)
+    # ---------- non-breaking change marked by hand (v1 Δ, no parallel version) ----------
     flow('api-to-process', 'process-to-api')
-    drop('p2a-contract-switch', 1)
-    check('a target API change forecasts upstream', ev("window.__debug.forecasts()[0].dir") == 'up')
-    drop('p2a-process-shared', 1)
-    check('a process change has no forecast', not pg.is_visible('#forecastToggle'))
+    pg.locator('#world .flow-layer .node[data-type=api]').nth(1).click()
+    check('the version card offers to mark a non-breaking change', pg.locator('#world .target-card .dc-mark').count() == 1)
+    pg.click('#world .target-card .dc-mark')
+    check('marking opens the copy and shows v1 Δ on that connector, no parallel version', pg.is_visible('#versionPane') and deltas() == 1
+          and ev("Object.keys(window.__debug.versionOverrides()).length") == 0)
+    pg.locator('#vworld .flow-layer .node[data-type=process]').first.click()
+    pg.click('#vworld .target-card .dc-mark')
+    check('any symbol can be marked (a process too)', deltas() == 2 and len(ev("window.__debug.marks()")) == 2)
+    with pg.expect_download() as dl: pg.click('#exportBtn')
+    dl.value.save_as(D + 'm.json'); f = json.load(open(D + 'm.json'))
+    check('export keeps the marks', sorted(m['at'] for m in f['marks']) == ['out', 'out'])
+    pg.keyboard.press('Control+z')
+    check('undo removes the last mark', deltas() == 1)
+    pg.locator('#vworld .flow-layer .node[data-type=api]').nth(1).click()
+    check('a marked connector offers to remove the mark', 'Remove' in pg.inner_text('#vworld .target-card .dc-mark'))
+    pg.click('#vworld .target-card .dc-mark')
+    check('removing the last mark closes the copy', not pg.is_visible('#versionPane') and deltas() == 0)
+    pg.click('#clearCanvas'); pg.click('#confirmOk')
+    pg.set_input_files('#importFile', D + 'm.json'); pg.wait_for_timeout(300)
+    check('import restores the marks', deltas() == 2)
+    check('no forecast bands or toggle any more', pg.locator('.fc-band, #forecastToggle').count() == 0)
+
+    # ---------- one-page print ----------
+    ev("(()=>{ window.__restore = window.__debug.printAssessment(true); return 1; })()")
+    check('print sheet holds the base flow, the copy and the four lists', pg.locator('.print-host .ps-pic').count() == 2
+          and pg.locator('.print-host .ps-cols h2').count() == 4 and 'non-breaking change, marked' in pg.inner_text('.print-host .ps-cols'))
+    pg.emulate_media(media='print')
+    pg.pdf(path=D + 'a.pdf', format='A4', landscape=True, print_background=True)
+    pdf = open(D + 'a.pdf', 'rb').read()
+    check('it prints on exactly one A4 page', pdf.count(b'/Type /Page') - pdf.count(b'/Type /Pages') == 1)
+    pg.emulate_media(media='screen'); ev("window.__restore()")
+    check('after printing, the sheet is gone and the theme is back', pg.locator('.print-host .print-sheet').count() == 0
+          and not ev("document.body.classList.contains('light-theme')"))
 
     # ---------- start from a description ----------
     pg.goto(URL)
@@ -171,27 +179,27 @@ with sync_playwright() as p:
     check('the library shows only the blocks on its routes', sorted(visible()) == ['File-to-Process', 'Process-to-API'])
     check('the route hint says so', pg.is_visible('#routeHint') and 'File to API' in pg.inner_text('#routeHintText'))
     pg.click('#routeHintClear')
-    check('"Show all" clears the narrowing', len(visible()) == 8 and not pg.is_visible('#routeHint'))
+    check('"Show all" clears the narrowing', len(visible()) == 9 and not pg.is_visible('#routeHint'))
     pg.goto(URL)
     prompt('API to API via event')
     check('"API to API via event": two blocks can start it, so nothing is placed', order() == [] and 'More than one block' in pg.inner_text('#flowPromptMsg'))
     check('…the library is narrowed to the blocks on those routes', sorted(visible()) == sorted(
-          ['API-to-Process', 'API-to-Publish', 'Process-to-Publish', 'Consume-to-Process', 'Process-to-API', 'Consume-to-API']))
+          ['API-to-Process', 'API-to-Publish', 'API-to-API', 'Process-to-Publish', 'Consume-to-Process', 'Process-to-API', 'Consume-to-API']))
     prompt('hello there')
     check('gibberish: nothing changes, clickable end-to-end examples are offered',
           order() == [] and 'Couldn' in pg.inner_text('#flowPromptMsg') and pg.locator('.fp-example').count() == 6)
     exs = ev("[...document.querySelectorAll('.fp-example')].map(e=>e.textContent.toLowerCase())")
     check('examples are only end-to-end scenarios (never a topic as start or end)', all(' to ' in e and 'topic' not in e for e in exs))
-    pg.locator('.fp-example', has_text='API to file').first.click()
-    check('clicking an example runs it', pg.input_value('#flowPromptInput') == 'API to file' and order() == ['api-to-process'])
+    pg.locator('.fp-example', has_text='file to file').first.click()
+    check('clicking an example runs it', pg.input_value('#flowPromptInput') == 'file to file' and order() == ['file-to-process'])
     pg.mouse.click(1300, 860)
     prompt('file')
     check('only a source: asks where it should go, with matching examples', 'Where should it go' in pg.inner_text('#flowPromptMsg')
           and all(e.lower().startswith('file') for e in ev("[...document.querySelectorAll('.fp-example')].map(e=>e.textContent)")))
     prompt('API to topic')
     check('a topic is never an end: "API to topic" asks where to', 'Where should it go' in pg.inner_text('#flowPromptMsg'))
-    prompt('file to file')
-    check('canvas already has a flow: nothing placed, library narrowed', order() == ['api-to-process'] and 'nothing was placed' in pg.inner_text('#flowPromptMsg'))
+    prompt('file to API')
+    check('canvas already has a flow: nothing placed, library narrowed', order() == ['file-to-process'] and 'nothing was placed' in pg.inner_text('#flowPromptMsg'))
     ev("window.__debug.chainOrder()[0].click()")
     pg.click('#flowPromptInput'); pg.keyboard.press('Delete')
     check('typing in the description box never deletes blocks', len(order()) == 1)

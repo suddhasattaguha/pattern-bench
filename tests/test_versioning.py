@@ -24,21 +24,21 @@ with sync_playwright() as p:
     split = lambda: ev("document.getElementById('canvasWrap').classList.contains('split')")
     pg.click('#tabVersioned')
     shown = lambda q=None: pg.locator('#versionGrid ' + ('.quad[data-q=%s] ' % q if q else '') + '.version-card:not(.off-flow)').count()
-    check('empty flow: no versioned blocks shown at all', shown() == 0 and pg.locator('#versionGrid .version-card').count() == 27)
+    check('empty flow: no versioned blocks shown at all', shown() == 0 and pg.locator('#versionGrid .version-card').count() == 31)
     check('the 2×2 grid stays intact: every quadrant says nothing for this flow',
           pg.locator('#versionGrid .quad').count() == 4 and pg.locator('#versionGrid .quad-empty:visible').count() == 4
           and pg.locator('#versionGrid .quad-empty:visible').first.inner_text() == 'Nothing for this flow')
     check('axis labels are shown', pg.locator('#versionGrid .vg-col').count() == 2 and pg.locator('#versionGrid .vg-row').count() == 2)
     for t in ['api-to-process', 'process-to-publish', 'consume-to-process', 'process-to-api']:
         ev(f"window.__debug.append('{t}')")
-    check('exit quadrants show Process-to-API/-Publish versions of the flow', shown('exit-process') == 2 and shown('exit-contract') == 4)
+    check('exit quadrants show Process-to-API/-Publish versions of the flow', shown('exit-process') == 3 and shown('exit-contract') == 4)
     check('entry quadrants show API-/Consume-to-Process versions of the flow', shown('entry-process') == 4 and shown('entry-contract') == 5)
     check('a quadrant with versions hides its empty note', pg.locator('#versionGrid .quad-empty:visible').count() == 0)
     pg.goto(URL); pg.click('#tabVersioned')
 
     for t in ['api-to-process', 'process-to-publish', 'consume-to-api']:
         ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
-    check('only versions of blocks in the flow are shown', pg.locator('.version-card.off-flow').count() == 18)
+    check('only versions of blocks in the flow are shown', pg.locator('.version-card.off-flow').count() == 20)
     check('no split before first version', not split())
 
     # real drag-and-drop from the palette card onto the base block
@@ -123,7 +123,7 @@ with sync_playwright() as p:
     pg.click('#clearCanvas'); pg.click('#confirmOk')
     for t in ['api-to-process', 'process-to-api']:
         ev(f"(()=>{{const d=window.__debug; d.append('{t}'); d.recordHistory();}})()")
-    check('Process-to-API versions shown once it is in the flow', pg.locator('.version-card.off-flow').count() == 20)
+    check('Process-to-API versions shown once it is in the flow', pg.locator('.version-card.off-flow').count() == 24)
     for vid in ['p2a-contract-parallel', 'p2a-contract-switch', 'p2a-process-shared']:
         ev(f"window.__debug.dropVersion('{vid}',10,10)")
         check(vid + ' applies to Process-to-API', ov() == [vid])

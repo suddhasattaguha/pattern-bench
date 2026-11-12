@@ -259,3 +259,15 @@ one logical change each with a real diff behind them.
 - Start from a description ("file to API", "API to API via event"): narrows
   the library to the route's blocks and places the start step when it's unique.
 - Legend moved to the bottom left of the copy and gained Code change / Impact.
+- Test observations (Nov 12): API-to-API base block with two versions;
+  Consume-to-API "Target API v2 · own Queue v2 (parallel)"; Process-to-Publish
+  "New Process v2 · own Topic v2".
+- API boundary rule: an API joined by two blocks belongs to the downstream
+  iPaaS in its own container; ripple and route search treat it as a boundary.
+- Library: non-relevant version cards are hidden (never greyed) for the flow,
+  a selected connector and the Upstream / Downstream choice (which now also
+  scrolls to the options); sticky axis headers, bold axis lines, picture-only
+  cards with name and description on hover.
+- v1 Δ mark for a non-breaking change on any connector.
+- One-page PDF print of the assessment.
+- Ripple forecast removed.
