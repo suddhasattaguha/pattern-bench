@@ -336,3 +336,19 @@ one logical change each with a real diff behind them.
 6. "shared ×N" badge removed (idea kept for the versioning step).
 7. More space: rows 300 px apart, ≥ 80 px between branches on a row, callers 90 px apart.
 - Tests: `tests/test_composite.py` rewritten, 39 checks; the 265 v1.9 checks still pass.
+
+### v2.0 trial — round 5: versioning on the composite flow
+- One layout for both views: rows take the height of their tallest tile, so a versioned
+  block (220 px) pushes neighbouring rows away; containers, connectors and callers follow.
+- The versioned copy shows the whole composite flow (all rows). Other branches at a split
+  component join the matching lane (v2 if their own version carries it, else v1 — dotted if retired).
+- Versioning mode in composite flow: no version card is available until a component is
+  clicked; then only versions of the blocks touching it (on any row) that change it. The side
+  card lists every touching block (upstream / downstream · main flow / branch).
+- Direct-neighbour decisions across rows: the in-row neighbour as in v1.9; other branches only
+  for a switch (v1 retired), not for a parallel version. The affected component in each affected
+  block is highlighted; cards open / minimize; each card states how many flows are affected.
+- Contract ripple across branches: one absorb / pass-on path per block taking from (or feeding)
+  the shared process, each decided on its own; Δ on the process, ⚠ / impact where a path lands.
+- Saved: branch versions and per-path ripple answers. Small window keeps a readable minimum scale.
+- Tests: `tests/test_composite_versioning.py` 33 checks; 39 composite and 265 v1.9 checks still pass.

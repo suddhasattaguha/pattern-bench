@@ -554,6 +554,9 @@
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable{ pointer-events:all; cursor:pointer; }
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable:hover{ filter:drop-shadow(0 0 1.5px var(--accent-teal)) drop-shadow(0 0 5px var(--accent-teal)); }
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node[data-type="app"][data-skey]{ pointer-events:all; cursor:pointer; }
+  .flow-layer .node.affected{ filter:drop-shadow(0 0 2px var(--accent-amber)) drop-shadow(0 0 8px var(--accent-amber)); }
+  .flow-layer .node.affected .n-shape{ stroke:var(--accent-amber); stroke-width:2.5; }
+  .dc-count{ color:var(--accent-amber); }
   .flow-layer .node.branch-point{ filter:drop-shadow(0 0 1.5px var(--accent-amber)) drop-shadow(0 0 6px var(--accent-amber)); }
   .comp-banner{ display:none; position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:14; pointer-events:none;
     padding:4px 12px; border-radius:14px; border:1px solid var(--accent-teal); background:var(--panel);
@@ -651,6 +654,7 @@
   .canvas-wrap:not(.versioning) #world .flow-layer .node.can-add-caller{ pointer-events:all; cursor:pointer; }
   .canvas-wrap:not(.versioning) #world .flow-layer .node.can-add-caller:hover{ filter:drop-shadow(0 0 4px var(--ext)); }
   body.lib-versioned #routeHint, body.lib-versioned #endHint{ display:none; }
+  body.lib-versioned.flow-composite #endHint:not([hidden]){ display:flex; }   /* composite: "click a component" */
 
   .decision-card{
     position:absolute; z-index:40; width:260px; box-sizing:border-box; cursor:default;
@@ -1116,7 +1120,7 @@
     out += arrows;
     model.nodes.forEach(n => {
       const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '') +
-        (n.caller ? ' caller-node' : '') + (n.impact ? ' impact' : '') + (n.delta ? ' delta' : '');
+        (n.caller ? ' caller-node' : '') + (n.impact ? ' impact' : '') + (n.delta ? ' delta' : '') + (n.affected ? ' affected' : '');
       out += '<g class="node ' + cls + '" data-type="' + n.type + '"' + (n.role ? ' data-role="' + n.role + '"' : '') +
         (n.skey ? ' data-skey="' + n.skey + '" data-blocks="' + n.bis.join(',') + '"' : '') +
         ' transform="translate(' + n.x + ',' + n.y + ')">' + symbolMarkup(n.type) + '</g>';
@@ -1782,6 +1786,7 @@
       });
       item.addEventListener('dragend', () => item.classList.remove('dragging-source'));
       div.appendChild(item);
+      item.dataset.variant = v.id;
       paletteItemsByVariantId[v.id] = item;
     });
     versionGrid.appendChild(div);
@@ -1848,6 +1853,7 @@
       canvasWrap.classList.toggle('versioning', !isBase);
       if(isBase) clearVersionTarget();
       updateLayout();
+      if(flowMode === 'composite') refreshLibrary();
     });
   });
 
@@ -1879,7 +1885,9 @@
     VERSION_VARIANTS.forEach(v => {
       const item = paletteItemsByVariantId[v.id];
       if(!item) return;
-      const ok = chainOrder.some(b => b.dataset.tpl === v.base);
+      // composite flow: no version is available until a component is selected; then only its versions
+      const ok = flowMode === 'composite' ? !!versionTarget && targetOptions(versionTarget).includes(v.id)
+                                          : chainOrder.some(b => b.dataset.tpl === v.base);
       item.classList.toggle('off-flow', !ok);
       item.draggable = ok;
     });
@@ -2719,58 +2727,57 @@
     return list.concat(extraCallers);
   }
 
-  function compositeModel(){
-    const geo0 = chainGeometry(false);
+  // One layout for both views. The base view (versions off) places the branch tiles on the
+  // canvas; the versioned copy (versions on) uses the same rows with the versioned tiles' real
+  // heights — a taller row pushes its neighbouring rows away, everything else follows.
+  //   returns { model, tiles: { blockId -> { left, top, w, h, variant, hidden } } }
+  function compositeLayout(opts){
+    const withV = !!(opts && opts.versions), pending = (opts && opts.pending) || new Set();
+    const variantOf = (b) => withV ? (versionOverrides[b.dataset.id] || null) : null;
+    const hOf = (b) => variantOf(b) ? VH : BLOCK_H;
+    const tiles = {};
+    const geo0 = chainGeometry(withV);
     if(geo0.length) geo0[0].caller = false;          // composite draws every caller the same way (below)
-    const trunk = buildFlowModel(geo0, false);
-    const all = { containers:trunk.containers.slice(), links:trunk.links.slice(), nodes:trunk.nodes.slice() };
-    const pos = {}, level = {};
-    const note = (m, lv) => m.nodes.forEach(n => { if(n.skey){ pos[n.skey] = n; level[n.skey] = lv; } });
-    note(trunk, 0);
     const top0 = chainOrder.length ? parseFloat(chainOrder[0].style.top) : 0;
+    chainOrder.forEach(b => { tiles[b.dataset.id] = { left:parseFloat(b.style.left), top:top0, w:parseFloat(b.style.width), h:hOf(b), variant:variantOf(b) }; });
     const cl = compositeCallers();
     const callersAt = {};
     cl.forEach(c => { const k = anchorKey(c.anchor); if(k) (callersAt[k] = callersAt[k] || []).push(c); });
 
-    // ---- row packing: each branch takes the nearest free row away from the main flow, where
-    // its tiles don't overlap another branch and its drop line crosses no other row's tiles
+    // ---- pass 1: rows and x positions. Row packing only needs x: each branch takes the nearest
+    // free row away from the main flow where its tiles don't overlap another branch and its drop
+    // line crosses no other row's tiles.
+    const trunk0 = buildFlowModel(geo0, false);
+    const posX = {}, level = {};
+    trunk0.nodes.forEach(n => { if(n.skey){ posX[n.skey] = n.x; level[n.skey] = 0; } });
     const rows = new Map();          // level -> [{ L, R, key }]
     const drops = [];                // { x, lo, hi, key } vertical drop lines between levels lo..hi
-    const span = (m, lv) => {
-      const xs = m.nodes.map(n => n.x);
-      return xs.length ? { L:Math.min(...xs) - 60, R:Math.max(...xs) + 60 } : null;
-    };
-    const tspan = span(trunk);
-    if(tspan){
+    if(trunk0.nodes.length){
+      const xs = trunk0.nodes.map(n => n.x);
+      const tspan = { L:Math.min(...xs) - 60, R:Math.max(...xs) + 60 };
       if(chainOrder[0] && callersAt[anchorKey([{ block:chainOrder[0].dataset.id, side:'in' }])]) tspan.L -= CALLER_DX + CALLER_ROOM + 40;
       rows.set(0, [{ ...tspan, key:null }]);
     }
     const occupied = (lv) => rows.get(lv) || [];
     const placed = [];               // { key, row } in placement order
-    const binfo = [];                // per placed branch, for the joined-asset boundaries
-    const inAt = new Set();          // connectors that take multi-source links
+    const plans = [];                // per placed branch
+    const inAt = new Set();          // components that take multi-source links
     branches.forEach(br => {
       const key = anchorKey(br.anchor);
-      const a = key && pos[key];
-      br.blocks.forEach(b => { b.style.display = a ? '' : 'none'; });
-      if(!a){ br.row = 0; return; }
+      const ax = key ? posX[key] : undefined;
+      if(ax === undefined){ br.row = 0; br.blocks.forEach(b => { tiles[b.dataset.id] = { hidden:true }; }); return; }
       const p = level[key];
-      // Away from the main flow. On the main flow itself, branches of the same connector
-      // alternate above / below so both sides stay balanced.
-      // on the main flow every branch of one connector (fan-out and multi-source alike) alternates:
+      // on the main flow every branch of one component (fan-out and multi-source alike) alternates:
       // 1st below, 2nd above, 3rd below, 4th above … — the diagram stays symmetric
       let dir = p > 0 ? 1 : p < 0 ? -1 : (placed.filter(o => o.key === key).length % 2 === 0 ? 1 : -1);
-      const dropX = br.kind === 'out' ? a.x : a.x - JUNC;
+      const dropX = br.kind === 'out' ? ax : ax - JUNC;
       const W = br.blocks.reduce((s, b) => s + parseFloat(b.style.width), 0);
-      const firstTpl = templatesById[br.blocks[0].dataset.tpl];
       let L, R;
-      if(br.kind === 'out'){ L = a.x - 24; R = a.x + BRANCH_OFF - SEAM_X + W + TILE_D + 40; }
+      if(br.kind === 'out'){ L = ax - 24; R = ax + BRANCH_OFF - SEAM_X + W + TILE_D + 40; }
       else {
-        L = a.x - BRANCH_OFF_IN - SEAM_X - W - 40; R = dropX + 24;
+        L = ax - BRANCH_OFF_IN - SEAM_X - W - 40; R = dropX + 24;
         if(callersAt[sideKey({ block:br.blocks[0].dataset.id, side:'in' }, 0)]) L -= CALLER_DX + CALLER_ROOM + 40;   // room for its calling applications
       }
-      // nearest clean row on that side (tiles free, drop line clear); if none, the nearest row with
-      // free tiles on the same side — the side is never switched
       const gap = ROW_GAP;
       const freeAt = (k) => occupied(k).every(o => o.R + gap < L || o.L - gap > R) &&
         drops.every(d => d.key === key || !(d.lo < k && k < d.hi) || d.x < L || d.x > R);
@@ -2805,51 +2812,101 @@
       drops.push({ x:dropX, lo:Math.min(p, k), hi:Math.max(p, k), key });
       placed.push({ key, row:k });
       if(br.kind === 'in') inAt.add(key);
-
-      const top = top0 + k * BRANCH_ROW, rowY = top + BLOCK_H/2;
+      // x of every tile in the row
+      const lefts = [];
       if(br.kind === 'out'){
-        let x = a.x + BRANCH_OFF - SEAM_X;
-        br.blocks.forEach(b => { b.style.left = x + 'px'; b.style.top = top + 'px'; x += parseFloat(b.style.width); });
+        let x = ax + BRANCH_OFF - SEAM_X;
+        br.blocks.forEach(b => { lefts.push(x); x += parseFloat(b.style.width); });
       } else {
-        let x = a.x - BRANCH_OFF_IN - SEAM_X;
-        for(let i = br.blocks.length - 1; i >= 0; i--){
-          const b = br.blocks[i]; x -= parseFloat(b.style.width);
-          b.style.left = x + 'px'; b.style.top = top + 'px';
-        }
+        let x = ax - BRANCH_OFF_IN - SEAM_X;
+        for(let i = br.blocks.length - 1; i >= 0; i--){ x -= parseFloat(br.blocks[i].style.width); lefts[i] = x; }
       }
-      const geo = br.blocks.map(b => ({ id:b.dataset.id, left:parseFloat(b.style.left), top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:null, caller:false }));
-      const m = buildFlowModel(geo, false);
-      // The shared connector is drawn once, on its own row. The branch's link to it becomes
-      // straight segments: a drop line from the connector to the row, then along the row.
       const hk = br.kind === 'out' ? br.blocks[0].dataset.id + ':in' : br.blocks[br.blocks.length - 1].dataset.id + ':out';
-      const h = m.nodes.find(n => n.key === hk);
+      const m0 = buildFlowModel(br.blocks.map((b, i) => ({ id:b.dataset.id, left:lefts[i], top:0, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:null, caller:false })), false);
+      m0.nodes.forEach(n => { if(n.skey && n.key !== hk){ posX[n.skey] = n.x; level[n.skey] = k; } });
+      plans.push({ br, key, k, dropX, lefts, hk });
+    });
+
+    // ---- row heights: tallest tile in the row; rows stacked outward from the main flow
+    const ext = new Map();
+    const grow = (lv, h) => {
+      const e = ext.get(lv) || { up:BLOCK_H/2 + 46, down:BLOCK_H/2 + 12, h:BLOCK_H };
+      e.up = Math.max(e.up, h/2 + 46); e.down = Math.max(e.down, h/2 + 12); e.h = Math.max(e.h, h);
+      ext.set(lv, e);
+    };
+    chainOrder.forEach(b => grow(0, hOf(b)));
+    plans.forEach(pl => pl.br.blocks.forEach(b => grow(pl.k, hOf(b))));
+    const E = (lv) => ext.get(lv) || { up:BLOCK_H/2 + 46, down:BLOCK_H/2 + 12, h:BLOCK_H };
+    const ROW_CLEAR = BRANCH_ROW - (BLOCK_H + 46 + 12);
+    const yc = new Map([[0, top0 + BLOCK_H/2]]);
+    const lvls = [...ext.keys()];
+    for(let lv = 1; lv <= Math.max(0, ...lvls); lv++) yc.set(lv, yc.get(lv-1) + E(lv-1).down + ROW_CLEAR + E(lv).up);
+    for(let lv = -1; lv >= Math.min(0, ...lvls); lv--) yc.set(lv, yc.get(lv+1) - E(lv+1).up - ROW_CLEAR - E(lv).down);
+
+    // ---- pass 2: draw
+    const pendIdx = (list) => new Set(list.map((b, i) => pending.has(b.dataset.id) ? i : -1).filter(i => i >= 0));
+    const trunk = buildFlowModel(geo0, withV, pendIdx(chainOrder));
+    const all = { containers:trunk.containers.slice(), links:trunk.links.slice(), nodes:trunk.nodes.slice() };
+    const lanes = {}, pos = {};
+    const note = (m) => m.nodes.forEach(n => { if(n.skey){ (lanes[n.skey] = lanes[n.skey] || []).push(n); } });
+    const canon = (k) => { const ls = lanes[k] || []; return ls.find(n => n.ver !== 'v2' && n.role !== 'retired') || ls.find(n => n.ver !== 'v2') || ls[0]; };
+    // a branch joins the lane of the shared component that matches its own version (v2 → v2 lane;
+    // otherwise v1 — if v1 is retired there, that connector is drawn retired)
+    const pickLane = (k, ver) => {
+      const ls = lanes[k] || [];
+      if(ver && ver !== 'v1'){ const same = ls.find(n => n.ver === ver); if(same) return same; }
+      return ls.find(n => !n.ver || n.ver === 'v1') || ls[0];
+    };
+    note(trunk);
+    const binfo = [];
+    plans.forEach(({ br, key, k, dropX, lefts, hk }) => {
+      const a = canon(key);
+      if(!a){ br.blocks.forEach(b => { tiles[b.dataset.id] = { hidden:true }; }); return; }
+      const top = yc.get(k) - BLOCK_H/2;
+      br.blocks.forEach((b, i) => { tiles[b.dataset.id] = { left:lefts[i], top, w:parseFloat(b.style.width), h:hOf(b), variant:variantOf(b) }; });
+      const geo = br.blocks.map((b, i) => ({ id:b.dataset.id, left:lefts[i], top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:variantOf(b), caller:false }));
+      const m = buildFlowModel(geo, withV, pendIdx(br.blocks));
+      // The shared component is drawn once, on its own row. The branch's link to it becomes
+      // straight segments: a drop line from the component to the row, then along the row.
+      const hidden = m.nodes.filter(n => n.key === hk);
       m.nodes = m.nodes.filter(n => n.key !== hk);
-      if(h) m.links.forEach(l => {
-        if(near(l.x1, l.y1, h)){ l.pts = [[a.x, a.y], [a.x, rowY], [l.x2, l.y2]]; l.x1 = a.x; l.y1 = a.y; }
-        // multi-source: along the row to the junction line, up / down to the connector's level,
+      m.links.forEach(l => {
+        const hs = hidden.find(h => near(l.x1, l.y1, h)), he = hidden.find(h => near(l.x2, l.y2, h));
+        if(hs){
+          const al = pickLane(key, hs.ver);
+          l.pts = [[al.x, al.y], [al.x, hs.y], [l.x2, l.y2]]; l.x1 = al.x; l.y1 = al.y;
+          if(al.role === 'retired') l.retired = true;
+        }
+        // multi-source: along the row to the junction line, up / down to the component's level,
         // then into it from the left — the same way the calling applications arrive
-        if(near(l.x2, l.y2, h)){ l.pts = [[l.x1, l.y1], [dropX, rowY], [dropX, a.y], [a.x, a.y]]; l.x2 = a.x; l.y2 = a.y; }
+        if(he){
+          const al = pickLane(key, he.ver);
+          l.pts = [[l.x1, l.y1], [dropX, l.y1], [dropX, al.y], [al.x, al.y]]; l.x2 = al.x; l.y2 = al.y;
+          if(al.role === 'retired') l.retired = true;
+        }
       });
+      const h0 = hidden[0];
       m.containers = m.containers.filter(c => {
         if(!c.keys.includes(hk)) return true;
         c.keys = c.keys.filter(kk => kk !== hk);
-        if(!c.keys.length || !h) return false;
-        if(br.kind === 'out') c.x1 = h.x + 24; else c.x2 = h.x - 24;
+        if(!c.keys.length || !h0) return false;
+        if(br.kind === 'out') c.x1 = h0.x + 24; else c.x2 = h0.x - 24;
         return true;
       });
-      note(m, k);
+      note(m);
       all.containers.push(...m.containers); all.links.push(...m.links); all.nodes.push(...m.nodes);
-      binfo.push({ br, key, a, top, dropX, nb: br.kind === 'in' ? m.nodes[m.nodes.length - 1] : m.nodes[0] });
+      binfo.push({ br, key, a, k, dropX, nb: br.kind === 'in' ? m.nodes[m.nodes.length - 1] : m.nodes[0] });
     });
+    Object.keys(lanes).forEach(k => { pos[k] = canon(k); });
 
     // ---- blocks joined at a process belong to one iPaaS asset: the process's container expands
     // to take in the joined block on the other row, linked by a band along the drop / junction line
-    binfo.forEach(({ br, key, a, top, dropX, nb }) => {
+    binfo.forEach(({ br, key, a, k, dropX, nb }) => {
       if(a.type !== 'process') return;
       const cK = all.containers.find(c => c.keys.includes(key));
       if(!cK || cK.owner !== 'ipaas') return;
       const ph = SYMBOLS.process.half + 16;
-      const y1 = top - 46, y2 = top + BLOCK_H + 12;
+      const y1 = yc.get(k) - E(k).h/2 - 46, y2 = yc.get(k) + E(k).h/2 + 12;
       const cb = nb && nb.owner === 'ipaas' ? all.containers.find(c => c !== cK && c.keys.includes(nb.key)) : null;
       let x1, x2;
       if(br.kind === 'in'){
@@ -2866,29 +2923,41 @@
     });
 
     // ---- calling applications, stacked left of the API / file they call
-    compCallerPos = {};
+    const callerPos = {};
     Object.entries(callersAt).forEach(([k, list]) => {
       const t = pos[k];
       if(!t) return;
-      // a connector with a block on its left (a target API / folder, a seam): callers sit above / below
+      // a component with a block on its left (a target API / folder, a seam): callers sit above / below
       const busy = all.links.some(l => !l.pts && Math.abs(l.y1 - t.y) < 0.5 && near(l.x2, l.y2, t) && l.x1 < t.x);
       const dys = busy ? CALLER_DY_BUSY : CALLER_DY;
       list.forEach((c, i) => {
         const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = t.y + (dys[i] ?? (i + 1) * 90);
-        compCallerPos[c.id] = { x:cx, y:cy };
-        all.nodes.push({ x:cx, y:cy, type:'app', owner:'caller', role:null, ver:null, dim:false, key:c.key, caller:true,
+        callerPos[c.id] = { x:cx, y:cy };
+        const dim = withV;
+        all.nodes.push({ x:cx, y:cy, type:'app', owner:'caller', role:null, ver:null, dim, key:c.key, caller:true,
           skey:'xc|' + c.id, bis:[] });
-        all.links.push(cy === t.y ? { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false }
-          : { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false, pts:[[cx, cy], [t.x - JUNC, cy], [t.x - JUNC, t.y], [t.x, t.y]] });
-        all.containers.push({ x1:cx - 38, x2:cx + 38, y1:cy - 42, y2:cy + 24, owner:'caller', keys:[c.key], dim:false });
+        all.links.push(cy === t.y ? { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim }
+          : { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim, pts:[[cx, cy], [t.x - JUNC, cy], [t.x - JUNC, t.y], [t.x, t.y]] });
+        all.containers.push({ x1:cx - 38, x2:cx + 38, y1:cy - 42, y2:cy + 24, owner:'caller', keys:[c.key], dim });
       });
     });
+    return { model:all, tiles, pos, callerPos };
+  }
 
+  // The base view: places the branch tiles and remembers what the cards and clicks need.
+  function compositeModel(){
+    const L = compositeLayout({ versions:false });
+    branches.forEach(br => br.blocks.forEach(b => {
+      const t = L.tiles[b.dataset.id];
+      b.style.display = !t || t.hidden ? 'none' : '';
+      if(t && !t.hidden){ b.style.left = t.left + 'px'; b.style.top = t.top + 'px'; }
+    }));
+    compPos = L.pos;
+    compCallerPos = L.callerPos;
     // every API or file can take calling applications — also when other flows already use it
-    compPos = pos;
     callableKeys = new Set();
-    all.nodes.forEach(n => { if(n.skey && !n.caller && ['api', 'file'].includes(n.type)) callableKeys.add(n.skey); });
-    return all;
+    L.model.nodes.forEach(n => { if(n.skey && !n.caller && ['api', 'file'].includes(n.type)) callableKeys.add(n.skey); });
+    return L.model;
   }
 
   function markBranchNodes(){
@@ -2961,6 +3030,12 @@
 
   function compositeHint(){
     endHint.hidden = false;
+    if(canvasWrap.classList.contains('versioning')){
+      if(versionTarget){ endHint.hidden = true; return; }
+      endHintText.textContent = 'Composite flow: click a component (API, Process, Topic, Queue, File) on the canvas to see its versions.';
+      paletteHeadDesc.textContent = 'Versioning mode (composite flow): click a component on the canvas to see its versions. The versioned copy shows the whole composite flow; the base stays as a small reference.';
+      return;
+    }
     if(!branchPoint){
       endHintText.textContent = 'Composite flow: click a Topic, Process, API or File on the canvas to see the patterns that fit it.';
       return;
@@ -3008,6 +3083,9 @@
     branchPoint = null;
     callerPick = null;
     canvasWrap.classList.toggle('composite', m === 'composite');
+    document.body.classList.toggle('flow-composite', m === 'composite');
+    document.getElementById('modeBanner').innerHTML = '<b>Versioning mode</b> · click a ' + (m === 'composite' ? 'component' : 'connector') + ' to version it';
+    renderCopy();
     modeSingle.classList.toggle('on', m === 'single');
     modeComposite.classList.toggle('on', m === 'composite');
     refreshPaletteAvailability();
@@ -3039,6 +3117,15 @@
       return { anchor: c.anchor.map(a => ({ ref: refOf(a.block), side: a.side })).filter(a => a.ref),
                name: lab ? lab.name || '' : '', process: lab ? lab.process || '' : '' };
     }).filter(c => c.anchor.length);
+    // versions on branch blocks (main-flow versions stay in the v1.9 'versions' list)
+    flow.branchVersions = [];
+    branches.forEach((br, j) => br.blocks.forEach((b, i) => {
+      if(versionOverrides[b.dataset.id]) flow.branchVersions.push({ ref:'b' + j + '.' + i, variant:versionOverrides[b.dataset.id] });
+    }));
+    // contract-ripple answers per path (source>path)
+    flow.compositeRipples = Object.entries(rippleChoices).filter(([k, r]) => k.includes('>') && versionOverrides[k.split('>')[0]] === r.vid)
+      .map(([k, r]) => { const [a, b] = k.split('>'); return { src:refOf(a), path:refOf(b), choice:r.choice, code:r.code ?? null }; })
+      .filter(r => r.src && r.path);
     return flow;
   }
   function validateBranches(f){
@@ -3057,6 +3144,24 @@
     }
     if(f.branches === undefined) return null;
     if(!Array.isArray(f.branches)) return 'Flow file has an invalid branch list.';
+    const nbAll = f.branches.length;
+    if(f.branchVersions !== undefined){
+      if(!Array.isArray(f.branchVersions)) return 'Flow file has an invalid branch version list.';
+      for(const bv of f.branchVersions){
+        const m = /^b(\d+)\.(\d+)$/.exec((bv && bv.ref) || '');
+        const fb = m && f.branches[+m[1]];
+        const blk = fb && Array.isArray(fb.blocks) && fb.blocks[+m[2]];
+        const v = bv && variantsById[bv.variant];
+        if(!blk || !v || v.base !== blk.pattern) return 'Flow file has an invalid branch version.';
+      }
+    }
+    if(f.compositeRipples !== undefined){
+      if(!Array.isArray(f.compositeRipples)) return 'Flow file has an invalid ripple list.';
+      for(const r of f.compositeRipples)
+        if(!r || !refOk({ ref:r.src, side:'in' }, nbAll) || !refOk({ ref:r.path, side:'in' }, nbAll) || !['absorb', 'pass', null].includes(r.choice ?? null) ||
+           !(r.code === null || r.code === undefined || typeof r.code === 'boolean'))
+          return 'Flow file has an invalid ripple entry.';
+    }
     if(f.branches.length && !f.blocks.length) return 'Flow file has branches but no main flow.';
     for(let j = 0; j < f.branches.length; j++){
       const br = f.branches[j];
@@ -3093,11 +3198,203 @@
       });
       branches.push(br);
     });
+    (f.branchVersions || []).forEach(bv => { versionOverrides[idOf(bv.ref)] = bv.variant; });
+    (f.compositeRipples || []).forEach(r => {
+      const a = idOf(r.src), b = idOf(r.path);
+      if(versionOverrides[a]) rippleChoices[a + '>' + b] = { vid:versionOverrides[a], choice:r.choice ?? null, code:r.code ?? null };
+    });
     (f.callers || []).forEach(fc => {
       const id = 'xc-' + (++xcCounter);
       extraCallers.push({ id, key:id + ':caller', anchor: fc.anchor.map(a => ({ block:idOf(a.ref), side:a.side })) });
       if(fc.name || fc.process) containerLabels[id + ':caller'] = { name: fc.name, process: fc.process };
     });
+  }
+
+  // ---------------------------------------------------------------
+  // 2.0 — Versioning on the composite flow
+  // The component graph says which blocks feed / take each component on any row, so the
+  // v1.9 direct-neighbour rules (decisions, contract ripple) work across all branches.
+  // ---------------------------------------------------------------
+  function findBlock(id){ return allBlocks().find(b => b.dataset.id === id) || null; }
+  const entryKeyOf = (b) => sideKey({ block:b.dataset.id, side:'in' }, 0);
+  const exitKeyOf = (b) => sideKey({ block:b.dataset.id, side:'out' }, 0);
+  const feedersOf = (key) => allBlocks().filter(b => exitKeyOf(b) === key);
+  const takersOf = (key) => allBlocks().filter(b => entryKeyOf(b) === key);
+  function rowOf(b){ if(chainOrder.includes(b)) return chainOrder; const br = branchOf(b); return br ? br.blocks : [b]; }
+  function inRowNeighbour(a, b){ const r = rowOf(a), i = r.indexOf(a), j = r.indexOf(b); return i >= 0 && j >= 0 && Math.abs(i - j) === 1; }
+  function blocksAtComponent(key){
+    return allBlocks().filter(b => entryKeyOf(b) === key || exitKeyOf(b) === key ||
+      NODE_SPECS[b.dataset.tpl].mid.some((m, mk) => b.dataset.id + ':m' + mk === key));
+  }
+  // a switch: no v1 of that component stays in use (v1 retired); otherwise v1 and v2 run in parallel
+  const isSwitchAt = (v, type) => !v.nodes.some(n => n.type === type && n.ver === 'v1' && n.role !== 'retired');
+
+  function computeCompositeDecisions(){
+    const out = [];
+    allBlocks().forEach(B => {
+      const v = variantsById[versionOverrides[B.dataset.id]];
+      if(!v) return;
+      const spec = NODE_SPECS[B.dataset.tpl];
+      [['upstream', entryKeyOf(B), spec.entry.type, feedersOf], ['downstream', exitKeyOf(B), spec.exit.type, takersOf]].forEach(([side, key, type, who]) => {
+        const nn = newNodeOf(v, type);
+        if(!nn || !key) return;
+        const sw = isSwitchAt(v, type);
+        // the in-row neighbour is asked as in v1.9; other branches at the component only if it's a switch
+        const asked = who(key).filter(n => n !== B).filter(n => {
+          if(!inRowNeighbour(B, n) && !sw) return false;
+          const nv = variantsById[versionOverrides[n.dataset.id]];
+          return !(nv && newNodeOf(nv, type));
+        });
+        asked.forEach(n => {
+          const nv = variantsById[versionOverrides[n.dataset.id]];
+          const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl &&
+            x.nodes.some(m => m.type === type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
+          out.push({ key:n.dataset.id + '|' + side + '|' + B.dataset.id, blockId:n.dataset.id, sourceId:B.dataset.id, side, type,
+            ver:nn.ver, options, current: nv ? nv.id : null, cross: !inRowNeighbour(B, n), sw, count: asked.length, ckey:key });
+        });
+      });
+    });
+    const r = computeCompositeRipples();
+    r.asks.filter(a => !a.resolved).forEach(a => out.push(a));
+    r.forced.forEach(d => { if(!out.some(x => x.key === d.key)) out.push(d); });
+    return out;
+  }
+
+  // Contract ripple across the composite flow: every block that takes its input from (or feeds)
+  // the shared process is its own path, asked absorb / pass on independently, one step at a time.
+  function computeCompositeRipples(){
+    const out = { asks:[], delta:new Set(), impact:new Set(), forced:[], absorbed:{} };
+    const callersOn = (key) => compositeCallers().filter(c => anchorKey(c.anchor) === key);
+    allBlocks().forEach(B => {
+      const v = variantsById[versionOverrides[B.dataset.id]];
+      if(!v) return;
+      const spec = NODE_SPECS[B.dataset.tpl];
+      const pn = primaryNode(v);
+      // a new version of an API / file reaches its calling applications directly
+      if(pn && (pn.type === 'api' || pn.type === 'file')){
+        const key = spec.entry.type === pn.type ? entryKeyOf(B) : spec.exit.type === pn.type ? exitKeyOf(B) : null;
+        if(key) callersOn(key).forEach(c => out.impact.add(c.key));
+      }
+      if(!handsToSharedProcess(v)) return;
+      const dir = spec.exit.type === 'process' ? 'downstream' : spec.entry.type === 'process' ? 'upstream' : null;
+      if(!dir) return;
+      const pkey = dir === 'downstream' ? exitKeyOf(B) : entryKeyOf(B);
+      const paths = (dir === 'downstream' ? takersOf(pkey) : feedersOf(pkey)).filter(n => n !== B && !versionOverrides[n.dataset.id]);
+      paths.forEach(n => {
+        const nspec = NODE_SPECS[n.dataset.tpl];
+        const far = dir === 'downstream' ? { type:nspec.exit.type, owner:nspec.exit.owner, key:exitKeyOf(n) }
+                                         : { type:nspec.entry.type, owner:nspec.entry.owner, key:entryKeyOf(n) };
+        const cs = callersOn(far.key);
+        if(cs.length && dir === 'upstream') far.caller = cs.map(c => c.key);
+        far.boundary = far.type === 'api' && (dir === 'downstream' ? takersOf(far.key).length > 0 : feedersOf(far.key).length > 0);
+        const rkey = B.dataset.id + '>' + n.dataset.id;
+        const st = rippleChoices[rkey];
+        const choice = st && st.vid === v.id ? st : null;
+        const ask = { key:'ripple|' + rkey, kind:'ripple', rkey, blockId:n.dataset.id, sourceId:B.dataset.id, vid:v.id, side:dir,
+          type:'process', skey:pkey, changed:pn, far, choice, count:paths.length,
+          resolved: !!choice && (choice.choice === 'absorb' || choice.code === true || choice.code === false) };
+        out.asks.push(ask);
+        if(!ask.resolved) return;
+        if(choice.choice === 'absorb' || choice.code){ out.delta.add(pkey); (out.absorbed[pkey] = out.absorbed[pkey] || []).push(n.dataset.id); }
+        if(choice.choice === 'absorb') return;
+        if(far.type === 'topic' || far.boundary){
+          const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && x.change === 'contract' &&
+            x.nodes.some(m => m.type === far.type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
+          out.forced.push({ key:n.dataset.id + '|passed|' + B.dataset.id, blockId:n.dataset.id, sourceId:B.dataset.id, side:dir,
+            type:far.type, ver:'v2', options, current:null, passed:true });
+        } else if(far.type === 'api' || far.type === 'file'){
+          if(far.caller) far.caller.forEach(k => out.impact.add(k));
+          else { out.impact.add(far.key); cs.forEach(c => out.impact.add(c.key)); }
+        }
+      });
+    });
+    return out;
+  }
+
+  // The versioned copy of the whole composite flow.
+  function renderCompositeCopy(){
+    const ids = new Set(allBlocks().map(b => b.dataset.id));
+    Object.keys(versionOverrides).forEach(k => { if(!ids.has(k)) delete versionOverrides[k]; });
+    Object.keys(rippleChoices).forEach(k => { if(k.includes('>') && k.split('>').some(id => !ids.has(id))) delete rippleChoices[k]; });
+    const active = Object.keys(versionOverrides).length > 0 || manualDeltas.size > 0;
+    const wasActive = canvasWrap.classList.contains('split');
+    const keepSelected = selectedCopy ? selectedCopy.dataset.baseId : null;
+    canvasWrap.classList.toggle('split', active);
+    vworld.innerHTML = '';
+    selectedCopy = null;
+    updateLayout();
+    if(!active){ highlightSuggestions([]); refreshLibrary(); return; }
+    const decisions = computeCompositeDecisions();
+    const pendingIds = new Set(decisions.map(d => d.blockId));
+    const L = compositeLayout({ versions:true, pending:pendingIds });
+
+    allBlocks().forEach(b => {
+      const t = L.tiles[b.dataset.id];
+      if(!t || t.hidden) return;
+      const vid = t.variant;
+      const el = document.createElement('div');
+      el.className = 'cblock copy-block' + (vid ? ' versioned' : '') + (pendingIds.has(b.dataset.id) ? ' pending' : '');
+      el.style.left = t.left + 'px';
+      el.style.top = (t.top - (t.h - BLOCK_H)/2) + 'px';
+      el.style.width = t.w + 'px';
+      el.style.height = t.h + 'px';
+      el.dataset.baseId = b.dataset.id;
+      el.dataset.tpl = b.dataset.tpl;
+      if(vid){
+        const v = variantsById[vid];
+        el.dataset.variant = vid;
+        el.title = v.label + ' — ' + v.purpose;
+        el.innerHTML = tileSvg(t.w, t.h) + '<div class="vcaption"></div><div class="cblock-label"></div>' +
+          '<div class="delete-x" title="Remove this version">×</div>';
+        el.querySelector('.vcaption').textContent = v.label;
+        el.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          if(e.target.classList.contains('delete-x')) return;
+          deselectAll();
+          setActivePane('copy');
+          el.classList.add('selected');
+          selectedCopy = el;
+        });
+        el.querySelector('.delete-x').addEventListener('click', (e) => { e.stopPropagation(); removeVersion(el.dataset.baseId); });
+      } else {
+        el.innerHTML = tileSvg(t.w, t.h) + '<div class="cblock-label"></div>';
+      }
+      el.querySelector('.cblock-label').textContent = b.querySelector('.cblock-label').textContent;
+      vworld.appendChild(el);
+      if(keepSelected === b.dataset.id && vid){ el.classList.add('selected'); selectedCopy = el; }
+    });
+
+    const model = L.model;
+    const ripples = computeCompositeRipples();
+    model.nodes.forEach(n => {
+      if(n.type === 'process' && ripples.delta.has(n.skey) && n.role !== 'retired' && n.ver !== 'v2'){ n.delta = true; n.dim = false; }
+      if(manualDeltas.has(n.skey) && n.role !== 'retired' && n.ver !== 'v2'){ n.delta = true; n.dim = false; }
+      if(ripples.impact.has(n.key) && n.role !== 'retired'){ n.impact = true; n.dim = false; }
+    });
+    model.containers.forEach(c => { if(c.keys.some(k => ripples.impact.has(k))){ c.impact = true; c.dim = false; } });
+    // the affected component inside each affected block is highlighted: its own symbol on that side,
+    // or — when the shared component is drawn on another row — the block's nearest symbol on that side
+    decisions.forEach(d => {
+      const nb = findBlock(d.blockId);
+      if(!nb) return;
+      const key = d.kind === 'ripple' ? d.skey : (d.side === 'downstream' ? entryKeyOf(nb) : exitKeyOf(nb));
+      const own = model.nodes.filter(n => n.bis && n.bis.includes(d.blockId));
+      let hit = own.filter(n => n.skey === key);
+      if(!hit.length && own.length){
+        const xs = own.map(n => n.x);
+        const x = d.side === 'downstream' ? Math.min(...xs) : Math.max(...xs);
+        hit = own.filter(n => n.x === x);
+      }
+      hit.forEach(n => { n.affected = true; n.dim = false; });
+    });
+    renderFlowLayer(vworld, model);
+    const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...decisions]);
+    renderTargetCard(vworld);
+    highlightSuggestions(decisions);
+    if(!wasActive) openCopyView();
+    revealDecisions(fresh);
+    scheduleMini();
+    refreshLibrary();          // the library follows the selected component only
   }
 
   // ---------------------------------------------------------------
@@ -3117,10 +3414,10 @@
 
   // Redraws both panes' flow layers (and the copy's tiles).
   function renderFlows(){
-    if(versionTarget && !versionTarget.blocks.every(id => chainOrder.some(b => b.dataset.id === id))) versionTarget = null;
+    if(versionTarget && !versionTarget.blocks.every(id => allBlocks().some(b => b.dataset.id === id))) versionTarget = null;
     const firstId = chainOrder[0] ? chainOrder[0].dataset.id : null;
     Object.keys(callers).forEach(k => { if(k !== firstId) delete callers[k]; });   // a caller belongs to the start of the flow
-    [...manualDeltas].forEach(k => { if(!chainOrder.some(b => b.dataset.id === k.split(':')[0])) manualDeltas.delete(k); });
+    [...manualDeltas].forEach(k => { if(!allBlocks().some(b => b.dataset.id === k.split(':')[0])) manualDeltas.delete(k); });
     renderFlowLayer(world, flowMode === 'composite' ? compositeModel() : buildFlowModel(chainGeometry(false), false));
     if(flowMode === 'composite') markBranchNodes();
     const mc = document.getElementById('modeComposite');
@@ -3142,6 +3439,7 @@
   }
 
   function renderCopy(){
+    if(flowMode === 'composite') return renderCompositeCopy();
     const ids = new Set(chainOrder.map(b => b.dataset.id));
     Object.keys(versionOverrides).forEach(k => { if(!ids.has(k)) delete versionOverrides[k]; });
     const active = Object.keys(versionOverrides).length > 0 || manualDeltas.size > 0;
@@ -3222,7 +3520,7 @@
   const changesConnector = (v, type, role) => v.nodes.some(n => n.type === type && n.ver !== 'v1' && n.role === role);
   function targetOptions(t){
     const ids = t.only ? [t.only] : t.blocks;
-    const tpls = ids.map(id => chainOrder.find(b => b.dataset.id === id)).filter(Boolean).map(b => b.dataset.tpl);
+    const tpls = ids.map(id => findBlock(id)).filter(Boolean).map(b => b.dataset.tpl);
     let opts = VERSION_VARIANTS.filter(v => tpls.includes(v.base) && changesConnector(v, t.type, 'primary'));
     // A queue never changes on its own (it follows its process), so fall back to
     // the versions where it is versioned as a side-effect.
@@ -3233,10 +3531,11 @@
     versionTarget = t;
     if(t) document.getElementById('tabVersioned').click();
     renderFlows();
+    if(flowMode === 'composite') refreshLibrary();
     const first = t && versionGrid.querySelector('.version-card.suggested');
     if(first) first.scrollIntoView({ block:'nearest', behavior:'smooth' });
   }
-  function clearVersionTarget(){ if(versionTarget){ versionTarget = null; renderFlows(); } }
+  function clearVersionTarget(){ if(versionTarget){ versionTarget = null; renderFlows(); if(flowMode === 'composite') refreshLibrary(); } }
   world.addEventListener('click', (e) => {
     if(canvasWrap.classList.contains('versioning')) return;
     if(flowMode === 'composite') return;   // composite flow: connector clicks pick a branch point instead
@@ -3252,12 +3551,13 @@
     let n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
     const badge = !n && e.target.closest && e.target.closest('.flow-layer .dbadge[data-skey]');
     if(badge) n = [...w.querySelectorAll('.flow-layer .node[data-skey]')].find(x => x.dataset.skey === badge.dataset.skey && !/role-(retired)/.test(x.getAttribute('class')));
-    if(!n) return;
+    if(!n || n.dataset.type === 'app') return;
     e.stopPropagation();
     const pane = w === world ? 'base' : 'copy';
     const tr = n.transform.baseVal.consolidate();
     const m = tr ? tr.matrix : { e:0, f:0 };
-    const blocks = n.dataset.blocks.split(',').filter(Boolean);
+    // composite flow: every block touching the component, on any row
+    const blocks = flowMode === 'composite' ? blocksAtComponent(n.dataset.skey).map(b => b.dataset.id) : n.dataset.blocks.split(',').filter(Boolean);
     if(versionTarget && versionTarget.skey === n.dataset.skey && versionTarget.pane === pane){
       // same connector again: reopen the card if a side was chosen, otherwise deselect
       if(versionTarget.only){ versionTarget.only = null; renderFlows(); } else clearVersionTarget();
@@ -3300,12 +3600,14 @@
       const row = document.createElement('div');
       row.className = 'dc-side';
       t.blocks.forEach((id, k) => {
-        const b = chainOrder.find(x => x.dataset.id === id);
+        const b = findBlock(id);
         if(!b) return;
         const btn = document.createElement('button');
         btn.dataset.block = id;
         btn.className = t.only === id ? 'on' : '';
-        btn.innerHTML = '<span class="ds-dir">' + (k === 0 ? 'Upstream' : 'Downstream') + '</span>';
+        const dir = flowMode !== 'composite' ? (k === 0 ? 'Upstream' : 'Downstream')
+          : (exitKeyOf(b) === t.skey ? 'Upstream' : entryKeyOf(b) === t.skey ? 'Downstream' : 'In block') + (branchOf(b) ? ' · branch' : ' · main flow');
+        btn.innerHTML = '<span class="ds-dir">' + dir + '</span>';
         btn.appendChild(document.createTextNode(b.querySelector('.cblock-label').textContent));
         btn.addEventListener('click', () => { t.only = t.only === id ? null : id; renderFlows(); revealSuggestions(); });
         row.appendChild(btn);
@@ -3313,13 +3615,13 @@
       card.appendChild(row);
     }
     // a Δ that came from a ripple answer is changed through that answer
-    const rippleAsk = computeRipples().asks.find(a => a.resolved && a.skey === t.skey && (a.choice.choice === 'absorb' || a.choice.code));
+    const rippleAsk = (flowMode === 'composite' ? computeCompositeRipples() : computeRipples()).asks.find(a => a.resolved && a.skey === t.skey && (a.choice.choice === 'absorb' || a.choice.code));
     if(rippleAsk){
       const again = document.createElement('button');
       again.className = 'dc-opt dc-mark';
       again.dataset.action = 'ripple-again';
       again.textContent = 'Change the ripple answer (absorb / pass on)';
-      again.addEventListener('click', () => { versionTarget = null; renderFlows(); setRipple(rippleAsk.sourceId, null); });
+      again.addEventListener('click', () => { versionTarget = null; renderFlows(); setRipple(rippleAsk.rkey || rippleAsk.sourceId, null); });
       card.appendChild(again);
     }
     // a non-breaking change: mark the connector v1 Δ instead of adding a parallel version
@@ -3502,7 +3804,8 @@
     return 'the API\u2019s callers';
   }
   function setRipple(srcId, patch){
-    const vid = versionOverrides[srcId];
+    // srcId is a source block id, or 'source>path' for one path in the composite flow
+    const vid = versionOverrides[String(srcId).split('>')[0]];
     if(!vid) return;
     collapsedDecisions.delete('ripple|' + srcId);
     if(patch === null) delete rippleChoices[srcId];
@@ -3544,7 +3847,8 @@
     shownDecisions = live;
     const nextY = {};
     decisions.forEach(d => {
-      const b = chainOrder[d.index];
+      const b = flowMode === 'composite' ? vworld.querySelector('.cblock[data-base-id="' + d.blockId + '"]') : chainOrder[d.index];
+      if(!b) return;
       // Right under the impacted block, extending away from the versioned
       // neighbour (whose taller tile would otherwise sit behind the card).
       const bw = parseFloat(b.style.width);
@@ -3574,7 +3878,7 @@
           : '\u2192 Passed on' + (d.choice.code ? ' (v1 \u0394)' : ' untouched');
         pill.title = 'Click to change how ' + name + ' handles the contract change';
         pill.addEventListener('pointerdown', e => e.stopPropagation());
-        pill.addEventListener('click', () => setRipple(d.sourceId, null));
+        pill.addEventListener('click', () => setRipple(d.rkey || d.sourceId, null));
         vworld.appendChild(pill);
         nextY[d.blockId] = y + 36;
         return;
@@ -3590,13 +3894,19 @@
         head.className = 'dc-head';
         head.textContent = '\u26A0 Contract change reaches this process';
         card.appendChild(closeButton('Decide later', () => { collapsedDecisions.add(d.key); renderCopy(); }));
-        const src = chainOrder.find(c => c.dataset.id === d.sourceId);
+        const src = findBlock(d.sourceId);
         const q = document.createElement('p');
         q.className = 'dc-q';
         const passing = d.choice && d.choice.choice === 'pass';
         q.textContent = passing ? 'Passing it on to ' + farLabel(d.far) + ': does the process need a code change?'
           : CONNECTOR_LABEL[d.changed.type] + ' ' + d.changed.ver + ' (' + src.querySelector('.cblock-label').textContent + ') reaches the process shared with ' + name + '. Absorb it here, or pass it on?';
         card.append(head, q);
+        if(d.count > 1){
+          const cn = document.createElement('p');
+          cn.className = 'dc-note dc-count';
+          cn.textContent = 'The process is shared: ' + d.count + ' flows take this change — each decides on its own.';
+          card.appendChild(cn);
+        }
         const opts = passing
           ? [['code', 'yes', 'Yes \u00B7 code change in the same version (v1 \u0394)'], ['code', 'no', 'No \u00B7 passes through untouched']]
           : [['ripple', 'absorb', 'Absorb here \u00B7 code change, same version (v1 \u0394)'], ['ripple', 'pass', 'Pass it on to ' + farLabel(d.far)]];
@@ -3605,7 +3915,7 @@
           btn.className = 'dc-opt';
           btn.dataset[attr] = val;
           btn.textContent = label;
-          btn.addEventListener('click', () => setRipple(d.sourceId, attr === 'ripple' ? { choice: val, code: null } : { code: val === 'yes' }));
+          btn.addEventListener('click', () => setRipple(d.rkey || d.sourceId, attr === 'ripple' ? { choice: val, code: null } : { code: val === 'yes' }));
           card.appendChild(btn);
         });
         const actions = document.createElement('div');
@@ -3614,7 +3924,7 @@
           const back = document.createElement('button');
           back.className = 'dc-link'; back.dataset.action = 'back';
           back.textContent = 'Back';
-          back.addEventListener('click', () => setRipple(d.sourceId, null));
+          back.addEventListener('click', () => setRipple(d.rkey || d.sourceId, null));
           actions.appendChild(back);
         }
         const later = document.createElement('button');
@@ -3636,6 +3946,13 @@
       q.textContent = d.passed ? 'A contract change was passed on to ' + CONNECTOR_LABEL[d.type] + '. How should ' + name + ' version it?'
                                : what + ' is new. How should ' + name + ' handle it?';
       card.append(head, q);
+      if(d.count){
+        const cn = document.createElement('p');
+        cn.className = 'dc-note dc-count';
+        cn.textContent = CONNECTOR_LABEL[d.type] + ' ' + d.ver + (d.sw ? ' is a switch (v1 retired)' : ' runs next to v1') + ' — ' +
+          d.count + ' flow' + (d.count === 1 ? ' is' : 's are') + ' affected at this ' + CONNECTOR_LABEL[d.type] + '.';
+        card.appendChild(cn);
+      }
       if(d.current){
         const note = document.createElement('p');
         note.className = 'dc-note';
@@ -3659,7 +3976,7 @@
       });
       const actions = document.createElement('div');
       actions.className = 'dc-actions';
-      if(d.options.length){
+      if(d.options.length && flowMode !== 'composite'){
         const lib = document.createElement('button');
         lib.className = 'dc-link'; lib.dataset.action = 'library';
         lib.textContent = 'Show in library';
@@ -3768,7 +4085,16 @@
     }, { l:Infinity, t:Infinity, r:-Infinity, b:-Infinity });
     box.l -= 40; box.r += 40; box.t -= 44; box.b += 44;      // room for containers and their labels
     const W = miniView.clientWidth, H = miniView.clientHeight - 22, top = 22;
-    const sc = Math.min(W / (box.r - box.l), H / (box.b - box.t), 1);
+    let sc = Math.min(W / (box.r - box.l), H / (box.b - box.t), 1);
+    // a very large composite flow: keep a readable scale, centred on the versioned blocks
+    if(sc < 0.12){
+      sc = 0.12;
+      const vt = [...src.querySelectorAll(':scope > .cblock.versioned')];
+      const focus = vt.length ? vt : tiles;
+      const cx = focus.reduce((s, t) => s + parseFloat(t.style.left) + parseFloat(t.style.width)/2, 0) / focus.length;
+      const cy = focus.reduce((s, t) => s + parseFloat(t.style.top) + parseFloat(t.style.height)/2, 0) / focus.length;
+      box.l = cx - W/sc/2; box.r = cx + W/sc/2; box.t = cy - H/sc/2; box.b = cy + H/sc/2;
+    }
     const clone = src.cloneNode(true);
     clone.querySelectorAll('.decision-card, .decision-pill, .ripple-pill, .fc-band, .label-editor, .delete-x').forEach(n => n.remove());
     clone.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
@@ -3787,11 +4113,11 @@
   function blockAtPoint(clientX, clientY){
     const hit = (el) => { const r = el.getBoundingClientRect(); return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom; };
     const inPane = canvasWrap.classList.contains('copy-big') && hit(versionPane);
-    const pool = inPane ? [...vworld.children] : chainOrder;
+    const pool = inPane ? [...vworld.children] : allBlocks();
     const el = pool.find(hit);
     if(!el) return null;
     const id = inPane ? el.dataset.baseId : el.dataset.id;
-    return chainOrder.find(b => b.dataset.id === id) || null;
+    return findBlock(id);
   }
 
   function dropVersion(v, clientX, clientY){
@@ -3800,13 +4126,13 @@
     let target = null;
     if(versionTarget && targetOptions(versionTarget).includes(v.id)){
       const ids = versionTarget.only ? [versionTarget.only] : versionTarget.blocks;
-      target = ids.map(id => chainOrder.find(b => b.dataset.id === id)).find(b => b && b.dataset.tpl === v.base) || null;
+      target = ids.map(id => findBlock(id)).find(b => b && b.dataset.tpl === v.base) || null;
       versionTarget = null;
     }
     if(!target) target = blockAtPoint(clientX, clientY);
     if(target && target.dataset.tpl !== v.base) target = null;
     if(!target){
-      const matches = chainOrder.filter(b => b.dataset.tpl === v.base);
+      const matches = allBlocks().filter(b => b.dataset.tpl === v.base);
       if(matches.length === 0){ showToast('Add a ' + baseLabel + ' block to the base flow first.', true); return; }
       if(matches.length > 1){ showToast('Drop it onto the ' + baseLabel + ' block you want to version.', true); return; }
       target = matches[0];
@@ -4199,7 +4525,9 @@
     // 2.0 composite flow
     setFlowMode, flowMode: () => flowMode, branches: () => branches.map(br => ({ kind:br.kind, row:br.row, key:anchorKey(br.anchor), blocks:br.blocks.map(b => b.dataset.tpl) })),
     branchPoint: () => branchPoint, compositeAttach: (id) => compositeAttach(templatesById[id]), isCompatible: (id) => isTemplateCompatible(templatesById[id]),
-    callable: () => [...callableKeys], addCaller, callersList: () => compositeCallers().map(c => ({ id:c.id, key:anchorKey(c.anchor) })), removeCaller };
+    callable: () => [...callableKeys], addCaller,
+    compositeDecisions: () => computeCompositeDecisions(), compositeRipples: () => computeCompositeRipples(), setRipple,
+    blocksAt: (k) => blocksAtComponent(k).map(b => b.dataset.id), callersList: () => compositeCallers().map(c => ({ id:c.id, key:anchorKey(c.anchor) })), removeCaller };
 })();
 </script>
 </body>
