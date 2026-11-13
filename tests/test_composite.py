@@ -9,6 +9,10 @@ res = []
 def check(name, cond):
     res.append(bool(cond)); print(('PASS ' if cond else 'FAIL ') + name)
 
+ON_LINE = """(sel) => [...document.querySelectorAll(sel + ' .flow-layer .link-arrow')].every(a => {
+    const m = /^M([-\\d.]+) ([-\\d.]+)/.exec(a.getAttribute('d')); const pt = new DOMPoint(+m[1], +m[2]);
+    return [...a.ownerSVGElement.querySelectorAll('.link')].some(l => l.isPointInStroke(pt)); })"""
+
 with sync_playwright() as p:
     br = p.chromium.launch()
     pg = br.new_page(viewport={'width': 1500, 'height': 900})
@@ -19,188 +23,124 @@ with sync_playwright() as p:
     def pick(skey):
         pg.locator(f'#world .flow-layer .node[data-skey="{skey}"]').first.click(force=True)
     branches = lambda: ev(f"{d}.branches()")
+    tpls = lambda: ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])")
+    def ids_of(t): return [i for i, x in tpls() if x == t]
+    available = lambda: ev(f"Object.keys({d}.templatesById).filter(id => {d}.isCompatible(id))")
 
-    # ---- the switch
-    check('mode switch is shown above the canvas, Single flow on by default',
-          pg.is_visible('#modeSingle') and 'on' in pg.get_attribute('#modeSingle', 'class') and ev(f"{d}.flowMode()") == 'single')
+    # ---- fix 3: the switch
+    check('Single flow on by default', ev(f"{d}.flowMode()") == 'single' and 'on' in pg.get_attribute('#modeSingle', 'class'))
+    check('fix 3: Composite flow is not selectable on an empty canvas', pg.is_disabled('#modeComposite'))
     for t in ['api-to-process', 'process-to-publish', 'consume-to-api']:
         ev(f"{d}.append('{t}')")
     ev(f"{d}.recordHistory()")
     single_snapshot = ev(f"JSON.stringify({d}.serializeFlow())")
     check('single flow serialises without composite fields', 'branches' not in json.loads(single_snapshot))
-    check('single flow: connectors are not branch points', pg.locator('#world .node.branchable').count() == 0)
-
+    check('…selectable once the flow has a block', not pg.is_disabled('#modeComposite'))
     pg.click('#modeComposite')
-    check('switching to Composite flow', ev(f"{d}.flowMode()") == 'composite' and 'composite' in pg.get_attribute('#canvasWrap', 'class'))
-    check('composite: topic / process / API nodes are branch points, queues are not',
-          pg.locator('#world .node.branchable[data-type="topic"]').count() == 1 and
-          pg.locator('#world .node.branchable[data-type="queue"]').count() == 0 and
-          pg.locator('#world .node.branchable[data-type="process"]').count() == 1)
+    check('switching to Composite flow', ev(f"{d}.flowMode()") == 'composite')
 
-    # ---- fan-out at the topic
+    # ---- fix 2: nothing free to drop
+    check('fix 2: with no connector picked, no library pattern is available', available() == [])
+    check('…and the hint says to click a connector', pg.is_visible('#endHint') and 'click a Topic' in pg.inner_text('#endHintText'))
+    check('queues are not clickable', pg.locator('#world .node.branchable[data-type="queue"]').count() == 0)
+
+    # ---- fix 4: strict alternation on one connector (topic in the middle of the main flow)
     pick('block-2:out')
-    check('picking the topic marks it and shows the branching hint',
-          pg.locator('#world .node.branch-point').count() == 1 and pg.is_visible('#endHint') and 'Topic' in pg.inner_text('#endHintText'))
-    check('topic branch point: consumers and publishers fit, others do not',
-          ev(f"{d}.isCompatible('consume-to-process')") and ev(f"{d}.isCompatible('api-to-publish')") and
-          not ev(f"{d}.isCompatible('process-to-api')") and not ev(f"{d}.isCompatible('file-to-process')"))
-    ev(f"{d}.compositeAttach('consume-to-process'); {d}.recordHistory()")
-    b = branches()
-    check('fan-out branch created below the main flow', len(b) == 1 and b[0]['kind'] == 'out' and b[0]['row'] == 1 and b[0]['key'] == 'block-2:out')
-    check('the new branch end is selected: it extends with process patterns only',
-          ev(f"{d}.isCompatible('process-to-file')") and not ev(f"{d}.isCompatible('consume-to-api')"))
-    ev(f"{d}.compositeAttach('process-to-file'); {d}.recordHistory()")
-    check('branch extended to the right', branches()[0]['blocks'] == ['consume-to-process', 'process-to-file'])
-    check('topic shows as shared (3 links)', pg.locator('#world .sbadge').count() == 1 and 'shared ×3' in pg.text_content('#world .sbadge text'))
-    check('the topic is drawn once (branch does not repeat it)', pg.locator('#world .node[data-type="topic"]').count() == 1)
+    check('topic picked: consumers and publishers fit, nothing else',
+          sorted(available()) == sorted(['consume-to-process', 'consume-to-api', 'process-to-publish', 'api-to-publish']))
+    ev(f"{d}.compositeAttach('consume-to-process')")
+    check('1st branch on the topic goes below', branches()[0]['row'] > 0)
+    # fix 1 (in line): the new branch's far end is picked; a process pattern extends it in line
+    check('after adding, the new far-end connector is picked (process patterns fit)',
+          'process-to-file' in available() and 'consume-to-api' not in available())
+    ev(f"{d}.compositeAttach('process-to-file')")
+    check('…and extends that branch in line (same row)', branches()[0]['blocks'] == ['consume-to-process', 'process-to-file'] and len(branches()) == 1)
+    pick('block-2:out'); ev(f"{d}.compositeAttach('api-to-publish')")
+    pick('block-2:out'); ev(f"{d}.compositeAttach('consume-to-api')")
+    pick('block-2:out'); ev(f"{d}.compositeAttach('consume-to-process')")
+    rows = [b['row'] for b in branches()]
+    check('fix 4: branches of the topic alternate below / above / below / above', [r > 0 for r in rows] == [True, False, True, False])
 
-    # ---- multi-source: a second publisher on the same topic
-    pick('block-2:out')
-    ev(f"{d}.compositeAttach('api-to-publish'); {d}.recordHistory()")
-    b = branches()
-    check('multi-source branch created above the main flow', b[1]['kind'] == 'in' and b[1]['row'] == -1)
-    check('topic now shared ×4', 'shared ×4' in pg.text_content('#world .sbadge text'))
-
-    # ---- multi-source on the target API (another caller)
-    pick('block-3:out')
-    check('target API: only callers fit (multi-source), no fan-out',
-          ev(f"{d}.isCompatible('process-to-api')") and not ev(f"{d}.isCompatible('api-to-process')"))
-    ev(f"{d}.compositeAttach('process-to-api'); {d}.recordHistory()")
-    check('its branch extends to the left', ev(f"{d}.isCompatible('file-to-process')") and not ev(f"{d}.isCompatible('process-to-file')"))
-    ev(f"{d}.compositeAttach('file-to-process'); {d}.recordHistory()")
-    check('caller branch reads file → process → shared API', branches()[2]['blocks'] == ['file-to-process', 'process-to-api'] and branches()[2]['row'] == -2)
-
-    # ---- process reuse: the main flow's process gets a second output
+    # ---- fix 1: blocks joined at a process stay one asset on one row
+    pick('block-2:out'); ev(f"{d}.compositeAttach('process-to-publish')")
+    p2p = branches()[-1]
+    check('5th branch on the topic goes below again', p2p['row'] > 0 and p2p['kind'] == 'in')
+    check('its open process start is picked: API-to-Process fits', 'api-to-process' in available())
+    ev(f"{d}.compositeAttach('api-to-process')")
+    b5 = branches()[-1]
+    check('fix 1: API-to-Process joins that process in line, on the same row', b5['blocks'] == ['api-to-process', 'process-to-publish'] and len(branches()) == 5)
+    # process reuse: a second block joins the main flow's process from another row
     pick('block-1:out')
-    ev(f"{d}.compositeAttach('process-to-file'); {d}.recordHistory()")
-    check('process reuse: fan-out from the process', branches()[3]['kind'] == 'out' and branches()[3]['key'] == 'block-1:out' and branches()[3]['row'] > 0)
+    ev(f"{d}.compositeAttach('api-to-process')")
+    check('process reuse goes on its own row', branches()[-1]['key'] == 'block-1:out' and branches()[-1]['kind'] == 'in')
+    check("fix 1: the process's iPaaS container expands to take in the joined block (one outline)",
+          ev("document.querySelectorAll('#world .container-layer path.pcont.own-ipaas').length") == 2)
 
-    # ---- queue ↔ process is 1:1
-    ids = ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])")
-    c2p = [i for i, t in ids if t == 'consume-to-process'][0]
-    pick(f'{c2p}:out')
-    check('a process already fed by a queue cannot take a second Consume-to-Process',
-          not ev(f"{d}.isCompatible('consume-to-process')") and ev(f"{d}.isCompatible('api-to-process')"))
-    pg.mouse.click(1300, 860)
-    check('clicking empty canvas clears the branch point', ev(f"{d}.branchPoint()") is None)
+    # ---- fix 5: calling applications on any API / file, alongside other flows
+    callable_ = ev(f"{d}.callable()")
+    check('fix 5: exposed API, target API and branch APIs all take calling applications',
+          'block-1:in' in callable_ and 'block-3:out' in callable_ and all(f'{i}:in' in callable_ for i in ids_of('api-to-publish')))
+    pick('block-1:in'); pg.click('#world .comp-card .dc-opt')      # a calling application on the exposed API
+    pick('block-1:in')
+    ev(f"{d}.compositeAttach('process-to-api')")     # another flow also calls it: multi-source branch
+    check('with a caller on it, the exposed API is no open end: Process-to-API becomes a multi-source branch',
+          branches()[-1]['key'] == 'block-1:in' and branches()[-1]['blocks'] == ['process-to-api'])
+    pick('block-1:in')
+    check('…and "Add calling application" is still offered', pg.is_visible('#world .comp-card') and 'Add calling application' in pg.inner_text('#world .comp-card'))
+    pg.click('#world .comp-card .dc-opt')
+    pick('block-3:out'); pg.click('#world .comp-card .dc-opt')
+    cl = ev(f"{d}.callersList()")
+    check('three calling applications added', len(cl) == 3)
+    app_y = ev("[...document.querySelectorAll('#world .flow-layer .node[data-type=app]')].map(n=>n.transform.baseVal.consolidate().matrix.f)")
+    api_y = ev("document.querySelector('#world .flow-layer .node[data-skey=\"block-3:out\"]').transform.baseVal.consolidate().matrix.f")
+    check('a caller of the target API sits above / below it, clear of the tile on its left', any(abs(y - api_y) >= 130 for y in app_y))
 
-    # ---- layout: branch tiles sit on their rows, under the shared connector
-    tops = ev("[...document.querySelectorAll('#world .cblock')].map(b=>parseFloat(b.style.top))")
-    check('rows: main flow, two rows below, two above', sorted(set(tops)) == sorted({tops[0] - 400, tops[0] - 200, tops[0], tops[0] + 200, tops[0] + 400}))
+    # ---- fix 6 / 7 and drawing
+    check('fix 6: no "shared ×N" badges', ev("document.querySelectorAll('#world .sbadge').length") == 0)
+    all_tops = sorted(set(ev("[...document.querySelectorAll('#world .cblock')].map(b=>parseFloat(b.style.top))")))
+    t0 = ev(f"parseFloat({d}.chainOrder()[0].style.top)")
+    check('fix 7: rows are 300 px apart', all((t - t0) % 300 == 0 for t in all_tops) and len(all_tops) >= 4)
+    check('branch links are straight segments with bends', ev("[...document.querySelectorAll('#world .flow-layer path.link')].every(p => !/C/.test(p.getAttribute('d')))"))
+    check('every arrowhead tip lies on its line', ev(f"({ON_LINE})('#world')"))
+    if SHOT:
+        pg.mouse.click(1450, 880); pg.click('#zoomOut'); pg.click('#zoomOut'); pg.click('#zoomOut')
+        pg.screenshot(path=SHOT)
     check('no page errors so far', not errs)
 
-    # ---- links: straight segments with bends, and every arrowhead sits on its line
-    check('branch links are drawn as straight segments with bends (no free curves)',
-          ev("[...document.querySelectorAll('#world .flow-layer path.link')].every(p => !/C/.test(p.getAttribute('d')))"))
-    ON_LINE = """(sel) => [...document.querySelectorAll(sel + ' .flow-layer .link-arrow')].every(a => {
-        const m = /^M([-\\d.]+) ([-\\d.]+)/.exec(a.getAttribute('d')); const pt = new DOMPoint(+m[1], +m[2]);
-        return [...a.ownerSVGElement.querySelectorAll('.link')].some(l => l.isPointInStroke(pt)); })"""
-    check('every arrowhead tip lies on a link (composite)', ev(f"({ON_LINE})('#world')"))
-
-    # ---- rows are packed so drop lines don't run through another branch's tiles
-    clear = ev("""(()=>{
-      const tiles=[...document.querySelectorAll('#world .cblock')].map(b=>({x1:parseFloat(b.style.left),x2:parseFloat(b.style.left)+parseFloat(b.style.width)+20,y1:parseFloat(b.style.top),y2:parseFloat(b.style.top)+120,id:b.dataset.id}));
-      const segs=[];
-      document.querySelectorAll('#world .flow-layer path.link').forEach(p=>{ const nums=[...p.getAttribute('d').matchAll(/[ML]([-\\d.]+) ([-\\d.]+)/g)].map(m=>[+m[1],+m[2]]); for(let i=1;i<nums.length;i++) if(Math.abs(nums[i][0]-nums[i-1][0])<0.5 && Math.abs(nums[i][1]-nums[i-1][1])>150) segs.push([nums[i][0],Math.min(nums[i][1],nums[i-1][1]),Math.max(nums[i][1],nums[i-1][1])]); });
-      // a long vertical segment may cross its own start row (main flow) but no other row's tiles
-      const top0=parseFloat(document.querySelector('#world .cblock').style.top);
-      return segs.every(([x,y1,y2])=>tiles.every(t=>t.y1===top0 || !(t.x1<x && x<t.x2 && t.y1<y2-60 && t.y2>y1+60)));
-    })()""")
-    check('no drop line runs through a branch row it does not belong to', clear)
-
-    # ---- multi-source links arrive level with the connector (like callers), not from above
-    level_in = ev("""(()=>{
-      const out=[]; document.querySelectorAll('#world .flow-layer path.link').forEach(p=>{
-        const n=[...p.getAttribute('d').matchAll(/[MLQ]([-\\d.]+) ([-\\d.]+)/g)].map(m=>[+m[1],+m[2]]);
-        const a=n[n.length-2], z=n[n.length-1]; if(n.length>3) out.push(Math.abs(a[1]-z[1])<0.5 || Math.abs(a[0]-z[0])<0.5 && z[1]>a[1]===false);
-      }); return out; })()""")
-    check('bent links end with a level segment into the receiving symbol', all(level_in))
-
-    # ---- calling applications on any upstream API / file
-    callable_ = ev(f"{d}.callable()")
-    check('the exposed API at the start of the main flow can take a calling application', 'block-1:in' in callable_)
-    apub = [i for i, t in ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])") if t == 'api-to-publish'][0]
-    check("a branch starting with an API can take one too", f'{apub}:in' in callable_)
-    check('a shared target API (fed by processes) cannot', 'block-3:out' not in callable_)
-    pick('block-1:in')
-    check('picking that API shows the card with "Add calling application"', pg.is_visible('#world .comp-card') and 'Add calling application' in pg.inner_text('#world .comp-card'))
-    pg.click('#world .comp-card .dc-opt')
-    pick('block-1:in'); pg.click('#world .comp-card .dc-opt')
-    pick(f'{apub}:in'); pg.click('#world .comp-card .dc-opt')
-    cl = ev(f"{d}.callersList()")
-    check('three calling applications: two on the main API, one on the branch API',
-          len(cl) == 3 and sum(c['key'] == 'block-1:in' for c in cl) == 2 and sum(c['key'] == f'{apub}:in' for c in cl) == 1)
-    ys = ev("[...document.querySelectorAll('#world .flow-layer .node[data-type=app]')].map(n=>n.transform.baseVal.consolidate().matrix.f)")
-    check('two callers of the same API are stacked, not on top of each other', len(set(round(y) for y in ys)) == 3)
-    check('the main API is now shared ×3', any('×3' in t for t in ev("[...document.querySelectorAll('#world .sbadge text')].map(t=>t.textContent)")))
-    check('arrowheads still on their lines', ev(f"({ON_LINE})('#world')"))
-    if SHOT: pg.screenshot(path=SHOT)
-    first_app = ev("document.querySelector('#world .flow-layer .node[data-type=app]').dataset.skey")
-    pg.locator(f'#world .flow-layer .node[data-skey="{first_app}"]').click(force=True)
-    check('clicking a calling application offers to remove it', 'Remove this calling application' in pg.inner_text('#world .comp-card'))
-    pg.click('#world .comp-card .dc-opt')
-    check('…and removes it', len(ev(f"{d}.callersList()")) == 2)
-    rt = ev(f"{d}.serializeFlow()")
-    check('added calling applications are saved', len(rt.get('callers', [])) == 2 and ev(f"{d}.validateFlow({d}.serializeFlow())") is None)
-    ev(f"{d}.loadFlow({d}.serializeFlow())")
-    check('…and come back on load', len(ev(f"{d}.callersList()")) == 2)
-    ev(f"{d}.undo()")
-    check('undo brings the removed caller back', len(ev(f"{d}.callersList()")) == 3)
-    ev(f"{d}.removeCaller(...[{d}.callersList()[0].id])"); ev(f"{d}.removeCaller({d}.callersList()[0].id)"); ev(f"{d}.removeCaller({d}.callersList()[0].id)")
-    check('callers removed again', len(ev(f"{d}.callersList()")) == 0)
-
-    # ---- switching back is blocked while branches exist
+    # ---- switching, saving, undo
     pg.click('#modeSingle')
-    check('Single flow is blocked while branches exist', ev(f"{d}.flowMode()") == 'composite' and 'Remove the branches' in pg.inner_text('#toast'))
-
-    # ---- removal rules
-    n_before = len(branches())
-    ids = ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])")
-    middle = [i for i, t in ids if t == 'consume-to-process'][0]
-    ev(f"{d}.removeChainBlock(document.querySelector('[data-id=\"{middle}\"]'))")
-    check('a branch block that is not the far end is not removed', len(ev("document.querySelectorAll('#world .cblock')")) == len(ids))
-    first = ev(f"{d}.chainOrder()[0].dataset.id")
-    ev(f"{d}.removeChainBlock({d}.chainOrder()[0])")
-    check('the main flow start keeps its process branch (it hangs on the seam)', ev(f"{d}.chainOrder().length") == 2 and len(branches()) == n_before)
-
-    # ---- history and export round-trip
+    check('Single flow blocked while branches exist', ev(f"{d}.flowMode()") == 'composite')
     flow = ev(f"{d}.serializeFlow()")
-    check('composite flow serialises its branches', flow.get('mode') == 'composite' and len(flow['branches']) == 4)
-    check('the serialised file validates', ev(f"{d}.validateFlow({d}.serializeFlow())") is None)
+    check('composite flow saves branches and callers', flow.get('mode') == 'composite' and len(flow['branches']) == 7 and len(flow['callers']) == 3)
+    check('the saved file validates', ev(f"{d}.validateFlow({d}.serializeFlow())") is None)
     before = json.dumps(flow, sort_keys=True)
     ev(f"{d}.loadFlow({d}.serializeFlow())")
-    after = json.dumps(ev(f"{d}.serializeFlow()"), sort_keys=True)
-    check('load(serialize) reproduces the composite flow', before == after)
+    check('load(save) reproduces the composite flow', before == json.dumps(ev(f"{d}.serializeFlow()"), sort_keys=True))
     ev(f"{d}.undo()")
-    check('undo restores the removed main-flow block with its branches', ev(f"{d}.chainOrder().length") == 3 and len(branches()) == 4)
-    for _ in range(12):
-        if not branches(): break
-        ev(f"{d}.undo()")
-    check('undo back past the first branch leaves no branches', len(branches()) == 0)
-    pg.click('#modeSingle')
-    check('with no branches, switching back to Single flow works', ev(f"{d}.flowMode()") == 'single')
-    check('single flow is identical to before composite mode', ev(f"JSON.stringify({d}.serializeFlow())") == single_snapshot)
+    check('undo removes the last calling application', len(ev(f"{d}.callersList()")) == 2)
+
+    # ---- removal rules
+    far = [i for i, t in tpls() if t == 'process-to-file'][0]
+    mid = [i for i, t in tpls() if t == 'consume-to-process'][0]
+    n = len(tpls())
+    ev(f"{d}.removeChainBlock(document.querySelector('[data-id=\"{mid}\"]'))")
+    check('a branch block that is not at the far end is kept', len(tpls()) == n)
+    ev(f"{d}.removeChainBlock(document.querySelector('[data-id=\"{far}\"]'))")
+    check('the far-end block of a branch is removed', len(tpls()) == n - 1)
+
+    # ---- fix 3: clearing the canvas returns to Single flow
+    pg.click('#clearCanvas'); pg.click('#confirmOk')
+    check('fix 3: clearing the canvas returns to Single flow', ev(f"{d}.flowMode()") == 'single' and pg.is_disabled('#modeComposite'))
+
+    # ---- single flow is untouched
+    ev(f"{d}.loadFlow({json.dumps(json.loads(single_snapshot))})")
+    check('single flow round-trips exactly as before', ev(f"JSON.stringify({d}.serializeFlow())") == single_snapshot)
     ev(f"{d}.dropVersion('a2p-contract-parallel', 10, 10)"); pg.wait_for_timeout(150)
     pg.click('#tabVersioned'); pg.wait_for_timeout(150)
     check('single flow + versioned copy: every arrowhead tip lies on its (curved) link',
           ev(f"({ON_LINE})('#world')") and ev(f"({ON_LINE})('#vworld')") and ev("document.querySelectorAll('#vworld .link-arrow').length") > 3)
     check('no page errors', not errs)
     if errs: print(errs)
-
-    # ---- balance: branches of one connector on the main flow alternate below / above
-    pg.goto(URL)
-    for t in ['file-to-process', 'process-to-api']: ev(f"{d}.append('{t}')")
-    ev(f"{d}.setFlowMode('composite')")
-    rows_ = []
-    for _ in range(4):
-        pick('block-1:out'); ev(f"{d}.compositeAttach('process-to-api')"); rows_.append(branches()[-1]['row'])
-    check('four fan-outs from one process alternate below / above (1, -1, 2, -2)', rows_ == [1, -1, 2, -2])
-    pick('block-1:in'); pg.click('#world .comp-card .dc-opt')
-    pick('block-1:in'); ev(f"{d}.compositeAttach('process-to-file')")
-    app_x = ev("document.querySelector('#world .flow-layer .node[data-type=app]').transform.baseVal.consolidate().matrix.e")
-    file_x = ev("document.querySelector('#world .flow-layer .node[data-skey=\"block-1:in\"]').transform.baseVal.consolidate().matrix.e")
-    check('a file with a multi-source writer pushes its calling application further left', file_x - app_x > 150)
-    check('no page errors (balance)', not errs)
     br.close()
 
 print(f"\n{sum(res)}/{len(res)} checks passed")

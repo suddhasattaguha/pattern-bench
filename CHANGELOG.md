@@ -319,3 +319,20 @@ one logical change each with a real diff behind them.
 - Branches of one connector on the main flow alternate below / above (1st below, 2nd above, …
   multi-source starts above) so both sides stay balanced; a row is searched on both sides.
 - Tests: `tests/test_composite.py` now 55 checks; the 265 v1.9 checks still pass.
+
+### v2.0 trial — round 4 (fix list 1–7)
+1. Blocks joined at a process are one iPaaS asset: a pattern added at the open end of a row
+   extends that row in line (one container). When the process is already fed in line, the
+   joined block goes on its own row and the process's container expands to take it in
+   (one outline, linked along the junction line); calling applications move further left.
+2. Composite flow: nothing is free to drop. The library is unavailable until a connector is
+   clicked; then only patterns that fit it show. After adding, the new block's far-end
+   connector is picked so building can continue.
+3. Composite flow can't be selected on an empty canvas; clearing the canvas returns to Single flow.
+4. All branches of a connector alternate strictly: 1st below, 2nd above, 3rd below … The other
+   side is used only if the preferred side has no clean row.
+5. "+ Add calling application" on any API or file, also when other flows already use it;
+   callers of a connector with a block on its left sit above / below it.
+6. "shared ×N" badge removed (idea kept for the versioning step).
+7. More space: rows 300 px apart, ≥ 80 px between branches on a row, callers 90 px apart.
+- Tests: `tests/test_composite.py` rewritten, 39 checks; the 265 v1.9 checks still pass.

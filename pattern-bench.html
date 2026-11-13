@@ -548,13 +548,13 @@
   .fm-seg button:hover{ background:var(--block-bg-hover); }
   .fm-seg button.on{ background:var(--accent-teal); color:#06231F; }
   .fm-seg button.on:hover{ background:var(--accent-teal); }
+  .fm-seg button:disabled{ opacity:.4; cursor:not-allowed; }
+  .fm-seg button:disabled:hover{ background:transparent; }
   /* Composite flow: connectors you can branch from are clickable */
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable{ pointer-events:all; cursor:pointer; }
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable:hover{ filter:drop-shadow(0 0 1.5px var(--accent-teal)) drop-shadow(0 0 5px var(--accent-teal)); }
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node[data-type="app"][data-skey]{ pointer-events:all; cursor:pointer; }
   .flow-layer .node.branch-point{ filter:drop-shadow(0 0 1.5px var(--accent-amber)) drop-shadow(0 0 6px var(--accent-amber)); }
-  .flow-layer .sbadge rect{ fill:var(--panel); stroke:var(--accent-teal); stroke-width:1.5; }
-  .flow-layer .sbadge text{ font-family:var(--font-mono); font-size:10.5px; font-weight:700; fill:var(--accent-teal); }
   .comp-banner{ display:none; position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:14; pointer-events:none;
     padding:4px 12px; border-radius:14px; border:1px solid var(--accent-teal); background:var(--panel);
     color:var(--text-primary); font-family:var(--font-ui); font-size:12px; white-space:nowrap; }
@@ -774,7 +774,7 @@
       </div>
     </div>
     <div class="mode-banner" id="modeBanner"><b>Versioning mode</b> · click a connector to version it</div>
-    <div class="comp-banner" id="compBanner"><b>Composite flow</b> · click a Topic, Process, API or File to branch from it</div>
+    <div class="comp-banner" id="compBanner"><b>Composite flow</b> · click a Topic, Process, API or File to add to it</div>
     <div class="pane-tag active" id="baseTag">Base flow</div>
     <div class="version-pane" id="versionPane">
       <div class="world" id="vworld"></div>
@@ -1131,12 +1131,6 @@
         out += '<g class="dbadge"' + (n.skey ? ' data-skey="' + n.skey + '"' : '') + '><title>Code change in the same version (not a new version) \u2014 click to change</title><rect x="' + bx + '" y="' + by + '" width="50" height="18" rx="6"></rect>' +
           '<text x="' + (bx+25) + '" y="' + (by+13) + '" text-anchor="middle">v1 Δ</text></g>';
       }
-      if(n.shared){
-        // composite flow: a connector used by several blocks (reuse / fan-out / multi-source)
-        const by = n.y - SYMBOLS[n.type].half - 34;
-        out += '<g class="sbadge"><title>Shared connector — ' + n.shared + ' blocks depend on it</title><rect x="' + (n.x - 34) + '" y="' + by + '" width="68" height="18" rx="9"></rect>' +
-          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">shared ×' + n.shared + '</text></g>';
-      }
       if(n.impact){
         // dependent logic behind an end application's API / folder may be impacted
         const bx = n.x - 58, by = n.y + 24;
@@ -1154,11 +1148,36 @@
     for(const k of keys) if(containerLabels[k]) return containerLabels[k];
     return null;
   }
+  // Outline and fill of a union of axis-aligned rectangles (cells of their edge grid).
+  function unionShape(rects){
+    const xs = [...new Set(rects.flatMap(r => [r.x1, r.x2]))].sort((a, b) => a - b);
+    const ys = [...new Set(rects.flatMap(r => [r.y1, r.y2]))].sort((a, b) => a - b);
+    const occ = (i, j) => {
+      if(i < 0 || j < 0 || i >= xs.length - 1 || j >= ys.length - 1) return false;
+      const cx = (xs[i] + xs[i+1])/2, cy = (ys[j] + ys[j+1])/2;
+      return rects.some(r => r.x1 < cx && cx < r.x2 && r.y1 < cy && cy < r.y2);
+    };
+    let fill = '', edge = '';
+    for(let i = 0; i < xs.length - 1; i++) for(let j = 0; j < ys.length - 1; j++){
+      if(!occ(i, j)) continue;
+      fill += 'M' + xs[i] + ' ' + ys[j] + 'H' + xs[i+1] + 'V' + ys[j+1] + 'H' + xs[i] + 'Z';
+      if(!occ(i, j-1)) edge += 'M' + xs[i] + ' ' + ys[j] + 'H' + xs[i+1];
+      if(!occ(i, j+1)) edge += 'M' + xs[i] + ' ' + ys[j+1] + 'H' + xs[i+1];
+      if(!occ(i-1, j)) edge += 'M' + xs[i] + ' ' + ys[j] + 'V' + ys[j+1];
+      if(!occ(i+1, j)) edge += 'M' + xs[i+1] + ' ' + ys[j] + 'V' + ys[j+1];
+    }
+    return { fill, edge };
+  }
   function containerMarkup(model, editable){
     let out = '';
     model.containers.forEach((c, ci) => {
       const ext = c.owner === 'external' || c.owner === 'caller';
       const cls = OWNERS[c.owner].cls + (c.dim ? ' dim' : '') + (c.impact ? ' impact' : '');
+      if(c.rects){
+        // one asset drawn as the union of several rectangles (composite flow: blocks joined at a process)
+        const u = unionShape(c.rects);
+        out += '<path class="pcont ' + cls + '" style="stroke:none" d="' + u.fill + '"></path><path class="pcont ' + cls + '" style="fill:none" d="' + u.edge + '"></path>';
+      } else
       out += '<rect class="pcont ' + cls + '" x="' + c.x1 + '" y="' + c.y1 + '" width="' + (c.x2 - c.x1) + '" height="' + (c.y2 - c.y1) + '" rx="' + (ext ? 5 : 18) + '"></rect>';
       const type = c.owner === 'caller' ? 'CALLER' : ext ? 'END APPLICATION' : OWNERS[c.owner].label.toUpperCase();
       const lab = containerLabel(c.keys);
@@ -2269,6 +2288,7 @@
     askConfirm('Remove the current flow' + (Object.keys(versionOverrides).length ? ' and its versioned copy' : '') + '?', 'Clear', () => {
       routeFilter = null; flowPromptMsg.hidden = true;
       resetChain();
+      if(flowMode === 'composite') setFlowMode('single');   // an empty canvas has nothing to branch from
       recordHistory();
     });
   });
@@ -2500,6 +2520,7 @@
       return;
     }
     if(selectedBlock === el) selectedBlock = null;
+    if(flowMode === 'composite' && !chainOrder.length) setFlowMode('single');
     updateEmptyHint();
     refreshPaletteAvailability();
     recordHistory();
@@ -2534,7 +2555,7 @@
   // Branch rows follow the main flow: their positions are re-derived from
   // their anchor connector on every render.
   // ---------------------------------------------------------------
-  const BRANCH_ROW = 200;   // vertical distance between rows
+  const BRANCH_ROW = 300;   // vertical distance between rows — room for versioned tiles (220 px) later
   // Where a branch may start. Queue ↔ process is always 1:1, so a queue is never a branch point;
   // an API or a file is shared by several callers / writers (multi-source), not fanned out.
   const BRANCH_RULES = {
@@ -2583,48 +2604,74 @@
     return allBlocks().some(b => b.dataset.tpl === 'consume-to-process' && sideKey({ block:b.dataset.id, side:'out' }, 0) === key);
   }
 
+  // Is the picked connector the open end of a row? Then a pattern added there extends that row in
+  // line, as in a single flow (blocks joined at a process stay one asset, on one row), instead of branching.
+  //   kind 'out' = the new block goes downstream of the connector, 'in' = upstream of it
+  function openEnd(bp, kind){
+    const key = bp.key;
+    const taken = kind === 'out'
+      ? branches.some(b => b.kind === 'out' && anchorKey(b.anchor) === key)
+      : branches.some(b => b.kind === 'in' && anchorKey(b.anchor) === key) || compositeCallers().some(c => anchorKey(c.anchor) === key);
+    if(taken) return null;
+    const rowsList = [{ list:chainOrder, br:null }].concat(branches.map(b => ({ list:b.blocks, br:b })));
+    for(const r of rowsList){
+      if(!r.list.length) continue;
+      if(kind === 'out' && (!r.br || r.br.kind === 'out') && sideKey({ block:r.list[r.list.length - 1].dataset.id, side:'out' }, 0) === key) return { ...r, at:'end' };
+      if(kind === 'in' && (!r.br || r.br.kind === 'in') && sideKey({ block:r.list[0].dataset.id, side:'in' }, 0) === key) return { ...r, at:'start' };
+    }
+    return null;
+  }
+
+  // Composite flow: patterns are added only at a picked connector — nothing is free to drop.
   function compositeFit(tpl){
-    if(branchPoint){
-      const r = BRANCH_RULES[branchPoint.type] || {};
-      if(r.out && tpl.entryType === branchPoint.type) return true;
-      if(r.in && tpl.exitType === branchPoint.type) return !(tpl.id === 'consume-to-process' && processHasQueue(branchPoint.key));
-      return false;
-    }
-    const br = selectedBlock && branchOf(selectedBlock);
-    if(br){
-      const t = templatesById[selectedBlock.dataset.tpl];
-      if(br.kind === 'out') return selectedBlock === br.blocks[br.blocks.length - 1] && tpl.entryType === t.exitType;
-      return selectedBlock === br.blocks[0] && tpl.exitType === t.entryType;
-    }
-    return undefined;   // nothing composite selected: the main flow's open ends apply (as in v1.9)
+    if(!branchPoint) return false;
+    const t = branchPoint.type, r = BRANCH_RULES[t] || {};
+    if(tpl.entryType === t && (r.out || openEnd(branchPoint, 'out'))) return true;
+    if(tpl.exitType === t && (r.in || openEnd(branchPoint, 'in')))
+      return !(tpl.id === 'consume-to-process' && processHasQueue(branchPoint.key));
+    return false;
   }
 
   function compositeAttach(tpl){
     const bp = branchPoint;
-    if(bp){
-      const r = BRANCH_RULES[bp.type] || {};
-      const kind = r.out && tpl.entryType === bp.type ? 'out' : 'in';
-      const rows = branches.filter(b => b.kind === kind).map(b => Math.abs(b.row));
-      const row = (rows.length ? Math.max(...rows) : 0) + 1;
-      const el = createBlock(tpl, 0, 0);            // placed by the layout
-      branches.push({ id:'br-' + (++branchCounter), kind, row: kind === 'out' ? row : -row, anchor: bp.anchor, blocks:[el] });
-      callerAsked.add(el.dataset.id);
-      selectBlock(el, true);                        // keep building on the new branch's far end
-      refreshPaletteAvailability();
+    if(!bp || !compositeFit(tpl)) return false;
+    const kind = tpl.entryType === bp.type ? 'out' : 'in';
+    const end = openEnd(bp, kind);
+    const w = SIZE_WIDTH[tpl.size] || SIZE_WIDTH.medium;
+    let el;
+    if(end && !end.br){
+      // the main flow's open end: extend it exactly as a single flow would
+      if(end.at === 'end'){
+        const an = chainOrder[chainOrder.length - 1];
+        el = createBlock(tpl, parseFloat(an.style.left) + parseFloat(an.style.width), parseFloat(an.style.top));
+        commitDock(an, 'right', el, 'left'); chainOrder.push(el);
+      } else {
+        const an = chainOrder[0];
+        el = createBlock(tpl, parseFloat(an.style.left) - w, parseFloat(an.style.top));
+        commitDock(el, 'right', an, 'left'); chainOrder.unshift(el);
+      }
+    } else if(end){
+      el = createBlock(tpl, 0, 0);                  // placed by the layout
+      if(end.at === 'end') end.br.blocks.push(el); else end.br.blocks.unshift(el);
+    } else {
+      el = createBlock(tpl, 0, 0);
+      branches.push({ id:'br-' + (++branchCounter), kind, row:0, anchor: bp.anchor, blocks:[el] });
       showToast(kind === 'out' ? 'Fan-out: a new flow now consumes the ' + CONNECTOR_LABEL[bp.type] + '.'
                                : 'Multi-source: another flow now uses the ' + CONNECTOR_LABEL[bp.type] + '.');
-      return true;
     }
-    const br = selectedBlock && branchOf(selectedBlock);
-    if(br){
-      const el = createBlock(tpl, 0, 0);
-      if(br.kind === 'out') br.blocks.push(el); else br.blocks.unshift(el);
-      callerAsked.add(el.dataset.id);
-      selectBlock(el, true);
-      refreshPaletteAvailability();
-      return true;
+    callerAsked.add(el.dataset.id);
+    deselectAll();
+    refreshPaletteAvailability();
+    // keep building: the new block's far connector becomes the picked one
+    const side = kind === 'out' ? 'out' : 'in';
+    const type = kind === 'out' ? tpl.exitType : tpl.entryType;
+    const key = sideKey({ block:el.dataset.id, side }, 0);
+    if(key && BRANCH_RULES[type] && compPos[key]){
+      branchPoint = { key, type, anchor:[{ block:el.dataset.id, side }], auto:true };
+      markBranchNodes();
+      refreshLibrary();
     }
-    return false;
+    return true;
   }
 
   // true = handled here; false = fall through to the v1.9 removal rules
@@ -2655,12 +2702,15 @@
   const near = (x, y, n) => Math.abs(x - n.x) < 0.5 && Math.abs(y - n.y) < 0.5;
   let compPos = {};          // connector key -> rendered node (last composite render)
   let callerPick = null;     // calling application whose card is open (id)
-  const BRANCH_OFF = 40;     // a fan-out row starts this far right of the shared connector, so the drop line stays clear of its tiles
-  const BRANCH_OFF_IN = 80;  // a multi-source row ends this far left of it, clear of the junction line
-  const JUNC = 52;           // multi-source links (and stacked callers) join this far left of the connector, then arrive level with it
-  const CALLER_ROOM = 60;    // extra space left of a connector that also has multi-source links, for the junction line
-  const CALLER_DX = 107;     // a calling application sits this far left of the API / file it calls
-  const CALLER_DY = [0, 70, -70, 140, -140, 210, -210];
+  const BRANCH_OFF = 60;     // a fan-out row starts this far right of the shared connector, so the drop line stays clear of its tiles
+  const BRANCH_OFF_IN = 110; // a multi-source row ends this far left of it, clear of the junction line
+  const JUNC = 60;           // multi-source links (and stacked callers) join this far left of the connector, then arrive level with it
+  const CALLER_ROOM = 70;    // extra space left of a connector that also has multi-source links, for the junction line
+  const CALLER_DX = 130;     // a calling application sits this far left of the API / file it calls
+  const ROW_GAP = 80;        // minimum clear space between two branches on one row
+  const CALLER_DY = [0, 90, -90, 180, -180, 270, -270];          // callers of a connector that starts its row
+  const CALLER_DY_BUSY = [140, -160, 230, -250, 320, -340];      // callers of a connector with a block on its left
+  let compCallerPos = {};    // caller id -> rendered position
   // Every calling application in composite flow: the main flow's (v1.9) caller plus the added ones.
   function compositeCallers(){
     const first = chainOrder[0];
@@ -2697,6 +2747,7 @@
     }
     const occupied = (lv) => rows.get(lv) || [];
     const placed = [];               // { key, row } in placement order
+    const binfo = [];                // per placed branch, for the joined-asset boundaries
     const inAt = new Set();          // connectors that take multi-source links
     branches.forEach(br => {
       const key = anchorKey(br.anchor);
@@ -2706,24 +2757,21 @@
       const p = level[key];
       // Away from the main flow. On the main flow itself, branches of the same connector
       // alternate above / below so both sides stay balanced.
-      let dir = p > 0 ? 1 : p < 0 ? -1 : 0;
-      if(dir === 0){
-        const same = placed.filter(o => o.key === key);
-        const up = same.filter(o => o.row < 0).length, down = same.filter(o => o.row > 0).length;
-        dir = up < down ? -1 : down < up ? 1 : (br.kind === 'out' ? 1 : -1);
-      }
+      // on the main flow every branch of one connector (fan-out and multi-source alike) alternates:
+      // 1st below, 2nd above, 3rd below, 4th above … — the diagram stays symmetric
+      let dir = p > 0 ? 1 : p < 0 ? -1 : (placed.filter(o => o.key === key).length % 2 === 0 ? 1 : -1);
       const dropX = br.kind === 'out' ? a.x : a.x - JUNC;
       const W = br.blocks.reduce((s, b) => s + parseFloat(b.style.width), 0);
       const firstTpl = templatesById[br.blocks[0].dataset.tpl];
       let L, R;
-      if(br.kind === 'out'){ L = a.x - 12; R = a.x + BRANCH_OFF - SEAM_X + W + TILE_D + 40; }
+      if(br.kind === 'out'){ L = a.x - 24; R = a.x + BRANCH_OFF - SEAM_X + W + TILE_D + 40; }
       else {
-        L = a.x - BRANCH_OFF_IN - SEAM_X - W - 40; R = dropX + 12;
-        if(['api', 'file'].includes(firstTpl.entryType)) L -= CALLER_DX + CALLER_ROOM + 40;   // room for calling applications
+        L = a.x - BRANCH_OFF_IN - SEAM_X - W - 40; R = dropX + 24;
+        if(callersAt[sideKey({ block:br.blocks[0].dataset.id, side:'in' }, 0)]) L -= CALLER_DX + CALLER_ROOM + 40;   // room for its calling applications
       }
-      // nearest clean row (tiles free, drop line clear); on the main flow the other side is tried
-      // too; if no clean row exists, the nearest row with free tiles on the preferred side
-      const gap = 30;
+      // nearest clean row on that side (tiles free, drop line clear); if none, the nearest row with
+      // free tiles on the same side — the side is never switched
+      const gap = ROW_GAP;
       const freeAt = (k) => occupied(k).every(o => o.R + gap < L || o.L - gap > R) &&
         drops.every(d => d.key === key || !(d.lo < k && k < d.hi) || d.x < L || d.x > R);
       const throughTo = (k, dr) => {
@@ -2735,12 +2783,22 @@
         for(let t = 1, kk = p + dr; t <= 40; t++, kk += dr) if(freeAt(kk) && (!clean || throughTo(kk, dr))) return kk;
         return null;
       };
+      // strict alternation: the preferred side wins whenever it has a clean row. Only if it has none
+      // is the other side's clean row used; if neither has one, the row whose drop line crosses the
+      // fewest other rows (preferred side first)
       let k = search(dir, true);
-      if(p === 0){
-        const other = search(-dir, true);
-        if(other !== null && (k === null || Math.abs(other) < Math.abs(k))) k = other;
+      if(k === null && p === 0) k = search(-dir, true);
+      if(k === null){
+        const crossings = (kk, dr) => { let c = 0; for(let m = p + dr; m !== kk; m += dr) if(occupied(m).some(o => o.key !== key && o.L - 6 < dropX && dropX < o.R + 6)) c++; return c; };
+        let best = null;
+        [dir].concat(p === 0 ? [-dir] : []).forEach(dr => {
+          const kk = search(dr, false);
+          if(kk === null) return;
+          const c = crossings(kk, dr);
+          if(!best || c < best.c) best = { k:kk, c };
+        });
+        k = best ? best.k : p + dir;
       }
-      if(k === null) k = search(dir, false);
       br.row = k;
       if(!rows.has(k)) rows.set(k, []);
       rows.get(k).push({ L, R, key });
@@ -2781,14 +2839,43 @@
       });
       note(m, k);
       all.containers.push(...m.containers); all.links.push(...m.links); all.nodes.push(...m.nodes);
+      binfo.push({ br, key, a, top, dropX, nb: br.kind === 'in' ? m.nodes[m.nodes.length - 1] : m.nodes[0] });
+    });
+
+    // ---- blocks joined at a process belong to one iPaaS asset: the process's container expands
+    // to take in the joined block on the other row, linked by a band along the drop / junction line
+    binfo.forEach(({ br, key, a, top, dropX, nb }) => {
+      if(a.type !== 'process') return;
+      const cK = all.containers.find(c => c.keys.includes(key));
+      if(!cK || cK.owner !== 'ipaas') return;
+      const ph = SYMBOLS.process.half + 16;
+      const y1 = top - 46, y2 = top + BLOCK_H + 12;
+      const cb = nb && nb.owner === 'ipaas' ? all.containers.find(c => c !== cK && c.keys.includes(nb.key)) : null;
+      let x1, x2;
+      if(br.kind === 'in'){
+        x2 = a.x + ph;
+        x1 = cb ? cb.x1 : (nb ? nb.x + SYMBOLS[nb.type].half + 30 : dropX - 30);
+      } else {
+        x1 = a.x - ph;
+        x2 = cb ? cb.x2 : (nb ? nb.x - SYMBOLS[nb.type].half - 30 : a.x + 60);
+      }
+      const bx1 = br.kind === 'in' ? dropX - 22 : a.x - ph, bx2 = a.x + ph;
+      const band = y1 > cK.y2 ? { x1:bx1, x2:bx2, y1:cK.y2 - 1, y2:y1 + 1 } : { x1:bx1, x2:bx2, y1:y2 - 1, y2:cK.y1 + 1 };
+      cK.rects = (cK.rects || [{ x1:cK.x1, x2:cK.x2, y1:cK.y1, y2:cK.y2 }]).concat({ x1, x2, y1, y2 }, band);
+      if(cb){ cK.keys = cK.keys.concat(cb.keys); all.containers.splice(all.containers.indexOf(cb), 1); }
     });
 
     // ---- calling applications, stacked left of the API / file they call
+    compCallerPos = {};
     Object.entries(callersAt).forEach(([k, list]) => {
       const t = pos[k];
       if(!t) return;
+      // a connector with a block on its left (a target API / folder, a seam): callers sit above / below
+      const busy = all.links.some(l => !l.pts && Math.abs(l.y1 - t.y) < 0.5 && near(l.x2, l.y2, t) && l.x1 < t.x);
+      const dys = busy ? CALLER_DY_BUSY : CALLER_DY;
       list.forEach((c, i) => {
-        const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = t.y + (CALLER_DY[i] ?? i*70);
+        const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = t.y + (dys[i] ?? (i + 1) * 90);
+        compCallerPos[c.id] = { x:cx, y:cy };
         all.nodes.push({ x:cx, y:cy, type:'app', owner:'caller', role:null, ver:null, dim:false, key:c.key, caller:true,
           skey:'xc|' + c.id, bis:[] });
         all.links.push(cy === t.y ? { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false }
@@ -2797,21 +2884,10 @@
       });
     });
 
-    // a connector touched by more than two links is shared by several blocks
-    all.nodes.forEach(n => {
-      if(!n.skey || n.caller) return;
-      const uses = all.links.filter(l => near(l.x1, l.y1, n) || near(l.x2, l.y2, n)).length;
-      if(uses > 2) n.shared = uses;
-    });
-    // an API or file nothing feeds (except calling applications) can take a calling application
+    // every API or file can take calling applications — also when other flows already use it
     compPos = pos;
     callableKeys = new Set();
-    all.nodes.forEach(n => {
-      if(!n.skey || n.caller || !['api', 'file'].includes(n.type)) return;
-      const ins = all.links.filter(l => near(l.x2, l.y2, n));
-      const fromApp = (l) => all.nodes.some(o => o.caller && near(l.x1, l.y1, o));
-      if(ins.every(fromApp)) callableKeys.add(n.skey);
-    });
+    all.nodes.forEach(n => { if(n.skey && !n.caller && ['api', 'file'].includes(n.type)) callableKeys.add(n.skey); });
     return all;
   }
 
@@ -2834,16 +2910,16 @@
     world.querySelectorAll(':scope > .comp-card').forEach(c => c.remove());
     if(flowMode !== 'composite') return;
     let at = null, head, text, opts;
-    if(branchPoint && callableKeys.has(branchPoint.key) && compPos[branchPoint.key]){
+    if(branchPoint && !branchPoint.auto && callableKeys.has(branchPoint.key) && compPos[branchPoint.key]){
       at = compPos[branchPoint.key];
       head = CONNECTOR_LABEL[branchPoint.type];
-      text = 'Drag a pattern from the library to add another flow that uses this ' + head + ' — or add an end application that calls it.';
+      text = 'Drag a matching pattern from the library to the canvas — or add an end application that ' + (head === 'File' ? 'writes to' : 'calls') + ' this ' + head + '.';
       opts = [['+ Add calling application', addCaller]];
     } else if(callerPick){
       const c = compositeCallers().find(x => x.id === callerPick);
       const k = c && anchorKey(c.anchor);
       if(k && compPos[k]){
-        at = { x:compPos[k].x - CALLER_DX, y:compPos[k].y + (CALLER_DY[(compositeCallers().filter(x => anchorKey(x.anchor) === k)).indexOf(c)] || 0) };
+        at = compCallerPos[c.id] || { x:compPos[k].x - CALLER_DX, y:compPos[k].y };
         head = 'Calling application';
         text = 'An end application that calls this ' + CONNECTOR_LABEL[compPos[k].type] + '. Name it via its container label.';
         opts = [['Remove this calling application', () => removeCaller(c.id)]];
@@ -2884,18 +2960,17 @@
   }
 
   function compositeHint(){
-    if(branchPoint){
-      const r = BRANCH_RULES[branchPoint.type];
-      endHint.hidden = false;
-      endHintText.textContent = 'Branching from the ' + CONNECTOR_LABEL[branchPoint.type] + ': ' +
-        [r.out ? 'fan-out (a new flow consumes it)' : '', r.in ? 'multi-source (another flow also uses it)' : ''].filter(Boolean).join(' or ') + '.';
+    endHint.hidden = false;
+    if(!branchPoint){
+      endHintText.textContent = 'Composite flow: click a Topic, Process, API or File on the canvas to see the patterns that fit it.';
       return;
     }
-    const br = selectedBlock && branchOf(selectedBlock);
-    if(br && endSelected){
-      endHint.hidden = false;
-      endHintText.textContent = 'Showing blocks that extend this branch at its ' + (br.kind === 'out' ? 'end (right).' : 'start (left).');
-    }
+    const t = branchPoint.type, r = BRANCH_RULES[t] || {}, L = CONNECTOR_LABEL[t];
+    const outEnd = openEnd(branchPoint, 'out'), inEnd = openEnd(branchPoint, 'in');
+    const ways = [];
+    if(outEnd) ways.push('continue the flow after it'); else if(r.out) ways.push('fan-out (a new flow consumes it)');
+    if(inEnd) ways.push('continue the flow before it'); else if(r.in) ways.push('multi-source (another flow also uses it)');
+    endHintText.textContent = 'Showing patterns for the ' + L + ': ' + ways.join(' or ') + '.';
   }
 
   world.addEventListener('click', (e) => {
@@ -3048,6 +3123,12 @@
     [...manualDeltas].forEach(k => { if(!chainOrder.some(b => b.dataset.id === k.split(':')[0])) manualDeltas.delete(k); });
     renderFlowLayer(world, flowMode === 'composite' ? compositeModel() : buildFlowModel(chainGeometry(false), false));
     if(flowMode === 'composite') markBranchNodes();
+    const mc = document.getElementById('modeComposite');
+    if(mc){
+      mc.disabled = flowMode === 'single' && !chainOrder.length;
+      mc.title = mc.disabled ? 'Add a first block to the flow — then you can branch from its connectors'
+                             : 'Fan-out and multi-source: branch from a shared connector for reuse and EDA';
+    }
     // the first block's exposed API can be clicked to add a calling application later
     if(flowMode !== 'composite' && firstId && templatesById[chainOrder[0].dataset.tpl].entryType === 'api' && !callers[firstId]){
       const n = world.querySelector('.flow-layer .node[data-skey="' + firstId + ':in"]');
@@ -3867,7 +3948,7 @@
 
   function loadFlow(f){
     resetChain();
-    if(f.blocks.length === 0) return;
+    if(f.blocks.length === 0){ if(flowMode === 'composite') setFlowMode('single'); return; }
     const order = f.buildOrder || f.blocks.map((b, i) => i);
     // first-built block's position, derived from the leftmost block's origin
     let x = f.origin.x;
@@ -3906,6 +3987,7 @@
     });
     (f.marks || []).forEach(m => manualDeltas.add(chainOrder[m.block].dataset.id + ':' + m.at));
     if((f.branches && f.branches.length) || (f.callers && f.callers.length)) loadBranches(f);
+    if(flowMode === 'composite' && !chainOrder.length) setFlowMode('single');
     deselectAll();
     updateEmptyHint();
     refreshPaletteAvailability();
