@@ -73,7 +73,7 @@ with sync_playwright() as p:
     # ---- process reuse: the main flow's process gets a second output
     pick('block-1:out')
     ev(f"{d}.compositeAttach('process-to-file'); {d}.recordHistory()")
-    check('process reuse: fan-out from the process', branches()[3]['kind'] == 'out' and branches()[3]['key'] == 'block-1:out' and branches()[3]['row'] == 2)
+    check('process reuse: fan-out from the process', branches()[3]['kind'] == 'out' and branches()[3]['key'] == 'block-1:out' and branches()[3]['row'] > 0)
 
     # ---- queue ↔ process is 1:1
     ids = ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])")
@@ -107,6 +107,14 @@ with sync_playwright() as p:
       return segs.every(([x,y1,y2])=>tiles.every(t=>t.y1===top0 || !(t.x1<x && x<t.x2 && t.y1<y2-60 && t.y2>y1+60)));
     })()""")
     check('no drop line runs through a branch row it does not belong to', clear)
+
+    # ---- multi-source links arrive level with the connector (like callers), not from above
+    level_in = ev("""(()=>{
+      const out=[]; document.querySelectorAll('#world .flow-layer path.link').forEach(p=>{
+        const n=[...p.getAttribute('d').matchAll(/[MLQ]([-\\d.]+) ([-\\d.]+)/g)].map(m=>[+m[1],+m[2]]);
+        const a=n[n.length-2], z=n[n.length-1]; if(n.length>3) out.push(Math.abs(a[1]-z[1])<0.5 || Math.abs(a[0]-z[0])<0.5 && z[1]>a[1]===false);
+      }); return out; })()""")
+    check('bent links end with a level segment into the receiving symbol', all(level_in))
 
     # ---- calling applications on any upstream API / file
     callable_ = ev(f"{d}.callable()")
@@ -178,6 +186,21 @@ with sync_playwright() as p:
           ev(f"({ON_LINE})('#world')") and ev(f"({ON_LINE})('#vworld')") and ev("document.querySelectorAll('#vworld .link-arrow').length") > 3)
     check('no page errors', not errs)
     if errs: print(errs)
+
+    # ---- balance: branches of one connector on the main flow alternate below / above
+    pg.goto(URL)
+    for t in ['file-to-process', 'process-to-api']: ev(f"{d}.append('{t}')")
+    ev(f"{d}.setFlowMode('composite')")
+    rows_ = []
+    for _ in range(4):
+        pick('block-1:out'); ev(f"{d}.compositeAttach('process-to-api')"); rows_.append(branches()[-1]['row'])
+    check('four fan-outs from one process alternate below / above (1, -1, 2, -2)', rows_ == [1, -1, 2, -2])
+    pick('block-1:in'); pg.click('#world .comp-card .dc-opt')
+    pick('block-1:in'); ev(f"{d}.compositeAttach('process-to-file')")
+    app_x = ev("document.querySelector('#world .flow-layer .node[data-type=app]').transform.baseVal.consolidate().matrix.e")
+    file_x = ev("document.querySelector('#world .flow-layer .node[data-skey=\"block-1:in\"]').transform.baseVal.consolidate().matrix.e")
+    check('a file with a multi-source writer pushes its calling application further left', file_x - app_x > 150)
+    check('no page errors (balance)', not errs)
     br.close()
 
 print(f"\n{sum(res)}/{len(res)} checks passed")

@@ -2655,7 +2655,10 @@
   const near = (x, y, n) => Math.abs(x - n.x) < 0.5 && Math.abs(y - n.y) < 0.5;
   let compPos = {};          // connector key -> rendered node (last composite render)
   let callerPick = null;     // calling application whose card is open (id)
-  const BRANCH_OFF = 40;     // a branch row starts / ends this far beside the shared connector, so the drop line stays clear of its tiles
+  const BRANCH_OFF = 40;     // a fan-out row starts this far right of the shared connector, so the drop line stays clear of its tiles
+  const BRANCH_OFF_IN = 80;  // a multi-source row ends this far left of it, clear of the junction line
+  const JUNC = 52;           // multi-source links (and stacked callers) join this far left of the connector, then arrive level with it
+  const CALLER_ROOM = 60;    // extra space left of a connector that also has multi-source links, for the junction line
   const CALLER_DX = 107;     // a calling application sits this far left of the API / file it calls
   const CALLER_DY = [0, 70, -70, 140, -140, 210, -210];
   // Every calling application in composite flow: the main flow's (v1.9) caller plus the added ones.
@@ -2689,46 +2692,68 @@
     };
     const tspan = span(trunk);
     if(tspan){
-      if(chainOrder[0] && callersAt[anchorKey([{ block:chainOrder[0].dataset.id, side:'in' }])]) tspan.L -= CALLER_DX + 40;
+      if(chainOrder[0] && callersAt[anchorKey([{ block:chainOrder[0].dataset.id, side:'in' }])]) tspan.L -= CALLER_DX + CALLER_ROOM + 40;
       rows.set(0, [{ ...tspan, key:null }]);
     }
     const occupied = (lv) => rows.get(lv) || [];
+    const placed = [];               // { key, row } in placement order
+    const inAt = new Set();          // connectors that take multi-source links
     branches.forEach(br => {
       const key = anchorKey(br.anchor);
       const a = key && pos[key];
       br.blocks.forEach(b => { b.style.display = a ? '' : 'none'; });
       if(!a){ br.row = 0; return; }
       const p = level[key];
-      const dir = p > 0 ? 1 : p < 0 ? -1 : (br.kind === 'out' ? 1 : -1);
+      // Away from the main flow. On the main flow itself, branches of the same connector
+      // alternate above / below so both sides stay balanced.
+      let dir = p > 0 ? 1 : p < 0 ? -1 : 0;
+      if(dir === 0){
+        const same = placed.filter(o => o.key === key);
+        const up = same.filter(o => o.row < 0).length, down = same.filter(o => o.row > 0).length;
+        dir = up < down ? -1 : down < up ? 1 : (br.kind === 'out' ? 1 : -1);
+      }
+      const dropX = br.kind === 'out' ? a.x : a.x - JUNC;
       const W = br.blocks.reduce((s, b) => s + parseFloat(b.style.width), 0);
       const firstTpl = templatesById[br.blocks[0].dataset.tpl];
       let L, R;
       if(br.kind === 'out'){ L = a.x - 12; R = a.x + BRANCH_OFF - SEAM_X + W + TILE_D + 40; }
       else {
-        L = a.x - BRANCH_OFF - SEAM_X - W - 40; R = a.x + 12;
-        if(['api', 'file'].includes(firstTpl.entryType)) L -= CALLER_DX + 40;   // room for calling applications
+        L = a.x - BRANCH_OFF_IN - SEAM_X - W - 40; R = dropX + 12;
+        if(['api', 'file'].includes(firstTpl.entryType)) L -= CALLER_DX + CALLER_ROOM + 40;   // room for calling applications
       }
-      let k = p + dir;
-      for(let tries = 0; tries < 40; tries++, k += dir){
-        const gap = 30;
-        const free = occupied(k).every(o => o.R + gap < L || o.L - gap > R) &&
-          drops.every(d => d.key === key || !(d.lo < k && k < d.hi) || d.x < L || d.x > R);
-        let through = true;
-        for(let m = p + dir; m !== k; m += dir)
-          if(occupied(m).some(o => o.key !== key && o.L - 6 < a.x && a.x < o.R + 6)){ through = false; break; }
-        if(free && through) break;
+      // nearest clean row (tiles free, drop line clear); on the main flow the other side is tried
+      // too; if no clean row exists, the nearest row with free tiles on the preferred side
+      const gap = 30;
+      const freeAt = (k) => occupied(k).every(o => o.R + gap < L || o.L - gap > R) &&
+        drops.every(d => d.key === key || !(d.lo < k && k < d.hi) || d.x < L || d.x > R);
+      const throughTo = (k, dr) => {
+        for(let m = p + dr; m !== k; m += dr)
+          if(occupied(m).some(o => o.key !== key && o.L - 6 < dropX && dropX < o.R + 6)) return false;
+        return true;
+      };
+      const search = (dr, clean) => {
+        for(let t = 1, kk = p + dr; t <= 40; t++, kk += dr) if(freeAt(kk) && (!clean || throughTo(kk, dr))) return kk;
+        return null;
+      };
+      let k = search(dir, true);
+      if(p === 0){
+        const other = search(-dir, true);
+        if(other !== null && (k === null || Math.abs(other) < Math.abs(k))) k = other;
       }
+      if(k === null) k = search(dir, false);
       br.row = k;
       if(!rows.has(k)) rows.set(k, []);
       rows.get(k).push({ L, R, key });
-      drops.push({ x:a.x, lo:Math.min(p, k), hi:Math.max(p, k), key });
+      drops.push({ x:dropX, lo:Math.min(p, k), hi:Math.max(p, k), key });
+      placed.push({ key, row:k });
+      if(br.kind === 'in') inAt.add(key);
 
       const top = top0 + k * BRANCH_ROW, rowY = top + BLOCK_H/2;
       if(br.kind === 'out'){
         let x = a.x + BRANCH_OFF - SEAM_X;
         br.blocks.forEach(b => { b.style.left = x + 'px'; b.style.top = top + 'px'; x += parseFloat(b.style.width); });
       } else {
-        let x = a.x - BRANCH_OFF - SEAM_X;
+        let x = a.x - BRANCH_OFF_IN - SEAM_X;
         for(let i = br.blocks.length - 1; i >= 0; i--){
           const b = br.blocks[i]; x -= parseFloat(b.style.width);
           b.style.left = x + 'px'; b.style.top = top + 'px';
@@ -2743,7 +2768,9 @@
       m.nodes = m.nodes.filter(n => n.key !== hk);
       if(h) m.links.forEach(l => {
         if(near(l.x1, l.y1, h)){ l.pts = [[a.x, a.y], [a.x, rowY], [l.x2, l.y2]]; l.x1 = a.x; l.y1 = a.y; }
-        if(near(l.x2, l.y2, h)){ l.pts = [[l.x1, l.y1], [a.x, rowY], [a.x, a.y]]; l.x2 = a.x; l.y2 = a.y; }
+        // multi-source: along the row to the junction line, up / down to the connector's level,
+        // then into it from the left — the same way the calling applications arrive
+        if(near(l.x2, l.y2, h)){ l.pts = [[l.x1, l.y1], [dropX, rowY], [dropX, a.y], [a.x, a.y]]; l.x2 = a.x; l.y2 = a.y; }
       });
       m.containers = m.containers.filter(c => {
         if(!c.keys.includes(hk)) return true;
@@ -2761,11 +2788,11 @@
       const t = pos[k];
       if(!t) return;
       list.forEach((c, i) => {
-        const cx = t.x - CALLER_DX, cy = t.y + (CALLER_DY[i] ?? i*70);
+        const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = t.y + (CALLER_DY[i] ?? i*70);
         all.nodes.push({ x:cx, y:cy, type:'app', owner:'caller', role:null, ver:null, dim:false, key:c.key, caller:true,
           skey:'xc|' + c.id, bis:[] });
         all.links.push(cy === t.y ? { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false }
-          : { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false, pts:[[cx, cy], [t.x - 52, cy], [t.x - 52, t.y], [t.x, t.y]] });
+          : { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false, pts:[[cx, cy], [t.x - JUNC, cy], [t.x - JUNC, t.y], [t.x, t.y]] });
         all.containers.push({ x1:cx - 38, x2:cx + 38, y1:cy - 42, y2:cy + 24, owner:'caller', keys:[c.key], dim:false });
       });
     });

@@ -311,3 +311,11 @@ one logical change each with a real diff behind them.
   application". Several callers per API stack vertically; click a caller to remove it.
   Saved in export / undo.
 - Tests: `tests/test_composite.py` now 51 checks; the 265 v1.9 checks still pass.
+
+### v2.0 trial — round 3
+- Multi-source links no longer drop onto a connector from above: they run along their row to a
+  junction line just left of the connector, then arrive level with it — the same point as the
+  calling applications. Callers move further left to make room for that junction line.
+- Branches of one connector on the main flow alternate below / above (1st below, 2nd above, …
+  multi-source starts above) so both sides stay balanced; a row is searched on both sides.
+- Tests: `tests/test_composite.py` now 55 checks; the 265 v1.9 checks still pass.
