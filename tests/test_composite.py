@@ -88,7 +88,58 @@ with sync_playwright() as p:
     tops = ev("[...document.querySelectorAll('#world .cblock')].map(b=>parseFloat(b.style.top))")
     check('rows: main flow, two rows below, two above', sorted(set(tops)) == sorted({tops[0] - 400, tops[0] - 200, tops[0], tops[0] + 200, tops[0] + 400}))
     check('no page errors so far', not errs)
+
+    # ---- links: straight segments with bends, and every arrowhead sits on its line
+    check('branch links are drawn as straight segments with bends (no free curves)',
+          ev("[...document.querySelectorAll('#world .flow-layer path.link')].every(p => !/C/.test(p.getAttribute('d')))"))
+    ON_LINE = """(sel) => [...document.querySelectorAll(sel + ' .flow-layer .link-arrow')].every(a => {
+        const m = /^M([-\\d.]+) ([-\\d.]+)/.exec(a.getAttribute('d')); const pt = new DOMPoint(+m[1], +m[2]);
+        return [...a.ownerSVGElement.querySelectorAll('.link')].some(l => l.isPointInStroke(pt)); })"""
+    check('every arrowhead tip lies on a link (composite)', ev(f"({ON_LINE})('#world')"))
+
+    # ---- rows are packed so drop lines don't run through another branch's tiles
+    clear = ev("""(()=>{
+      const tiles=[...document.querySelectorAll('#world .cblock')].map(b=>({x1:parseFloat(b.style.left),x2:parseFloat(b.style.left)+parseFloat(b.style.width)+20,y1:parseFloat(b.style.top),y2:parseFloat(b.style.top)+120,id:b.dataset.id}));
+      const segs=[];
+      document.querySelectorAll('#world .flow-layer path.link').forEach(p=>{ const nums=[...p.getAttribute('d').matchAll(/[ML]([-\\d.]+) ([-\\d.]+)/g)].map(m=>[+m[1],+m[2]]); for(let i=1;i<nums.length;i++) if(Math.abs(nums[i][0]-nums[i-1][0])<0.5 && Math.abs(nums[i][1]-nums[i-1][1])>150) segs.push([nums[i][0],Math.min(nums[i][1],nums[i-1][1]),Math.max(nums[i][1],nums[i-1][1])]); });
+      // a long vertical segment may cross its own start row (main flow) but no other row's tiles
+      const top0=parseFloat(document.querySelector('#world .cblock').style.top);
+      return segs.every(([x,y1,y2])=>tiles.every(t=>t.y1===top0 || !(t.x1<x && x<t.x2 && t.y1<y2-60 && t.y2>y1+60)));
+    })()""")
+    check('no drop line runs through a branch row it does not belong to', clear)
+
+    # ---- calling applications on any upstream API / file
+    callable_ = ev(f"{d}.callable()")
+    check('the exposed API at the start of the main flow can take a calling application', 'block-1:in' in callable_)
+    apub = [i for i, t in ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])") if t == 'api-to-publish'][0]
+    check("a branch starting with an API can take one too", f'{apub}:in' in callable_)
+    check('a shared target API (fed by processes) cannot', 'block-3:out' not in callable_)
+    pick('block-1:in')
+    check('picking that API shows the card with "Add calling application"', pg.is_visible('#world .comp-card') and 'Add calling application' in pg.inner_text('#world .comp-card'))
+    pg.click('#world .comp-card .dc-opt')
+    pick('block-1:in'); pg.click('#world .comp-card .dc-opt')
+    pick(f'{apub}:in'); pg.click('#world .comp-card .dc-opt')
+    cl = ev(f"{d}.callersList()")
+    check('three calling applications: two on the main API, one on the branch API',
+          len(cl) == 3 and sum(c['key'] == 'block-1:in' for c in cl) == 2 and sum(c['key'] == f'{apub}:in' for c in cl) == 1)
+    ys = ev("[...document.querySelectorAll('#world .flow-layer .node[data-type=app]')].map(n=>n.transform.baseVal.consolidate().matrix.f)")
+    check('two callers of the same API are stacked, not on top of each other', len(set(round(y) for y in ys)) == 3)
+    check('the main API is now shared ×3', any('×3' in t for t in ev("[...document.querySelectorAll('#world .sbadge text')].map(t=>t.textContent)")))
+    check('arrowheads still on their lines', ev(f"({ON_LINE})('#world')"))
     if SHOT: pg.screenshot(path=SHOT)
+    first_app = ev("document.querySelector('#world .flow-layer .node[data-type=app]').dataset.skey")
+    pg.locator(f'#world .flow-layer .node[data-skey="{first_app}"]').click(force=True)
+    check('clicking a calling application offers to remove it', 'Remove this calling application' in pg.inner_text('#world .comp-card'))
+    pg.click('#world .comp-card .dc-opt')
+    check('…and removes it', len(ev(f"{d}.callersList()")) == 2)
+    rt = ev(f"{d}.serializeFlow()")
+    check('added calling applications are saved', len(rt.get('callers', [])) == 2 and ev(f"{d}.validateFlow({d}.serializeFlow())") is None)
+    ev(f"{d}.loadFlow({d}.serializeFlow())")
+    check('…and come back on load', len(ev(f"{d}.callersList()")) == 2)
+    ev(f"{d}.undo()")
+    check('undo brings the removed caller back', len(ev(f"{d}.callersList()")) == 3)
+    ev(f"{d}.removeCaller(...[{d}.callersList()[0].id])"); ev(f"{d}.removeCaller({d}.callersList()[0].id)"); ev(f"{d}.removeCaller({d}.callersList()[0].id)")
+    check('callers removed again', len(ev(f"{d}.callersList()")) == 0)
 
     # ---- switching back is blocked while branches exist
     pg.click('#modeSingle')
@@ -96,6 +147,7 @@ with sync_playwright() as p:
 
     # ---- removal rules
     n_before = len(branches())
+    ids = ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])")
     middle = [i for i, t in ids if t == 'consume-to-process'][0]
     ev(f"{d}.removeChainBlock(document.querySelector('[data-id=\"{middle}\"]'))")
     check('a branch block that is not the far end is not removed', len(ev("document.querySelectorAll('#world .cblock')")) == len(ids))
@@ -120,6 +172,10 @@ with sync_playwright() as p:
     pg.click('#modeSingle')
     check('with no branches, switching back to Single flow works', ev(f"{d}.flowMode()") == 'single')
     check('single flow is identical to before composite mode', ev(f"JSON.stringify({d}.serializeFlow())") == single_snapshot)
+    ev(f"{d}.dropVersion('a2p-contract-parallel', 10, 10)"); pg.wait_for_timeout(150)
+    pg.click('#tabVersioned'); pg.wait_for_timeout(150)
+    check('single flow + versioned copy: every arrowhead tip lies on its (curved) link',
+          ev(f"({ON_LINE})('#world')") and ev(f"({ON_LINE})('#vworld')") and ev("document.querySelectorAll('#vworld .link-arrow').length") > 3)
     check('no page errors', not errs)
     if errs: print(errs)
     br.close()

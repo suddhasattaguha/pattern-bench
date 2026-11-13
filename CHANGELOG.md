@@ -295,3 +295,19 @@ one logical change each with a real diff behind them.
   serialises exactly as in v1.9.
 - Versioning (the versioned copy) still covers the main flow only.
 - Tests: `tests/test_composite.py` (33 checks); the 265 v1.9 checks still pass.
+
+### v2.0 trial — round 2 (Suddha's first feedback)
+- Composite links are straight segments with rounded bends: a drop line from the shared
+  connector to the branch row, then along the row. Branch rows start / end 40 px beside
+  the shared connector so the drop line stays clear of their tiles.
+- Rows are re-packed on every change: each branch takes the nearest free row away from the
+  main flow where its tiles don't overlap another branch and its drop line runs through no
+  other row's tiles — existing branches move outward as needed.
+- Arrowheads always sit on their line: on a curve (versioned lanes, single flow too) the tip
+  is placed on the curve and turned along it; on straight / bent links it follows the last
+  segment (also from above / below).
+- Calling applications in composite flow: pick any API or file that nothing feeds (the main
+  flow's exposed API, or the upstream start of a branch) and choose "+ Add calling
+  application". Several callers per API stack vertically; click a caller to remove it.
+  Saved in export / undo.
+- Tests: `tests/test_composite.py` now 51 checks; the 265 v1.9 checks still pass.

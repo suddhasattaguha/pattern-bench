@@ -551,6 +551,7 @@
   /* Composite flow: connectors you can branch from are clickable */
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable{ pointer-events:all; cursor:pointer; }
   .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable:hover{ filter:drop-shadow(0 0 1.5px var(--accent-teal)) drop-shadow(0 0 5px var(--accent-teal)); }
+  .canvas-wrap.composite:not(.versioning) #world .flow-layer .node[data-type="app"][data-skey]{ pointer-events:all; cursor:pointer; }
   .flow-layer .node.branch-point{ filter:drop-shadow(0 0 1.5px var(--accent-amber)) drop-shadow(0 0 6px var(--accent-amber)); }
   .flow-layer .sbadge rect{ fill:var(--panel); stroke:var(--accent-teal); stroke-width:1.5; }
   .flow-layer .sbadge text{ font-family:var(--font-mono); font-size:10.5px; font-weight:700; fill:var(--accent-teal); }
@@ -838,6 +839,11 @@
   let branches = [];
   let branchPoint = null;           // connector picked to branch from: { key, type, anchor }
   let branchCounter = 0;
+  // Calling applications added in composite flow, on any upstream API or file:
+  //   { id, key ('xc-N:caller', also the container-label key), anchor:[{ block, side }...] }
+  let extraCallers = [];
+  let xcCounter = 0;
+  let callableKeys = new Set();     // connectors that can take a calling application (rendered each time)
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
@@ -863,6 +869,8 @@
     queue:   { half:34, edge:false },
     app:     { half:22, edge:true }
   };
+  // half-heights, for arrowheads that arrive from above or below (composite flow)
+  const SYMBOL_VHALF = { api:16, file:19, process:20, topic:20, queue:14, app:16 };
 
   // All symbols are drawn centred on (0,0); colours come from CSS classes.
   function symbolMarkup(type){
@@ -1052,20 +1060,57 @@
   function flowMarkup(model){
     let out = '';
     let arrows = '';
+    // An arrowhead whose tip is at (x, y), pointing along (dx, dy) — always on the line itself.
+    const arrowPath = (x, y, dx, dy) => {
+      const len = Math.hypot(dx, dy) || 1, ux = dx/len, uy = dy/len, bx = x - ux*11, by = y - uy*11;
+      const r = (v) => Math.round(v*100)/100;
+      return 'M' + r(x) + ' ' + r(y) + 'L' + r(bx - uy*6) + ' ' + r(by + ux*6) + 'L' + r(bx + uy*6) + ' ' + r(by - ux*6) + 'Z';
+    };
     model.links.forEach(l => {
       const cls = 'link' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '');
+      const acls = 'link-arrow' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '');
+      const to = model.nodes.find(n => Math.abs(n.x - l.x2) < 0.5 && Math.abs(n.y - l.y2) < 0.5);
+      if(l.pts){
+        // straight segments with rounded bends (composite flow)
+        const p = l.pts;
+        let d = 'M' + p[0][0] + ' ' + p[0][1];
+        for(let i = 1; i < p.length; i++){
+          if(i < p.length - 1){
+            const [ax, ay] = p[i-1], [cx, cy] = p[i], [ex, ey] = p[i+1];
+            const r1 = Math.min(10, Math.hypot(cx-ax, cy-ay)/2), r2 = Math.min(10, Math.hypot(ex-cx, ey-cy)/2);
+            const s = (a, b, r) => { const L = Math.hypot(b[0]-a[0], b[1]-a[1]) || 1; return [b[0] - (b[0]-a[0])/L*r, b[1] - (b[1]-a[1])/L*r]; };
+            const q1 = s([ax, ay], [cx, cy], r1), q2 = s([ex, ey], [cx, cy], r2);
+            d += 'L' + q1[0] + ' ' + q1[1] + 'Q' + cx + ' ' + cy + ' ' + q2[0] + ' ' + q2[1];
+          } else d += 'L' + p[i][0] + ' ' + p[i][1];
+        }
+        out += '<path class="' + cls + '" d="' + d + '"></path>';
+        // arrowhead on the last segment, right before the receiving symbol
+        const [ax, ay] = p[p.length - 2], [zx, zy] = p[p.length - 1];
+        const dx = zx - ax, dy = zy - ay, horiz = Math.abs(dx) >= Math.abs(dy);
+        const gap = (to ? (horiz ? SYMBOLS[to.type].half : (SYMBOL_VHALF[to.type] || 20)) : 20) + 3;
+        const seg = Math.hypot(dx, dy);
+        if(seg - gap > 12) arrows += '<path class="' + acls + '" d="' + arrowPath(zx - dx/seg*gap, zy - dy/seg*gap, dx, dy) + '"></path>';
+        return;
+      }
+      const half = to ? SYMBOLS[to.type].half : 20;
+      const tx = l.x2 - half - 3;
       if(l.y1 === l.y2){
         out += '<line class="' + cls + '" x1="' + l.x1 + '" y1="' + l.y1 + '" x2="' + l.x2 + '" y2="' + l.y2 + '"></line>';
+        if(tx - 12 > l.x1) arrows += '<path class="' + acls + '" d="' + arrowPath(tx, l.y2, 1, 0) + '"></path>';
       } else {
         const mx = (l.x1 + l.x2)/2;
         out += '<path class="' + cls + '" d="M' + l.x1 + ' ' + l.y1 + 'C' + mx + ' ' + l.y1 + ' ' + mx + ' ' + l.y2 + ' ' + l.x2 + ' ' + l.y2 + '"></path>';
-      }
-      // a clear arrowhead right before the receiving symbol (links always end horizontally)
-      const to = model.nodes.find(n => Math.abs(n.x - l.x2) < 0.5 && Math.abs(n.y - l.y2) < 0.5);
-      const half = to ? SYMBOLS[to.type].half : 20;
-      const tx = l.x2 - half - 3;
-      if(tx - 12 > l.x1 + (to ? 0 : 0)){
-        arrows += '<path class="link-arrow' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '') + '" d="M' + tx + ' ' + l.y2 + 'L' + (tx-11) + ' ' + (l.y2-6) + 'L' + (tx-11) + ' ' + (l.y2+6) + 'Z"></path>';
+        // a curve isn't level just before its end: find the point on the curve where the
+        // tip goes and turn the arrowhead along the curve's direction there
+        if(tx - 12 > l.x1){
+          const bx = (t) => { const u = 1 - t; return u*u*u*l.x1 + 3*u*u*t*mx + 3*u*t*t*mx + t*t*t*l.x2; };
+          let lo = 0, hi = 1;
+          for(let k = 0; k < 40; k++){ const m = (lo + hi)/2; if(bx(m) < tx) lo = m; else hi = m; }
+          const t = (lo + hi)/2, u = 1 - t;
+          const y = l.y1 + (l.y2 - l.y1)*t*t*(3 - 2*t);
+          const dx = 3*u*u*(mx - l.x1) + 3*t*t*(l.x2 - mx), dy = (l.y2 - l.y1)*6*t*u;
+          arrows += '<path class="' + acls + '" d="' + arrowPath(tx, y, dx, dy) + '"></path>';
+        }
       }
     });
     out += arrows;
@@ -2240,6 +2285,7 @@
     vworld.querySelectorAll('.cblock.selected').forEach(b => b.classList.remove('selected'));
     selectedBlock = null;
     selectedCopy = null;
+    if(callerPick){ callerPick = null; renderCompositeCard(); }
     if(branchPoint){ branchPoint = null; endSelected = false; refreshLibrary(); markBranchNodes(); }
     if(endSelected){ endSelected = false; refreshLibrary(); }
   }
@@ -2465,6 +2511,8 @@
     branches.forEach(br => br.blocks.forEach(b => b.remove()));
     branches = [];
     branchPoint = null;
+    extraCallers = [];
+    callerPick = null;
     versionOverrides = {};
     containerLabels = {};
     callers = {};
@@ -2585,6 +2633,9 @@
     if(branches.some(b => b !== br && b.anchor.every(a => a.block === id))){
       showToast('Remove the branches that start on this block first.', true); return true;
     }
+    if(extraCallers.some(c => c.anchor.every(a => a.block === id))){
+      showToast('Remove the calling applications on this block first.', true); return true;
+    }
     if(!br){
       if(chainOrder.length === 1 && branches.length){ showToast('Remove the branches first.', true); return true; }
       return false;
@@ -2602,25 +2653,82 @@
   }
 
   const near = (x, y, n) => Math.abs(x - n.x) < 0.5 && Math.abs(y - n.y) < 0.5;
+  let compPos = {};          // connector key -> rendered node (last composite render)
+  let callerPick = null;     // calling application whose card is open (id)
+  const BRANCH_OFF = 40;     // a branch row starts / ends this far beside the shared connector, so the drop line stays clear of its tiles
+  const CALLER_DX = 107;     // a calling application sits this far left of the API / file it calls
+  const CALLER_DY = [0, 70, -70, 140, -140, 210, -210];
+  // Every calling application in composite flow: the main flow's (v1.9) caller plus the added ones.
+  function compositeCallers(){
+    const first = chainOrder[0];
+    const list = [];
+    if(first && callers[first.dataset.id]) list.push({ id:'main', key:first.dataset.id + ':caller', anchor:[{ block:first.dataset.id, side:'in' }] });
+    return list.concat(extraCallers);
+  }
+
   function compositeModel(){
-    const trunk = buildFlowModel(chainGeometry(false), false);
+    const geo0 = chainGeometry(false);
+    if(geo0.length) geo0[0].caller = false;          // composite draws every caller the same way (below)
+    const trunk = buildFlowModel(geo0, false);
     const all = { containers:trunk.containers.slice(), links:trunk.links.slice(), nodes:trunk.nodes.slice() };
-    const pos = {};
-    const note = (m) => m.nodes.forEach(n => { if(n.skey) pos[n.skey] = n; });
-    note(trunk);
+    const pos = {}, level = {};
+    const note = (m, lv) => m.nodes.forEach(n => { if(n.skey){ pos[n.skey] = n; level[n.skey] = lv; } });
+    note(trunk, 0);
     const top0 = chainOrder.length ? parseFloat(chainOrder[0].style.top) : 0;
+    const cl = compositeCallers();
+    const callersAt = {};
+    cl.forEach(c => { const k = anchorKey(c.anchor); if(k) (callersAt[k] = callersAt[k] || []).push(c); });
+
+    // ---- row packing: each branch takes the nearest free row away from the main flow, where
+    // its tiles don't overlap another branch and its drop line crosses no other row's tiles
+    const rows = new Map();          // level -> [{ L, R, key }]
+    const drops = [];                // { x, lo, hi, key } vertical drop lines between levels lo..hi
+    const span = (m, lv) => {
+      const xs = m.nodes.map(n => n.x);
+      return xs.length ? { L:Math.min(...xs) - 60, R:Math.max(...xs) + 60 } : null;
+    };
+    const tspan = span(trunk);
+    if(tspan){
+      if(chainOrder[0] && callersAt[anchorKey([{ block:chainOrder[0].dataset.id, side:'in' }])]) tspan.L -= CALLER_DX + 40;
+      rows.set(0, [{ ...tspan, key:null }]);
+    }
+    const occupied = (lv) => rows.get(lv) || [];
     branches.forEach(br => {
       const key = anchorKey(br.anchor);
       const a = key && pos[key];
       br.blocks.forEach(b => { b.style.display = a ? '' : 'none'; });
-      if(!a) return;
-      const top = top0 + br.row * BRANCH_ROW;
-      let x = a.x - SEAM_X;
+      if(!a){ br.row = 0; return; }
+      const p = level[key];
+      const dir = p > 0 ? 1 : p < 0 ? -1 : (br.kind === 'out' ? 1 : -1);
+      const W = br.blocks.reduce((s, b) => s + parseFloat(b.style.width), 0);
+      const firstTpl = templatesById[br.blocks[0].dataset.tpl];
+      let L, R;
+      if(br.kind === 'out'){ L = a.x - 12; R = a.x + BRANCH_OFF - SEAM_X + W + TILE_D + 40; }
+      else {
+        L = a.x - BRANCH_OFF - SEAM_X - W - 40; R = a.x + 12;
+        if(['api', 'file'].includes(firstTpl.entryType)) L -= CALLER_DX + 40;   // room for calling applications
+      }
+      let k = p + dir;
+      for(let tries = 0; tries < 40; tries++, k += dir){
+        const gap = 30;
+        const free = occupied(k).every(o => o.R + gap < L || o.L - gap > R) &&
+          drops.every(d => d.key === key || !(d.lo < k && k < d.hi) || d.x < L || d.x > R);
+        let through = true;
+        for(let m = p + dir; m !== k; m += dir)
+          if(occupied(m).some(o => o.key !== key && o.L - 6 < a.x && a.x < o.R + 6)){ through = false; break; }
+        if(free && through) break;
+      }
+      br.row = k;
+      if(!rows.has(k)) rows.set(k, []);
+      rows.get(k).push({ L, R, key });
+      drops.push({ x:a.x, lo:Math.min(p, k), hi:Math.max(p, k), key });
+
+      const top = top0 + k * BRANCH_ROW, rowY = top + BLOCK_H/2;
       if(br.kind === 'out'){
-        // the first block's entry sits under the shared connector; the row grows to the right
+        let x = a.x + BRANCH_OFF - SEAM_X;
         br.blocks.forEach(b => { b.style.left = x + 'px'; b.style.top = top + 'px'; x += parseFloat(b.style.width); });
       } else {
-        // the last block's exit sits under the shared connector; the row grows to the left
+        let x = a.x - BRANCH_OFF - SEAM_X;
         for(let i = br.blocks.length - 1; i >= 0; i--){
           const b = br.blocks[i]; x -= parseFloat(b.style.width);
           b.style.left = x + 'px'; b.style.top = top + 'px';
@@ -2628,29 +2736,54 @@
       }
       const geo = br.blocks.map(b => ({ id:b.dataset.id, left:parseFloat(b.style.left), top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:null, caller:false }));
       const m = buildFlowModel(geo, false);
-      // the shared connector is drawn once, on its own row: re-route the branch's links to it
+      // The shared connector is drawn once, on its own row. The branch's link to it becomes
+      // straight segments: a drop line from the connector to the row, then along the row.
       const hk = br.kind === 'out' ? br.blocks[0].dataset.id + ':in' : br.blocks[br.blocks.length - 1].dataset.id + ':out';
       const h = m.nodes.find(n => n.key === hk);
       m.nodes = m.nodes.filter(n => n.key !== hk);
       if(h) m.links.forEach(l => {
-        if(near(l.x1, l.y1, h)){ l.x1 = a.x; l.y1 = a.y; }
-        if(near(l.x2, l.y2, h)){ l.x2 = a.x; l.y2 = a.y; }
+        if(near(l.x1, l.y1, h)){ l.pts = [[a.x, a.y], [a.x, rowY], [l.x2, l.y2]]; l.x1 = a.x; l.y1 = a.y; }
+        if(near(l.x2, l.y2, h)){ l.pts = [[l.x1, l.y1], [a.x, rowY], [a.x, a.y]]; l.x2 = a.x; l.y2 = a.y; }
       });
       m.containers = m.containers.filter(c => {
         if(!c.keys.includes(hk)) return true;
-        c.keys = c.keys.filter(k => k !== hk);
+        c.keys = c.keys.filter(kk => kk !== hk);
         if(!c.keys.length || !h) return false;
         if(br.kind === 'out') c.x1 = h.x + 24; else c.x2 = h.x - 24;
         return true;
       });
-      note(m);
+      note(m, k);
       all.containers.push(...m.containers); all.links.push(...m.links); all.nodes.push(...m.nodes);
     });
+
+    // ---- calling applications, stacked left of the API / file they call
+    Object.entries(callersAt).forEach(([k, list]) => {
+      const t = pos[k];
+      if(!t) return;
+      list.forEach((c, i) => {
+        const cx = t.x - CALLER_DX, cy = t.y + (CALLER_DY[i] ?? i*70);
+        all.nodes.push({ x:cx, y:cy, type:'app', owner:'caller', role:null, ver:null, dim:false, key:c.key, caller:true,
+          skey:'xc|' + c.id, bis:[] });
+        all.links.push(cy === t.y ? { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false }
+          : { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim:false, pts:[[cx, cy], [t.x - 52, cy], [t.x - 52, t.y], [t.x, t.y]] });
+        all.containers.push({ x1:cx - 38, x2:cx + 38, y1:cy - 42, y2:cy + 24, owner:'caller', keys:[c.key], dim:false });
+      });
+    });
+
     // a connector touched by more than two links is shared by several blocks
     all.nodes.forEach(n => {
-      if(!n.skey) return;
+      if(!n.skey || n.caller) return;
       const uses = all.links.filter(l => near(l.x1, l.y1, n) || near(l.x2, l.y2, n)).length;
       if(uses > 2) n.shared = uses;
+    });
+    // an API or file nothing feeds (except calling applications) can take a calling application
+    compPos = pos;
+    callableKeys = new Set();
+    all.nodes.forEach(n => {
+      if(!n.skey || n.caller || !['api', 'file'].includes(n.type)) return;
+      const ins = all.links.filter(l => near(l.x2, l.y2, n));
+      const fromApp = (l) => all.nodes.some(o => o.caller && near(l.x1, l.y1, o));
+      if(ins.every(fromApp)) callableKeys.add(n.skey);
     });
     return all;
   }
@@ -2665,6 +2798,62 @@
       if(r) n.classList.add('branchable');
       if(branchPoint && n.dataset.skey === branchPoint.key) n.classList.add('branch-point');
     });
+    renderCompositeCard();
+  }
+
+  // On-canvas card for the picked connector: an API or file nothing feeds can also take a
+  // calling application. A calling application's own card offers to remove it.
+  function renderCompositeCard(){
+    world.querySelectorAll(':scope > .comp-card').forEach(c => c.remove());
+    if(flowMode !== 'composite') return;
+    let at = null, head, text, opts;
+    if(branchPoint && callableKeys.has(branchPoint.key) && compPos[branchPoint.key]){
+      at = compPos[branchPoint.key];
+      head = CONNECTOR_LABEL[branchPoint.type];
+      text = 'Drag a pattern from the library to add another flow that uses this ' + head + ' — or add an end application that calls it.';
+      opts = [['+ Add calling application', addCaller]];
+    } else if(callerPick){
+      const c = compositeCallers().find(x => x.id === callerPick);
+      const k = c && anchorKey(c.anchor);
+      if(k && compPos[k]){
+        at = { x:compPos[k].x - CALLER_DX, y:compPos[k].y + (CALLER_DY[(compositeCallers().filter(x => anchorKey(x.anchor) === k)).indexOf(c)] || 0) };
+        head = 'Calling application';
+        text = 'An end application that calls this ' + CONNECTOR_LABEL[compPos[k].type] + '. Name it via its container label.';
+        opts = [['Remove this calling application', () => removeCaller(c.id)]];
+      } else callerPick = null;
+    }
+    if(!at) return;
+    const card = document.createElement('div');
+    card.className = 'decision-card comp-card';
+    card.style.left = (at.x - 40) + 'px';
+    card.style.top = (at.y + 34) + 'px';
+    card.style.setProperty('--arrow-x', '40px');
+    card.addEventListener('pointerdown', e => e.stopPropagation());
+    card.addEventListener('click', e => e.stopPropagation());
+    const h = document.createElement('div'); h.className = 'dc-head'; h.textContent = head;
+    const q = document.createElement('p'); q.className = 'dc-note'; q.textContent = text;
+    card.append(closeButton('Close', () => { callerPick = null; deselectAll(); renderCompositeCard(); }), h, q);
+    opts.forEach(([label, fn]) => {
+      const b = document.createElement('button'); b.className = 'dc-opt'; b.textContent = label;
+      b.addEventListener('click', fn); card.appendChild(b);
+    });
+    world.appendChild(card);
+  }
+  function addCaller(){
+    if(!branchPoint) return;
+    const id = 'xc-' + (++xcCounter);
+    extraCallers.push({ id, key:id + ':caller', anchor:branchPoint.anchor });
+    deselectAll();
+    renderFlows();
+    recordHistory();
+    showToast('Calling application added. Name it via its container label.');
+  }
+  function removeCaller(id){
+    callerPick = null;
+    if(id === 'main'){ const f = chainOrder[0]; if(f) delete callers[f.dataset.id]; }
+    else extraCallers = extraCallers.filter(c => c.id !== id);
+    renderFlows();
+    recordHistory();
   }
 
   function compositeHint(){
@@ -2684,12 +2873,23 @@
 
   world.addEventListener('click', (e) => {
     if(flowMode !== 'composite' || canvasWrap.classList.contains('versioning')) return;
+    const app = e.target.closest && e.target.closest('.flow-layer .node[data-type="app"][data-skey]');
+    if(app){
+      e.stopPropagation();
+      const id = app.dataset.skey.split('|')[1];
+      const again = callerPick === id;
+      deselectAll();
+      callerPick = again ? null : id;
+      renderCompositeCard();
+      return;
+    }
     const n = e.target.closest && e.target.closest('.flow-layer .node.branchable');
     if(!n) return;
     e.stopPropagation();
     const again = branchPoint && branchPoint.key === n.dataset.skey;
     deselectAll();
     if(again) return;                                 // clicking it again un-picks it
+    callerPick = null;
     branchPoint = { key:n.dataset.skey, type:n.dataset.type, anchor:anchorFromNode(n) };
     markBranchNodes();
     refreshLibrary();
@@ -2699,11 +2899,12 @@
   const modeComposite = document.getElementById('modeComposite');
   function setFlowMode(m){
     if(m === flowMode) return;
-    if(m === 'single' && branches.length){
-      showToast('Remove the branches first — a single flow has none.', true); return;
+    if(m === 'single' && (branches.length || extraCallers.length)){
+      showToast('Remove the branches' + (extraCallers.length ? ' and added calling applications' : '') + ' first — a single flow has none.', true); return;
     }
     flowMode = m;
     branchPoint = null;
+    callerPick = null;
     canvasWrap.classList.toggle('composite', m === 'composite');
     modeSingle.classList.toggle('on', m === 'single');
     modeComposite.classList.toggle('on', m === 'composite');
@@ -2715,7 +2916,7 @@
   // Export / history: composite fields are only written in composite mode with branches,
   // so a single flow serialises exactly as in v1.9.
   function withComposite(flow){
-    if(flowMode !== 'composite' || !branches.length) return flow;
+    if(flowMode !== 'composite' || (!branches.length && !extraCallers.length)) return flow;
     const refOf = (id) => {
       let i = chainOrder.findIndex(b => b.dataset.id === id);
       if(i >= 0) return 't' + i;
@@ -2731,9 +2932,28 @@
       anchor: br.anchor.map(a => ({ ref: refOf(a.block), side: a.side })).filter(a => a.ref),
       blocks: br.blocks.map(b => ({ pattern: b.dataset.tpl, label: b.querySelector('.cblock-label').textContent }))
     }));
+    flow.callers = extraCallers.map(c => {
+      const lab = containerLabels[c.key];
+      return { anchor: c.anchor.map(a => ({ ref: refOf(a.block), side: a.side })).filter(a => a.ref),
+               name: lab ? lab.name || '' : '', process: lab ? lab.process || '' : '' };
+    }).filter(c => c.anchor.length);
     return flow;
   }
   function validateBranches(f){
+    const refOk = (a, maxBranch) => {
+      const m = /^(?:t(\d+)|b(\d+)\.(\d+))$/.exec((a && a.ref) || '');
+      if(!m || !/^(in|out|m\d)$/.test(a.side)) return false;
+      return m[1] !== undefined ? +m[1] < f.blocks.length : (+m[2] < maxBranch && +m[3] < f.branches[+m[2]].blocks.length);
+    };
+    if(f.callers !== undefined){
+      if(!Array.isArray(f.callers)) return 'Flow file has an invalid caller list.';
+      const nb = Array.isArray(f.branches) ? f.branches.length : 0;
+      for(const c of f.callers)
+        if(!c || !Array.isArray(c.anchor) || !c.anchor.length || !c.anchor.every(a => refOk(a, nb)) ||
+           typeof c.name !== 'string' || typeof c.process !== 'string' || c.name.length > 80 || c.process.length > 120)
+          return 'Flow file has an invalid calling application.';
+    }
+    if(f.branches === undefined) return null;
     if(!Array.isArray(f.branches)) return 'Flow file has an invalid branch list.';
     if(f.branches.length && !f.blocks.length) return 'Flow file has branches but no main flow.';
     for(let j = 0; j < f.branches.length; j++){
@@ -2760,7 +2980,7 @@
       const [j, i] = ref.slice(1).split('.').map(Number);
       return branches[j].blocks[i].dataset.id;
     };
-    f.branches.forEach(fb => {
+    (f.branches || []).forEach(fb => {
       const br = { id:'br-' + (++branchCounter), kind:fb.kind, row:fb.row, anchor: fb.anchor.map(a => ({ block:idOf(a.ref), side:a.side })), blocks:[] };
       fb.blocks.forEach(b => {
         const tpl = templatesById[b.pattern];
@@ -2770,6 +2990,11 @@
         br.blocks.push(el);
       });
       branches.push(br);
+    });
+    (f.callers || []).forEach(fc => {
+      const id = 'xc-' + (++xcCounter);
+      extraCallers.push({ id, key:id + ':caller', anchor: fc.anchor.map(a => ({ block:idOf(a.ref), side:a.side })) });
+      if(fc.name || fc.process) containerLabels[id + ':caller'] = { name: fc.name, process: fc.process };
     });
   }
 
@@ -2794,7 +3019,7 @@
     const firstId = chainOrder[0] ? chainOrder[0].dataset.id : null;
     Object.keys(callers).forEach(k => { if(k !== firstId) delete callers[k]; });   // a caller belongs to the start of the flow
     [...manualDeltas].forEach(k => { if(!chainOrder.some(b => b.dataset.id === k.split(':')[0])) manualDeltas.delete(k); });
-    renderFlowLayer(world, flowMode === 'composite' && branches.length ? compositeModel() : buildFlowModel(chainGeometry(false), false));
+    renderFlowLayer(world, flowMode === 'composite' ? compositeModel() : buildFlowModel(chainGeometry(false), false));
     if(flowMode === 'composite') markBranchNodes();
     // the first block's exposed API can be clicked to add a calling application later
     if(flowMode !== 'composite' && firstId && templatesById[chainOrder[0].dataset.tpl].entryType === 'api' && !callers[firstId]){
@@ -3609,7 +3834,7 @@
     if(f.marks !== undefined &&
        (!Array.isArray(f.marks) || !f.marks.every(m => m && Number.isInteger(m.block) && m.block >= 0 && m.block < f.blocks.length && /^(in|out|m\d)$/.test(m.at))))
       return 'Flow file has an invalid change mark.';
-    if(f.branches !== undefined) return validateBranches(f);
+    if(f.branches !== undefined || f.callers !== undefined) return validateBranches(f);
     return null;
   }
 
@@ -3653,7 +3878,7 @@
       if(versionOverrides[id]) rippleChoices[id] = { vid: versionOverrides[id], choice: r.choice, code: r.code };
     });
     (f.marks || []).forEach(m => manualDeltas.add(chainOrder[m.block].dataset.id + ':' + m.at));
-    if(f.branches && f.branches.length) loadBranches(f);
+    if((f.branches && f.branches.length) || (f.callers && f.callers.length)) loadBranches(f);
     deselectAll();
     updateEmptyHint();
     refreshPaletteAvailability();
@@ -3864,7 +4089,8 @@
     views: () => ({ base:{ panX, panY, zoom }, copy:{ panX:vPanX, panY:vPanY, zoom:vZoom }, active:activePane }),
     // 2.0 composite flow
     setFlowMode, flowMode: () => flowMode, branches: () => branches.map(br => ({ kind:br.kind, row:br.row, key:anchorKey(br.anchor), blocks:br.blocks.map(b => b.dataset.tpl) })),
-    branchPoint: () => branchPoint, compositeAttach: (id) => compositeAttach(templatesById[id]), isCompatible: (id) => isTemplateCompatible(templatesById[id]) };
+    branchPoint: () => branchPoint, compositeAttach: (id) => compositeAttach(templatesById[id]), isCompatible: (id) => isTemplateCompatible(templatesById[id]),
+    callable: () => [...callableKeys], addCaller, callersList: () => compositeCallers().map(c => ({ id:c.id, key:anchorKey(c.anchor) })), removeCaller };
 })();
 </script>
 </body>
