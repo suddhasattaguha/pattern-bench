@@ -532,11 +532,33 @@
   .canvas-wrap.versioning .flow-layer .node[data-skey]{ pointer-events:all; cursor:pointer; }
   .canvas-wrap.versioning .flow-layer .node[data-skey]:hover{ filter:drop-shadow(0 0 1.5px var(--accent-version)) drop-shadow(0 0 4px var(--accent-version)); }
   .mode-banner{
-    display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:14; pointer-events:none;
+    display:none; position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:14; pointer-events:none;
     padding:4px 12px; border-radius:14px; border:1px solid var(--accent-version); background:var(--panel);
     color:var(--text-primary); font-family:var(--font-ui); font-size:12px; white-space:nowrap;
   }
   .canvas-wrap.versioning .mode-banner{ display:block; }
+
+  /* 2.0 — flow mode switch (primary control, kept apart from the utility toolbar) */
+  .flow-mode{ position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:16; display:flex; align-items:center; gap:10px;
+    padding:4px 6px 4px 12px; border-radius:24px; background:var(--panel); border:1px solid var(--panel-border); box-shadow:0 4px 14px rgba(0,0,0,.25); }
+  .flow-mode .fm-label{ font-family:var(--font-mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); }
+  .fm-seg{ display:inline-flex; padding:3px; border-radius:20px; border:1.5px solid var(--accent-teal); background:var(--panel); }
+  .fm-seg button{ font-family:var(--font-ui); font-size:13px; font-weight:600; color:var(--text-primary); background:transparent;
+    border:none; border-radius:16px; padding:6px 16px; cursor:pointer; white-space:nowrap; }
+  .fm-seg button:hover{ background:var(--block-bg-hover); }
+  .fm-seg button.on{ background:var(--accent-teal); color:#06231F; }
+  .fm-seg button.on:hover{ background:var(--accent-teal); }
+  /* Composite flow: connectors you can branch from are clickable */
+  .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable{ pointer-events:all; cursor:pointer; }
+  .canvas-wrap.composite:not(.versioning) #world .flow-layer .node.branchable:hover{ filter:drop-shadow(0 0 1.5px var(--accent-teal)) drop-shadow(0 0 5px var(--accent-teal)); }
+  .flow-layer .node.branch-point{ filter:drop-shadow(0 0 1.5px var(--accent-amber)) drop-shadow(0 0 6px var(--accent-amber)); }
+  .flow-layer .sbadge rect{ fill:var(--panel); stroke:var(--accent-teal); stroke-width:1.5; }
+  .flow-layer .sbadge text{ font-family:var(--font-mono); font-size:10.5px; font-weight:700; fill:var(--accent-teal); }
+  .comp-banner{ display:none; position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:14; pointer-events:none;
+    padding:4px 12px; border-radius:14px; border:1px solid var(--accent-teal); background:var(--panel);
+    color:var(--text-primary); font-family:var(--font-ui); font-size:12px; white-space:nowrap; }
+  .canvas-wrap.composite:not(.versioning) .comp-banner{ display:block; }
+  .comp-banner b{ color:var(--accent-teal); font-weight:700; }
   .mode-banner b{ color:var(--accent-version); font-weight:700; }
   .dc-close{
     position:absolute; top:4px; right:4px; width:28px; height:28px; border:none; border-radius:6px; background:transparent;
@@ -697,7 +719,7 @@
     <div class="brand">
       <span class="dot"></span>
       PATTERN BENCH
-      <span class="sub">architecture canvas — v1.9</span>
+      <span class="sub">architecture canvas — v2.0 trial</span>
     </div>
     <div class="toolbar">
       <button class="btn" id="themeToggle" title="Toggle dark / light mode">🌙 Dark</button>
@@ -743,7 +765,15 @@
 
   <main class="canvas-wrap" id="canvasWrap">
     <div class="world" id="world"></div>
+    <div class="flow-mode" id="flowMode">
+      <span class="fm-label">Flow</span>
+      <div class="fm-seg" role="group" aria-label="Flow mode">
+        <button id="modeSingle" class="on" title="One end-to-end flow — behaves exactly like v1.9">Single flow</button>
+        <button id="modeComposite" title="Fan-out and multi-source: branch from a shared connector for reuse and EDA">Composite flow</button>
+      </div>
+    </div>
     <div class="mode-banner" id="modeBanner"><b>Versioning mode</b> · click a connector to version it</div>
+    <div class="comp-banner" id="compBanner"><b>Composite flow</b> · click a Topic, Process, API or File to branch from it</div>
     <div class="pane-tag active" id="baseTag">Base flow</div>
     <div class="version-pane" id="versionPane">
       <div class="world" id="vworld"></div>
@@ -799,6 +829,15 @@
   let rippleChoices = {};
   // A non-breaking change marked by hand on any connector: v1 Δ, no parallel version.
   let manualDeltas = new Set();     // connector keys (blockId:in|out|mN)
+  // 2.0 — flow mode. 'single' behaves exactly like v1.9; 'composite' adds branches.
+  // A branch is a linear row of blocks that shares one connector of the main flow
+  // (or of another branch): kind 'out' = fan-out (it consumes the connector),
+  // kind 'in' = multi-source (it also uses / feeds the connector).
+  //   { id, kind, row, anchor:[{ block, side }...] (alternatives naming the same connector), blocks:[el...] }
+  let flowMode = 'single';
+  let branches = [];
+  let branchPoint = null;           // connector picked to branch from: { key, type, anchor }
+  let branchCounter = 0;
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
@@ -1047,6 +1086,12 @@
         out += '<g class="dbadge"' + (n.skey ? ' data-skey="' + n.skey + '"' : '') + '><title>Code change in the same version (not a new version) \u2014 click to change</title><rect x="' + bx + '" y="' + by + '" width="50" height="18" rx="6"></rect>' +
           '<text x="' + (bx+25) + '" y="' + (by+13) + '" text-anchor="middle">v1 Δ</text></g>';
       }
+      if(n.shared){
+        // composite flow: a connector used by several blocks (reuse / fan-out / multi-source)
+        const by = n.y - SYMBOLS[n.type].half - 34;
+        out += '<g class="sbadge"><title>Shared connector — ' + n.shared + ' blocks depend on it</title><rect x="' + (n.x - 34) + '" y="' + by + '" width="68" height="18" rx="9"></rect>' +
+          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">shared ×' + n.shared + '</text></g>';
+      }
       if(n.impact){
         // dependent logic behind an end application's API / folder may be impacted
         const bx = n.x - 58, by = n.y + 24;
@@ -1279,6 +1324,7 @@
   }
 
   function isTemplateCompatible(tpl){
+    if(flowMode === 'composite'){ const c = compositeFit(tpl); if(c !== undefined) return c; }
     return chainAttachSide(tpl, selectedEnd()) !== null;
   }
 
@@ -1774,6 +1820,7 @@
       item.draggable = ok;
     });
     updateQuadEmpties();
+    if(flowMode === 'composite') compositeHint();
     // A route described in the prompt narrows the base library to its blocks.
     routeHint.hidden = !routeFilter;
     if(routeFilter) routeHintText.textContent = 'Showing the blocks on routes from ' + routeFilter.label + '.';
@@ -2193,6 +2240,7 @@
     vworld.querySelectorAll('.cblock.selected').forEach(b => b.classList.remove('selected'));
     selectedBlock = null;
     selectedCopy = null;
+    if(branchPoint){ branchPoint = null; endSelected = false; refreshLibrary(); markBranchNodes(); }
     if(endSelected){ endSelected = false; refreshLibrary(); }
   }
 
@@ -2252,6 +2300,7 @@
     const tpl = templatesById[data.templateId];
     if(!tpl) return;
     if(chainOrder.length > 0 && !isTemplateCompatible(tpl)) return; // defensive; palette already blocks this
+    if(flowMode === 'composite' && compositeAttach(tpl)){ recordHistory(); return; }
     const pt = clientToWorld(e.clientX, e.clientY);
     attachToChain(tpl, pt.x, pt.y);
     recordHistory();
@@ -2381,6 +2430,7 @@
   // (shrinking that end); removing anything in the middle would split the
   // flow into two, which this canvas doesn't support, so it resets instead.
   function removeChainBlock(el){
+    if(flowMode === 'composite' && compositeRemove(el)) return;
     const idx = chainOrder.indexOf(el);
     if(idx === -1){ el.remove(); return; }
     if(chainOrder.length === 1){
@@ -2412,6 +2462,9 @@
   function resetChain(){
     chainOrder.forEach(b => b.remove());
     chainOrder = [];
+    branches.forEach(br => br.blocks.forEach(b => b.remove()));
+    branches = [];
+    branchPoint = null;
     versionOverrides = {};
     containerLabels = {};
     callers = {};
@@ -2422,6 +2475,302 @@
     selectedBlock = null;
     updateEmptyHint();
     refreshPaletteAvailability();
+  }
+
+  // ---------------------------------------------------------------
+  // 2.0 — Composite flow (trial)
+  // Single flow is untouched: every hook below returns early unless the
+  // mode is 'composite'. In composite mode the user clicks a connector
+  // (branch point) and drops a pattern: a new row of blocks shares that
+  // connector — fan-out (it consumes it) or multi-source (it uses / feeds it).
+  // Branch rows follow the main flow: their positions are re-derived from
+  // their anchor connector on every render.
+  // ---------------------------------------------------------------
+  const BRANCH_ROW = 200;   // vertical distance between rows
+  // Where a branch may start. Queue ↔ process is always 1:1, so a queue is never a branch point;
+  // an API or a file is shared by several callers / writers (multi-source), not fanned out.
+  const BRANCH_RULES = {
+    topic:   { out:true,  in:true },    // more subscribers / more publishers
+    process: { out:true,  in:true },    // process reuse: several outputs / several inputs
+    api:     { out:false, in:true },    // several callers of the same API
+    file:    { out:false, in:true }     // several writers to the same folder
+  };
+
+  function branchOf(el){ return branches.find(br => br.blocks.includes(el)) || null; }
+  function locateBlock(id){
+    let i = chainOrder.findIndex(b => b.dataset.id === id);
+    if(i >= 0) return { list:chainOrder, i, br:null };
+    for(const br of branches){
+      i = br.blocks.findIndex(b => b.dataset.id === id);
+      if(i >= 0) return { list:br.blocks, i, br };
+    }
+    return null;
+  }
+  // The rendered connector key of one side of a block, whichever row it sits in.
+  function sideKey(a, depth){
+    const L = locateBlock(a.block);
+    if(!L || depth > 30) return null;
+    if(a.side === 'in'){
+      if(L.i > 0) return L.list[L.i - 1].dataset.id + ':out';          // a seam carries the upstream block's key
+      if(L.br && L.br.kind === 'out') return anchorKey(L.br.anchor, depth + 1);
+      return a.block + ':in';
+    }
+    if(a.side === 'out' && L.br && L.br.kind === 'in' && L.i === L.list.length - 1) return anchorKey(L.br.anchor, depth + 1);
+    return a.block + ':' + a.side;
+  }
+  function anchorKey(anchor, depth){
+    for(const a of anchor){ const k = sideKey(a, depth || 0); if(k) return k; }
+    return null;
+  }
+  // A seam is named by both blocks on it, so it survives either end of the flow growing or shrinking.
+  function anchorFromNode(n){
+    const [id, side] = n.dataset.skey.split(':');
+    const alts = [{ block:id, side }];
+    (n.dataset.blocks || '').split(',').filter(b => b && b !== id).forEach(b => alts.push({ block:b, side:'in' }));
+    return alts;
+  }
+  function allBlocks(){ return chainOrder.concat(...branches.map(br => br.blocks)); }
+  // queue ↔ process is 1:1: a process already fed by a queue can't take a second Consume-to-Process
+  function processHasQueue(key){
+    return allBlocks().some(b => b.dataset.tpl === 'consume-to-process' && sideKey({ block:b.dataset.id, side:'out' }, 0) === key);
+  }
+
+  function compositeFit(tpl){
+    if(branchPoint){
+      const r = BRANCH_RULES[branchPoint.type] || {};
+      if(r.out && tpl.entryType === branchPoint.type) return true;
+      if(r.in && tpl.exitType === branchPoint.type) return !(tpl.id === 'consume-to-process' && processHasQueue(branchPoint.key));
+      return false;
+    }
+    const br = selectedBlock && branchOf(selectedBlock);
+    if(br){
+      const t = templatesById[selectedBlock.dataset.tpl];
+      if(br.kind === 'out') return selectedBlock === br.blocks[br.blocks.length - 1] && tpl.entryType === t.exitType;
+      return selectedBlock === br.blocks[0] && tpl.exitType === t.entryType;
+    }
+    return undefined;   // nothing composite selected: the main flow's open ends apply (as in v1.9)
+  }
+
+  function compositeAttach(tpl){
+    const bp = branchPoint;
+    if(bp){
+      const r = BRANCH_RULES[bp.type] || {};
+      const kind = r.out && tpl.entryType === bp.type ? 'out' : 'in';
+      const rows = branches.filter(b => b.kind === kind).map(b => Math.abs(b.row));
+      const row = (rows.length ? Math.max(...rows) : 0) + 1;
+      const el = createBlock(tpl, 0, 0);            // placed by the layout
+      branches.push({ id:'br-' + (++branchCounter), kind, row: kind === 'out' ? row : -row, anchor: bp.anchor, blocks:[el] });
+      callerAsked.add(el.dataset.id);
+      selectBlock(el, true);                        // keep building on the new branch's far end
+      refreshPaletteAvailability();
+      showToast(kind === 'out' ? 'Fan-out: a new flow now consumes the ' + CONNECTOR_LABEL[bp.type] + '.'
+                               : 'Multi-source: another flow now uses the ' + CONNECTOR_LABEL[bp.type] + '.');
+      return true;
+    }
+    const br = selectedBlock && branchOf(selectedBlock);
+    if(br){
+      const el = createBlock(tpl, 0, 0);
+      if(br.kind === 'out') br.blocks.push(el); else br.blocks.unshift(el);
+      callerAsked.add(el.dataset.id);
+      selectBlock(el, true);
+      refreshPaletteAvailability();
+      return true;
+    }
+    return false;
+  }
+
+  // true = handled here; false = fall through to the v1.9 removal rules
+  function compositeRemove(el){
+    const br = branchOf(el), id = el.dataset.id;
+    if(branches.some(b => b !== br && b.anchor.every(a => a.block === id))){
+      showToast('Remove the branches that start on this block first.', true); return true;
+    }
+    if(!br){
+      if(chainOrder.length === 1 && branches.length){ showToast('Remove the branches first.', true); return true; }
+      return false;
+    }
+    const far = br.kind === 'out' ? br.blocks[br.blocks.length - 1] : br.blocks[0];
+    if(el !== far){ showToast('A branch shrinks from its far end — remove that block first.', true); return true; }
+    br.blocks = br.blocks.filter(b => b !== el);
+    el.remove();
+    if(!br.blocks.length) branches = branches.filter(b => b !== br);
+    if(selectedBlock === el) selectedBlock = null;
+    updateEmptyHint();
+    refreshPaletteAvailability();
+    recordHistory();
+    return true;
+  }
+
+  const near = (x, y, n) => Math.abs(x - n.x) < 0.5 && Math.abs(y - n.y) < 0.5;
+  function compositeModel(){
+    const trunk = buildFlowModel(chainGeometry(false), false);
+    const all = { containers:trunk.containers.slice(), links:trunk.links.slice(), nodes:trunk.nodes.slice() };
+    const pos = {};
+    const note = (m) => m.nodes.forEach(n => { if(n.skey) pos[n.skey] = n; });
+    note(trunk);
+    const top0 = chainOrder.length ? parseFloat(chainOrder[0].style.top) : 0;
+    branches.forEach(br => {
+      const key = anchorKey(br.anchor);
+      const a = key && pos[key];
+      br.blocks.forEach(b => { b.style.display = a ? '' : 'none'; });
+      if(!a) return;
+      const top = top0 + br.row * BRANCH_ROW;
+      let x = a.x - SEAM_X;
+      if(br.kind === 'out'){
+        // the first block's entry sits under the shared connector; the row grows to the right
+        br.blocks.forEach(b => { b.style.left = x + 'px'; b.style.top = top + 'px'; x += parseFloat(b.style.width); });
+      } else {
+        // the last block's exit sits under the shared connector; the row grows to the left
+        for(let i = br.blocks.length - 1; i >= 0; i--){
+          const b = br.blocks[i]; x -= parseFloat(b.style.width);
+          b.style.left = x + 'px'; b.style.top = top + 'px';
+        }
+      }
+      const geo = br.blocks.map(b => ({ id:b.dataset.id, left:parseFloat(b.style.left), top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:null, caller:false }));
+      const m = buildFlowModel(geo, false);
+      // the shared connector is drawn once, on its own row: re-route the branch's links to it
+      const hk = br.kind === 'out' ? br.blocks[0].dataset.id + ':in' : br.blocks[br.blocks.length - 1].dataset.id + ':out';
+      const h = m.nodes.find(n => n.key === hk);
+      m.nodes = m.nodes.filter(n => n.key !== hk);
+      if(h) m.links.forEach(l => {
+        if(near(l.x1, l.y1, h)){ l.x1 = a.x; l.y1 = a.y; }
+        if(near(l.x2, l.y2, h)){ l.x2 = a.x; l.y2 = a.y; }
+      });
+      m.containers = m.containers.filter(c => {
+        if(!c.keys.includes(hk)) return true;
+        c.keys = c.keys.filter(k => k !== hk);
+        if(!c.keys.length || !h) return false;
+        if(br.kind === 'out') c.x1 = h.x + 24; else c.x2 = h.x - 24;
+        return true;
+      });
+      note(m);
+      all.containers.push(...m.containers); all.links.push(...m.links); all.nodes.push(...m.nodes);
+    });
+    // a connector touched by more than two links is shared by several blocks
+    all.nodes.forEach(n => {
+      if(!n.skey) return;
+      const uses = all.links.filter(l => near(l.x1, l.y1, n) || near(l.x2, l.y2, n)).length;
+      if(uses > 2) n.shared = uses;
+    });
+    return all;
+  }
+
+  function markBranchNodes(){
+    const layer = world.querySelector(':scope > svg.flow-layer');
+    if(!layer) return;
+    layer.querySelectorAll('.node.branchable, .node.branch-point').forEach(n => n.classList.remove('branchable', 'branch-point'));
+    if(flowMode !== 'composite') return;
+    layer.querySelectorAll('.node[data-skey]').forEach(n => {
+      const r = BRANCH_RULES[n.dataset.type];
+      if(r) n.classList.add('branchable');
+      if(branchPoint && n.dataset.skey === branchPoint.key) n.classList.add('branch-point');
+    });
+  }
+
+  function compositeHint(){
+    if(branchPoint){
+      const r = BRANCH_RULES[branchPoint.type];
+      endHint.hidden = false;
+      endHintText.textContent = 'Branching from the ' + CONNECTOR_LABEL[branchPoint.type] + ': ' +
+        [r.out ? 'fan-out (a new flow consumes it)' : '', r.in ? 'multi-source (another flow also uses it)' : ''].filter(Boolean).join(' or ') + '.';
+      return;
+    }
+    const br = selectedBlock && branchOf(selectedBlock);
+    if(br && endSelected){
+      endHint.hidden = false;
+      endHintText.textContent = 'Showing blocks that extend this branch at its ' + (br.kind === 'out' ? 'end (right).' : 'start (left).');
+    }
+  }
+
+  world.addEventListener('click', (e) => {
+    if(flowMode !== 'composite' || canvasWrap.classList.contains('versioning')) return;
+    const n = e.target.closest && e.target.closest('.flow-layer .node.branchable');
+    if(!n) return;
+    e.stopPropagation();
+    const again = branchPoint && branchPoint.key === n.dataset.skey;
+    deselectAll();
+    if(again) return;                                 // clicking it again un-picks it
+    branchPoint = { key:n.dataset.skey, type:n.dataset.type, anchor:anchorFromNode(n) };
+    markBranchNodes();
+    refreshLibrary();
+  });
+
+  const modeSingle = document.getElementById('modeSingle');
+  const modeComposite = document.getElementById('modeComposite');
+  function setFlowMode(m){
+    if(m === flowMode) return;
+    if(m === 'single' && branches.length){
+      showToast('Remove the branches first — a single flow has none.', true); return;
+    }
+    flowMode = m;
+    branchPoint = null;
+    canvasWrap.classList.toggle('composite', m === 'composite');
+    modeSingle.classList.toggle('on', m === 'single');
+    modeComposite.classList.toggle('on', m === 'composite');
+    refreshPaletteAvailability();
+  }
+  modeSingle.addEventListener('click', () => setFlowMode('single'));
+  modeComposite.addEventListener('click', () => setFlowMode('composite'));
+
+  // Export / history: composite fields are only written in composite mode with branches,
+  // so a single flow serialises exactly as in v1.9.
+  function withComposite(flow){
+    if(flowMode !== 'composite' || !branches.length) return flow;
+    const refOf = (id) => {
+      let i = chainOrder.findIndex(b => b.dataset.id === id);
+      if(i >= 0) return 't' + i;
+      for(let j = 0; j < branches.length; j++){
+        i = branches[j].blocks.findIndex(b => b.dataset.id === id);
+        if(i >= 0) return 'b' + j + '.' + i;
+      }
+      return null;
+    };
+    flow.mode = 'composite';
+    flow.branches = branches.map(br => ({
+      kind: br.kind, row: br.row,
+      anchor: br.anchor.map(a => ({ ref: refOf(a.block), side: a.side })).filter(a => a.ref),
+      blocks: br.blocks.map(b => ({ pattern: b.dataset.tpl, label: b.querySelector('.cblock-label').textContent }))
+    }));
+    return flow;
+  }
+  function validateBranches(f){
+    if(!Array.isArray(f.branches)) return 'Flow file has an invalid branch list.';
+    if(f.branches.length && !f.blocks.length) return 'Flow file has branches but no main flow.';
+    for(let j = 0; j < f.branches.length; j++){
+      const br = f.branches[j];
+      if(!br || !['out', 'in'].includes(br.kind) || !Number.isInteger(br.row) || br.row === 0 ||
+         !Array.isArray(br.blocks) || !br.blocks.length || !Array.isArray(br.anchor) || !br.anchor.length)
+        return 'Flow file has an invalid branch.';
+      for(const b of br.blocks) if(!b || !templatesById[b.pattern]) return 'Unknown pattern in a branch: ' + (b && b.pattern);
+      for(let i = 1; i < br.blocks.length; i++)
+        if(templatesById[br.blocks[i-1].pattern].exitType !== templatesById[br.blocks[i].pattern].entryType) return 'Branch blocks don\'t fit together.';
+      for(const a of br.anchor){
+        const m = /^(?:t(\d+)|b(\d+)\.(\d+))$/.exec((a && a.ref) || '');
+        if(!m || !/^(in|out|m\d)$/.test(a.side)) return 'Flow file has an invalid branch anchor.';
+        const bad = m[1] !== undefined ? +m[1] >= f.blocks.length : (+m[2] >= j || +m[3] >= f.branches[+m[2]].blocks.length);
+        if(bad) return 'Flow file has an invalid branch anchor.';
+      }
+    }
+    return null;
+  }
+  function loadBranches(f){
+    setFlowMode('composite');
+    const idOf = (ref) => {
+      if(ref[0] === 't') return chainOrder[+ref.slice(1)].dataset.id;
+      const [j, i] = ref.slice(1).split('.').map(Number);
+      return branches[j].blocks[i].dataset.id;
+    };
+    f.branches.forEach(fb => {
+      const br = { id:'br-' + (++branchCounter), kind:fb.kind, row:fb.row, anchor: fb.anchor.map(a => ({ block:idOf(a.ref), side:a.side })), blocks:[] };
+      fb.blocks.forEach(b => {
+        const tpl = templatesById[b.pattern];
+        const el = createBlock(tpl, 0, 0);
+        el.querySelector('.cblock-label').textContent = String(b.label ?? tpl.label);
+        callerAsked.add(el.dataset.id);
+        br.blocks.push(el);
+      });
+      branches.push(br);
+    });
   }
 
   // ---------------------------------------------------------------
@@ -2445,9 +2794,10 @@
     const firstId = chainOrder[0] ? chainOrder[0].dataset.id : null;
     Object.keys(callers).forEach(k => { if(k !== firstId) delete callers[k]; });   // a caller belongs to the start of the flow
     [...manualDeltas].forEach(k => { if(!chainOrder.some(b => b.dataset.id === k.split(':')[0])) manualDeltas.delete(k); });
-    renderFlowLayer(world, buildFlowModel(chainGeometry(false), false));
+    renderFlowLayer(world, flowMode === 'composite' && branches.length ? compositeModel() : buildFlowModel(chainGeometry(false), false));
+    if(flowMode === 'composite') markBranchNodes();
     // the first block's exposed API can be clicked to add a calling application later
-    if(firstId && templatesById[chainOrder[0].dataset.tpl].entryType === 'api' && !callers[firstId]){
+    if(flowMode !== 'composite' && firstId && templatesById[chainOrder[0].dataset.tpl].entryType === 'api' && !callers[firstId]){
       const n = world.querySelector('.flow-layer .node[data-skey="' + firstId + ':in"]');
       if(n){ n.classList.add('can-add-caller'); n.insertAdjacentHTML('afterbegin', '<title>Called by an end application? Click to add it</title>'); }
     }
@@ -2556,6 +2906,7 @@
   function clearVersionTarget(){ if(versionTarget){ versionTarget = null; renderFlows(); } }
   world.addEventListener('click', (e) => {
     if(canvasWrap.classList.contains('versioning')) return;
+    if(flowMode === 'composite') return;   // composite flow: connector clicks pick a branch point instead
     const n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
     const b = chainOrder[0];
     if(!n || !b || n.dataset.skey !== b.dataset.id + ':in' || n.dataset.type !== 'api' || callers[b.dataset.id]) return;
@@ -3156,7 +3507,7 @@
     const first = chainOrder[0];
     const byCreation = chainOrder.map((b, i) => i)
       .sort((a, b) => +chainOrder[a].dataset.seq - +chainOrder[b].dataset.seq);
-    return {
+    return withComposite({
       format: FLOW_FORMAT,
       version: FLOW_VERSION,
       origin: first ? { x: parseFloat(first.style.left), y: parseFloat(first.style.top) } : null,
@@ -3186,7 +3537,7 @@
         const i = chainOrder.findIndex(b => b.dataset.id === id);
         return i < 0 ? null : { block: i, at };
       }).filter(Boolean)
-    };
+    });
   }
 
   // Returns an error message, or null if the flow can be loaded.
@@ -3258,6 +3609,7 @@
     if(f.marks !== undefined &&
        (!Array.isArray(f.marks) || !f.marks.every(m => m && Number.isInteger(m.block) && m.block >= 0 && m.block < f.blocks.length && /^(in|out|m\d)$/.test(m.at))))
       return 'Flow file has an invalid change mark.';
+    if(f.branches !== undefined) return validateBranches(f);
     return null;
   }
 
@@ -3301,6 +3653,7 @@
       if(versionOverrides[id]) rippleChoices[id] = { vid: versionOverrides[id], choice: r.choice, code: r.code };
     });
     (f.marks || []).forEach(m => manualDeltas.add(chainOrder[m.block].dataset.id + ':' + m.at));
+    if(f.branches && f.branches.length) loadBranches(f);
     deselectAll();
     updateEmptyHint();
     refreshPaletteAvailability();
@@ -3405,7 +3758,8 @@
       el.setPointerCapture(e.pointerId);
       startX = e.clientX; startY = e.clientY;
 
-      const groupBlocks = chainOrder.indexOf(el) !== -1 ? chainOrder : [el];
+      // composite flow: grabbing a branch block moves the whole composite (branches follow the main flow)
+      const groupBlocks = chainOrder.indexOf(el) !== -1 ? chainOrder : (branchOf(el) ? [...chainOrder, el] : [el]);
       dragGroup = groupBlocks.map(b => ({
         el: b,
         origLeft: parseFloat(b.style.left),
@@ -3507,7 +3861,10 @@
       const c = chainOrder, last = c[c.length - 1];
       attachToChain(templatesById[id], last ? parseFloat(last.style.left) + parseFloat(last.style.width) + 80 : 470, 240);
     },
-    views: () => ({ base:{ panX, panY, zoom }, copy:{ panX:vPanX, panY:vPanY, zoom:vZoom }, active:activePane }) };
+    views: () => ({ base:{ panX, panY, zoom }, copy:{ panX:vPanX, panY:vPanY, zoom:vZoom }, active:activePane }),
+    // 2.0 composite flow
+    setFlowMode, flowMode: () => flowMode, branches: () => branches.map(br => ({ kind:br.kind, row:br.row, key:anchorKey(br.anchor), blocks:br.blocks.map(b => b.dataset.tpl) })),
+    branchPoint: () => branchPoint, compositeAttach: (id) => compositeAttach(templatesById[id]), isCompatible: (id) => isTemplateCompatible(templatesById[id]) };
 })();
 </script>
 </body>

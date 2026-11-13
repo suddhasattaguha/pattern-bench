@@ -279,3 +279,19 @@ one logical change each with a real diff behind them.
 - End applications and callers are labelled with an application name and an
   optional business process.
 - Every link ends in a clear arrowhead right before the receiving symbol.
+
+## v2.0 trial — Composite flow (branch `feature/v2.0`, not merged)
+- Flow mode switch at the top of the canvas: **Single flow** (exactly v1.9) and
+  **Composite flow**. Switching back to Single flow is blocked while branches exist.
+- Composite flow: click a Topic, Process, API or File connector to pick a branch
+  point, then drop a pattern from the library.
+  - **Fan-out** (topic, process): a new row below consumes the connector.
+  - **Multi-source** (topic, process, API, file): a new row above also uses / feeds it.
+  - Queues are never branch points (queue ↔ process is always 1:1); a process
+    already fed by a queue can't take a second Consume-to-Process.
+  - A branch extends at its far end only and shrinks from its far end.
+  - A connector used by more than two links shows a "shared ×N" badge.
+- Branches are kept in export / import and undo / redo; a single flow
+  serialises exactly as in v1.9.
+- Versioning (the versioned copy) still covers the main flow only.
+- Tests: `tests/test_composite.py` (33 checks); the 265 v1.9 checks still pass.
