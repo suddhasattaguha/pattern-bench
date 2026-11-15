@@ -435,7 +435,8 @@ Both modes:
 3. Composite flow: once a version gives a component a v2 on a connector, that connector is locked
    until the versioned block is removed (×); dropping another version on a versioned block is
    refused — except the next step of that same version. Single flow keeps v1.9's replace-on-drop.
-4. Platform frames are at least 160 px wide (a lone process / topic / API has room for its name).
+4. Platform frames are at least 160 px wide (a lone process / topic / API has room for its name) —
+   grown into free space only (right first, then left), never over a neighbouring frame or caller box.
 5. / 6. Consume-to-API next steps: "Topic v2 · own Queue v2 · Target API v2" (two topics, two
    queues, two APIs) after "Target API v2 · own Queue v2", and "Topic v2 · Target API v2 · Queue
    switches" after "push switches". Offered only as that next step (`extends`); the block's lines at
@@ -450,4 +451,4 @@ Both modes:
     application" — non-breaking (Δ) or breaking (the API it calls is flagged "Caller change ·
     version API?" with its API versions or "Stay on v1"); saved as `callerChange`, printed.
 - A version applied from the library clears the stale guide card.
-- Tests: new `test_round7.py` 48 checks; all suites pass (465 checks).
+- Tests: new `test_round7.py` 50 checks; all suites pass (467 checks).

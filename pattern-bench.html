@@ -1207,9 +1207,6 @@
         const first = run[0], last = run[run.length - 1], owner = first.nodes[0].owner;
         let x1 = first.x - SYMBOLS[first.nodes[0].type].half - 16;
         let x2 = last.x + SYMBOLS[last.nodes[0].type].half + 16;
-        // round 7 (note 4): a platform with a single component (only a process, only a topic) is framed
-        // wide enough for its name
-        if(x2 - x1 < CONT_MIN_W){ const c = (x1 + x2) / 2; x1 = c - CONT_MIN_W/2; x2 = c + CONT_MIN_W/2; }
         let over = tiles.filter(t => t.x2 > x1 + 6 && t.x1 < x2 - 6);
         if(!over.length) over = [tiles[0]];   // the caller sits left of the first tile
         const active = run.some(st => st.vblock !== null || pending.has(st.bi));
@@ -1224,6 +1221,17 @@
         run.push(st);
       });
       flush();
+      // round 7 (note 4): a platform with a single component (only a process, only a topic) is framed
+      // wide enough for its name — it grows into free space only (right first, then left), never over a
+      // neighbouring frame or the caller box
+      containers.forEach((c, i) => {
+        let need = CONT_MIN_W - (c.x2 - c.x1);
+        if(need <= 0) return;
+        const prev = containers[i - 1], next = containers[i + 1];
+        const right = Math.max(0, Math.min(need, (next ? next.x1 - 12 : Infinity) - c.x2));
+        c.x2 += right; need -= right;
+        if(need > 0) c.x1 -= Math.max(0, Math.min(need, c.x1 - (prev ? prev.x2 + 12 : -Infinity)));
+      });
     }
 
     const nodes = [];

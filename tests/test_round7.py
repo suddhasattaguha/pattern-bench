@@ -91,6 +91,16 @@ with sync_playwright() as p:
     W = lambda pane: ev(f"[...document.querySelectorAll('{pane} .container-layer .pcont')].map(r=>r.getBBox()).filter(b=>!(b.width===150&&b.height===120)).map(b=>b.width)")
     check('note 4: every platform frame is at least 160 px wide (room for its name)', W('#vworld') and min(W('#vworld')) >= 159)
     check('…also in the base flow', W('#world') and min(W('#world')) >= 159)
+    # frames grow into free space only — never over a neighbouring frame or a caller box
+    def frames(pane): return ev(f"[...document.querySelectorAll('{pane} .container-layer rect.pcont')].map(r=>{{const b=r.getBBox(); return [b.x, b.y, b.x+b.width, b.y+b.height]}})")
+    check('note 4: widened frames overlap no other frame or caller box in the same row',
+          not any(inter(a, b) and abs(a[1] - b[1]) < 1 for pn in ['#world', '#vworld'] for i, a in enumerate(frames(pn)) for b in frames(pn)[i+1:]))
+
+    pg.goto(URL); pg.wait_for_timeout(100)
+    ev(f"{d}.append('api-to-api')"); click_node('block-1:in'); pg.click('#world .caller-card [data-caller=yes]'); pg.wait_for_timeout(100)
+    fr = ev("[...document.querySelectorAll('#world .container-layer rect.pcont')].map(r=>{const b=r.getBBox(); return [b.x, b.y, b.x+b.width, b.y+b.height]})")
+    check('note 4 (single flow, API-to-API + caller): frames ≥ 160 px and none overlaps the caller box or each other',
+          len(fr) == 3 and all(f[2] - f[0] >= 150 for f in fr) and not any(inter(a, b) for i, a in enumerate(fr) for b in fr[i+1:]))
 
     # ================= B: Consume-to-API next steps (notes 5, 6) =================
     fresh(['process-to-publish', 'consume-to-api'])
