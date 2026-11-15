@@ -3203,7 +3203,7 @@
     const trunk = buildFlowModel(geo0, withV, pendIdx(chainOrder));
     const all = { containers:trunk.containers.slice(), links:trunk.links.slice(), nodes:trunk.nodes.slice(), warnings:trunk.warnings.slice(), notes:[], colorVersions:withV };
     const lanes = {}, pos = {};
-    const note = (m) => m.nodes.forEach(n => { if(n.skey && !n.ownNew){ (lanes[n.skey] = lanes[n.skey] || []).push(n); } });
+    const note = (m) => m.nodes.forEach(n => { if(n.skey){ (lanes[n.skey] = lanes[n.skey] || []).push(n); } });
     const canon = (k) => { const ls = lanes[k] || []; return ls.find(n => n.ver !== 'v2' && n.role !== 'retired') || ls.find(n => n.ver !== 'v2') || ls[0]; };
     // a branch joins the lane of the shared component that matches its own version (v2 → v2 lane;
     // otherwise v1 — if v1 is retired there, that connector is drawn retired)
@@ -3224,13 +3224,21 @@
       const m = buildFlowModel(geo, withV, pendIdx(br.blocks));
       // The shared component is drawn once, on its own row. The branch's link to it becomes
       // straight segments: a drop line from the component to the row, then along the row.
-      // The shared component is drawn once, on its own row — except a new version of it that only this
-      // branch brings (e.g. a consumer subscribing to Topic v2 nobody else has yet): that one stays on
-      // the branch row, at its seam, so the new version is visible
-      const ownNew = m.nodes.filter(n => n.key === hk && n.ver && n.ver !== 'v1' && !(lanes[key] || []).some(x => x.ver === n.ver));
-      ownNew.forEach(n => { n.skey = key; n.ownNew = true; });
-      const hidden = m.nodes.filter(n => n.key === hk && !ownNew.includes(n));
-      m.nodes = m.nodes.filter(n => n.key !== hk || ownNew.includes(n));
+      // The shared component is drawn once, on its own row. A new version of it that only this branch
+      // brings (e.g. a consumer subscribing to Topic v2 nobody else has yet) is added there too, as a
+      // lane right next to v1 (on the branch's side) — the branch connects to it like to any lane
+      m.nodes.filter(n => n.key === hk && n.ver && n.ver !== 'v1' && !(lanes[key] || []).some(x => x.ver === n.ver)).forEach(n => {
+        const dir = yc.get(k) > a.y ? 1 : -1;
+        const lane = { x:a.x, y:a.y + dir * 2 * LANE, type:a.type, owner:a.owner, role:n.role, ver:n.ver, dim:false,
+          key:key + '#' + n.ver, caller:false, skey:key, bis:a.bis || [] };
+        (lanes[key] = lanes[key] || []).push(lane);
+        all.nodes.push(lane);
+        // the shared component's container takes in the new lane
+        const cK = all.containers.find(c => c.keys.includes(key));
+        if(cK && !cK.rects){ cK.y1 = Math.min(cK.y1, lane.y - 66); cK.y2 = Math.max(cK.y2, lane.y + 30); }   // room for the v2 badge and the container label
+      });
+      const hidden = m.nodes.filter(n => n.key === hk);
+      m.nodes = m.nodes.filter(n => n.key !== hk);
       // which lane(s) of the shared component this branch uses: its own version decides (v2 → v2 lane);
       // a branch that stays unversioned there follows its assessment (stay on v1 / move to v2 / keep both)
       const seamB = br.kind === 'out' ? br.blocks[0] : br.blocks[br.blocks.length - 1];
@@ -3271,7 +3279,6 @@
       const h0 = hidden[0];
       m.containers = m.containers.filter(c => {
         if(!c.keys.includes(hk)) return true;
-        if(ownNew.length) return true;               // the branch's own new version stays inside its container
         c.keys = c.keys.filter(kk => kk !== hk);
         if(!c.keys.length || !h0) return false;
         if(br.kind === 'out') c.x1 = h0.x + 24; else c.x2 = h0.x - 24;

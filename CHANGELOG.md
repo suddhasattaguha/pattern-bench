@@ -386,5 +386,6 @@ Both modes:
   v1.9 suites updated for the new print (265 checks pass).
 - Fix (Nov 15, after round 6): a new version that only a branch block brings for the shared component
   (e.g. a fan-out consumer switching to Topic v2) was folded into the single shared symbol and
-  disappeared. It is now drawn on the branch row at its seam, inside the branch's container, with the
-  retired v1 link from the shared component. Regression check over every version on every row added.
+  disappeared. It is now drawn as a lane right next to the shared v1 component (on the branch's side),
+  inside its container; the branch connects to it like to any lane, other branches can join it, and the
+  retired v1 link stays dotted. Regression checks over every version on every row, and on placement.

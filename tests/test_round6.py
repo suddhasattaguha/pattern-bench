@@ -263,6 +263,12 @@ with sync_playwright() as p:
             have = set(ev("[...document.querySelectorAll('#vworld .flow-layer .node')].filter(n=>{const b=n.nextElementSibling; return b && b.classList.contains('vbadge') && b.textContent==='v2'}).map(n=>n.dataset.type)"))
             if need - have: missing.append((tpl, v, sorted(need - have)))
     check('every new version (v2) a block brings is drawn, on the main flow and on every branch', not missing)
+    ev(f"(()=>{{const o={d}.versionOverrides(); Object.keys(o).forEach(k=>delete o[k]); o['block-5']='c2a-topic-switch'; {d}.renderCopy(); }})()")
+    tp = ev("[...document.querySelectorAll('#vworld .flow-layer .node[data-type=topic]')].map(n=>{const m=n.transform.baseVal.consolidate().matrix; const b=n.nextElementSibling; return [m.e, m.f, b && b.classList.contains('vbadge') ? b.textContent : '']})")
+    v1x = [t for t in tp if t[2] != 'v2' and abs(t[1] - 240) < 1]
+    v2t = [t for t in tp if t[2] == 'v2']
+    check('…a branch\'s new Topic v2 sits right next to the shared v1 topic on the main flow (not on the branch row)',
+          len(v2t) == 1 and v1x and abs(v2t[0][0] - v1x[0][0]) < 1 and abs(v2t[0][1] - 240) <= 80)
     if missing: print(missing)
     check('no page errors', not errs)
     if errs: print(errs)
