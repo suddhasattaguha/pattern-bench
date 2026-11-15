@@ -243,6 +243,27 @@ with sync_playwright() as p:
     check('fix 9: markers match the entries', ev("document.querySelectorAll('.print-host .ps-marker').length") == ev("document.querySelectorAll('.print-host .ps-entries li').length"))
     if SHOT: pg.screenshot(path=os.path.join(SHOT, 'r6-print.png'))
     pg.click('.print-host [data-pp=close]')
+    # regression (Nov 15): a new version a block brings must always be drawn — also when that block sits on a
+    # branch and the shared component has no such version on the main flow (e.g. a consumer on Topic v2)
+    pg.goto(URL); pg.wait_for_timeout(100)
+    for t in ['api-to-process', 'process-to-publish', 'consume-to-api']:
+        ev(f"{d}.append('{t}')")
+    pg.click('#modeComposite')
+    pick('block-2:out'); ev(f"{d}.compositeAttach('consume-to-process')")
+    pick('block-2:out'); ev(f"{d}.compositeAttach('consume-to-api')")
+    pick('block-2:out'); ev(f"{d}.compositeAttach('api-to-publish')")
+    pick('block-1:out'); ev(f"{d}.compositeAttach('process-to-file')")
+    pick('block-1:in'); ev(f"{d}.compositeAttach('process-to-api')")
+    pg.click('#tabVersioned')
+    missing = []
+    for bid, tpl in ev("[...document.querySelectorAll('#world .cblock')].map(b=>[b.dataset.id,b.dataset.tpl])"):
+        for v in ev(f"Object.values({d}.variantsById).filter(v=>v.base==='{tpl}').map(v=>v.id)"):
+            ev(f"(()=>{{const o={d}.versionOverrides(); Object.keys(o).forEach(k=>delete o[k]); o['{bid}']='{v}'; {d}.renderCopy(); }})()")
+            need = set(ev(f"{d}.variantsById['{v}'].nodes.filter(n=>n.ver==='v2').map(n=>n.type)"))
+            have = set(ev("[...document.querySelectorAll('#vworld .flow-layer .node')].filter(n=>{const b=n.nextElementSibling; return b && b.classList.contains('vbadge') && b.textContent==='v2'}).map(n=>n.dataset.type)"))
+            if need - have: missing.append((tpl, v, sorted(need - have)))
+    check('every new version (v2) a block brings is drawn, on the main flow and on every branch', not missing)
+    if missing: print(missing)
     check('no page errors', not errs)
     if errs: print(errs)
     br.close()

@@ -384,3 +384,7 @@ Both modes:
 - Single flow keeps the v1.9 file format and DOM (round-6 fields only in composite; acks only if any).
 - Tests: new `tests/test_round6.py` (62 checks); composite suites updated for fixes 2/3/4/10 (39 + 34);
   v1.9 suites updated for the new print (265 checks pass).
+- Fix (Nov 15, after round 6): a new version that only a branch block brings for the shared component
+  (e.g. a fan-out consumer switching to Topic v2) was folded into the single shared symbol and
+  disappeared. It is now drawn on the branch row at its seam, inside the branch's container, with the
+  retired v1 link from the shared component. Regression check over every version on every row added.
