@@ -99,7 +99,7 @@ with sync_playwright() as p:
     check('fix 6: no "shared ×N" badges', ev("document.querySelectorAll('#world .sbadge').length") == 0)
     all_tops = sorted(set(ev("[...document.querySelectorAll('#world .cblock')].map(b=>parseFloat(b.style.top))")))
     t0 = ev(f"parseFloat({d}.chainOrder()[0].style.top)")
-    check('fix 7: rows are 300 px apart', all((t - t0) % 300 == 0 for t in all_tops) and len(all_tops) >= 4)
+    check('fix 7: rows are at least 300 px apart (rows with caller stacks make extra room — round 6)', all(b - a >= 300 for a, b in zip(all_tops, all_tops[1:])) and len(all_tops) >= 4)
     check('branch links are straight segments with bends', ev("[...document.querySelectorAll('#world .flow-layer path.link')].every(p => !/C/.test(p.getAttribute('d')))"))
     check('every arrowhead tip lies on its line', ev(f"({ON_LINE})('#world')"))
     if SHOT:

@@ -352,3 +352,35 @@ one logical change each with a real diff behind them.
   the shared process, each decided on its own; Δ on the process, ⚠ / impact where a path lands.
 - Saved: branch versions and per-path ripple answers. Small window keeps a readable minimum scale.
 - Tests: `tests/test_composite_versioning.py` 33 checks; 39 composite and 265 v1.9 checks still pass.
+
+### v2.0 trial — round 6: fix list 1–15 (Nov 15)
+Composite flow:
+1. Connectors never share a segment: each multi-source / caller connector gets its own junction
+   line and arrival point; fan-out drop lines are offset; v1 and v2 lanes never share a line.
+2. Versioning = component + connector: the component's connectors (incl. callers') are highlighted
+   and clickable; the library stays empty until one is picked (single-connector components skip it).
+   A version picked on a caller's connector moves only that caller to v2.
+3. New guide card: opaque, above tiles and connectors, placed in free space (right → above → below →
+   left); assessment text + Upstream / Downstream buttons; Δ mark, Clear, ×. All cards sit above
+   the flow layer in composite flow.
+4. Readable caller boxes (150 × 120: CALLER / name / business process, icon below), stacked 130 px
+   apart, further left; rows make room for caller stacks.
+5. Dotted ↔ solid swap on a versioned block's fan lines (click a line); both solid = not a valid
+   pattern: amber lines, ⚠ badge, warning note (publisher / consumer / caller wording).
+6. Callers of a versioned API / file: a v1 and a v2 connector each, toggled by click; mixing is valid;
+   ⚠ dependent logic clears on v2; "no caller left on v1" when all moved; one caller on both = warning.
+7. Connectors coloured by version (v1 slate, v2 violet; amber only for warnings) + legend.
+10. Decision (d) revised: on a parallel version the other branches stay on v1 and are flagged as
+   impacted with an assess card (stay on v1 / move to v2 / keep both → warning). Switch unchanged.
+15. A switch opens its cards straight away; parallel questions and assessments start as pills (for review).
+Both modes:
+8. The selected tile is drawn in front; remove × 24 px with a ~32 px click area.
+9. / 12. Print report per named component: numbered markers on the diagram, one plain entry per
+   affected component (version change, breaking vs non-breaking Δ, decisions, callers, warnings);
+   the corner list of names is gone. Unnamed components: "Name them now / Print with auto labels".
+11. "Target API" only where the API ends the flow; an API between two blocks reads "API v2".
+13. Any ⚠ can be acknowledged with a note (grey ✓); saved, and shown in the print.
+14. New process icon "branching flow".
+- Single flow keeps the v1.9 file format and DOM (round-6 fields only in composite; acks only if any).
+- Tests: new `tests/test_round6.py` (62 checks); composite suites updated for fixes 2/3/4/10 (39 + 34);
+  v1.9 suites updated for the new print (265 checks pass).

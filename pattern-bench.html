@@ -361,7 +361,7 @@
     touch-action:none;
     z-index:10;
   }
-  .cblock.selected{ z-index:11; }
+  .cblock.selected{ z-index:45; }   /* round 6: the selected tile is always in front of its neighbours */
   .cblock.dragging{ z-index:50; opacity:0.94; }
   .cblock svg.cblock-svg{ display:block; overflow:visible; }
 
@@ -428,6 +428,26 @@
   .link.retired{ stroke:var(--text-muted); stroke-dasharray:1 8; }
   .link-arrow{ fill:var(--flow-line); stroke:none; }
   .link-arrow.retired{ fill:var(--text-muted); opacity:0.75; }
+  /* Round 6 — composite flow: connectors coloured by the version they attach to; amber only for warnings */
+  .link.v2{ stroke:var(--accent-version); }
+  .link-arrow.v2{ fill:var(--accent-version); }
+  .link.v2.retired, .link-arrow.v2.retired{ opacity:0.7; }
+  .link.warn{ stroke:var(--accent-amber); }
+  .link-arrow.warn{ fill:var(--accent-amber); opacity:1; }
+  .link.warn.retired{ stroke-dasharray:none; }
+  .link.warn.acked, .link-arrow.warn.acked{ stroke:var(--text-muted); fill:var(--text-muted); }
+  .link-hit{ fill:none; stroke:transparent; stroke-width:16; pointer-events:none; }
+  .version-pane .flow-layer .link-hit[data-tog]{ pointer-events:stroke; cursor:pointer; }
+  .flow-layer .link-hit.pickable{ pointer-events:stroke; cursor:pointer; }
+  .flow-layer .link.pickable{ stroke:var(--accent-amber); filter:drop-shadow(0 0 3px var(--accent-amber)); }
+  .flow-layer .link.picked{ stroke:var(--accent-amber); stroke-width:4.5; filter:drop-shadow(0 0 4px var(--accent-amber)); }
+  .wbadge rect{ fill:var(--accent-amber); stroke:none; }
+  .wbadge text{ fill:#1b1306; font-family:var(--font-ui); font-size:10.5px; font-weight:700; }
+  .version-pane .flow-layer .wbadge, .version-pane .flow-layer .ibadge{ pointer-events:all; cursor:pointer; }
+  .wbadge.acked rect, .ibadge.acked rect{ fill:var(--text-muted); }
+  .wbadge.acked text, .ibadge.acked text{ fill:var(--panel); }
+  .nbadge rect{ fill:var(--panel); stroke:var(--accent-teal); stroke-width:1.2; }
+  .nbadge text{ fill:var(--accent-teal); font-family:var(--font-ui); font-size:10.5px; font-weight:600; }
   .dim{ opacity:0.5; }
 
   /* Connector symbols. Shape = connector type; colour = owning platform. */
@@ -454,12 +474,13 @@
   .vcaption-text{ fill:var(--ver-glyph); font-family:var(--font-ui); font-size:11px; font-weight:600; }
 
   .delete-x{
-    position:absolute; top:-8px; right:-8px;
-    width:16px; height:16px; border-radius:50%;
-    background:var(--danger); color:#fff; font-size:10px; line-height:16px;
+    position:absolute; top:-6px; right:-2px;
+    width:24px; height:24px; border-radius:50%; box-sizing:border-box; border:2px solid var(--panel);
+    background:var(--danger); color:#fff; font-size:15px; line-height:20px;
     text-align:center; cursor:pointer; display:none;
     font-family:var(--font-ui); font-weight:700; z-index:3;
   }
+  .delete-x::after{ content:''; position:absolute; inset:-6px; border-radius:50%; }   /* ~32 px click area */
   .cblock.selected .delete-x{ display:block; }
 
   /* ---------- VERSIONED COPY (big view + small window) ----------
@@ -511,9 +532,11 @@
     background:var(--panel); border:1px solid var(--panel-border); border-radius:6px; padding:5px 10px;
   }
   .legend-item{ display:flex; align-items:center; gap:5px; }
+  body:not(.flow-composite) .legend-item.comp-only{ display:none; }
   .cblock.copy-block{ pointer-events:none; cursor:default; opacity:0.5; }
   .cblock.copy-block.versioned{ pointer-events:auto; cursor:pointer; opacity:1; z-index:25; }
   .cblock.copy-block.versioned .cblock-label{ pointer-events:none; }
+  .cblock.copy-block.versioned.selected{ z-index:45; }
   .vcaption{
     position:absolute; left:24px; top:11px; white-space:nowrap; pointer-events:none;
     font-family:var(--font-ui); font-size:11px; font-weight:600; color:var(--ver-glyph);
@@ -579,6 +602,17 @@
     background:transparent; color:var(--text-primary); font-family:var(--font-ui); font-size:12px; line-height:1.25; cursor:pointer; text-align:left; }
   .dc-side button .ds-dir{ display:block; font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted); }
   .dc-side button.on{ border-color:var(--accent-version); border-width:2px; padding:5px 7px; }
+  /* Round 6 — composite flow: cards are opaque and always on top of tiles, containers and connectors */
+  body.flow-composite .decision-card, body.flow-composite .decision-pill, body.flow-composite .ripple-pill{ z-index:70; }
+  .decision-card.comp-target{ width:280px; z-index:80 !important; }
+  .decision-card.comp-target::before{ display:none; }
+  .decision-card.comp-target .dc-on{ color:var(--text-primary); }
+  .decision-card.warn-card{ width:260px; z-index:75; }
+  .decision-card.warn-card input.warn-note{ display:block; width:100%; box-sizing:border-box; margin-top:3px; padding:6px 8px; border-radius:6px;
+    border:1px solid var(--panel-border); background:var(--block-bg); color:var(--text-primary); font-family:var(--font-ui); font-size:12px; }
+  .decision-card .dc-opt.dc-warn{ border-color:var(--accent-amber); }
+  .decision-card .dc-opt.on{ border-width:2px; padding:7px 9px; }
+  .ripple-pill.assess-pill.warn{ border-color:var(--accent-amber); }
 
   /* ---------- Dependencies between versioned blocks ---------- */
   /* A neighbour that must decide how to handle a new version on its shared connector */
@@ -636,6 +670,18 @@
   .ps-cols ul{ margin:0; padding-left:12px; }
   .ps-cols li{ margin-bottom:2px; }
   .ps-none{ color:#789; font-style:italic; }
+  /* round 6: one entry per named component; numbers match the markers on the diagram */
+  .ps-report{ display:block; }
+  .ps-entries{ list-style:none; margin:0; padding:0; columns:2; column-gap:14px; }
+  .ps-entries li{ break-inside:avoid; margin:0 0 4px; }
+  .ps-line{ padding-left:20px; }
+  .ps-num{ display:inline-block; min-width:14px; height:14px; line-height:14px; border-radius:7px; background:#1b2430; color:#fff; text-align:center; font-size:8.5px; margin-right:3px; }
+  .ps-marker circle{ fill:#1b2430; stroke:#fff; stroke-width:2; }
+  .ps-marker text{ fill:#fff; font-family:var(--font-ui); font-size:12px; font-weight:700; }
+  .pp-ask{ max-width:520px; margin:60px auto; background:var(--panel); color:var(--text-primary); border:1.5px solid var(--accent-amber); border-radius:10px; padding:16px 18px; font-family:var(--font-ui); font-size:13px; line-height:1.45; }
+  .pp-ask-btns{ display:flex; gap:8px; margin-top:12px; }
+  .pcont-label.need-name .pcont-name{ fill:var(--accent-amber); }
+  .pcont.need-name{ stroke:var(--accent-amber); stroke-width:2.5; stroke-dasharray:6 4; }
 
   /* ---------- Start from a description ---------- */
   .flow-prompt{ padding:9px 12px 8px; border-bottom:1px solid var(--panel-border); }
@@ -789,6 +835,9 @@
         <span class="legend-item"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--text-muted)" stroke-width="2.5" stroke-dasharray="1 6" stroke-linecap="round"/></svg>Retired</span>
         <span class="legend-item"><svg width="22" height="14"><rect x="1" y="1" width="20" height="12" rx="4" fill="none" stroke="var(--accent-teal)" stroke-width="1.5"/><text x="11" y="10.5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-teal)">Δ</text></svg>Code change</span>
         <span class="legend-item"><svg width="14" height="14"><rect x="0" y="0" width="14" height="14" rx="4" fill="var(--accent-amber)"/><text x="7" y="11" text-anchor="middle" font-size="10" font-weight="700" fill="#1b1306">!</text></svg>Impact</span>
+        <span class="legend-item comp-only"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--flow-line)" stroke-width="3" stroke-linecap="round"/></svg>v1</span>
+        <span class="legend-item comp-only"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--accent-version)" stroke-width="3" stroke-linecap="round"/></svg>v2</span>
+        <span class="legend-item comp-only"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--accent-amber)" stroke-width="3" stroke-linecap="round"/></svg>⚠ not valid</span>
       </div>
     </div>
     <div class="mini-view" id="miniView" title="Click to swap the two views">
@@ -848,6 +897,17 @@
   let extraCallers = [];
   let xcCounter = 0;
   let callableKeys = new Set();     // connectors that can take a calling application (rendered each time)
+  // Round 6 (composite flow): which lines are live. A versioned block's dotted / solid fan lines can be
+  // swapped (lineFlips: block id -> [link indexes swapped]); each caller of a versioned API / file is on
+  // v1, v2 or both (callerVer: caller id -> 'v1'|'v2'|'both'); a branch at a component that got a
+  // parallel version stays on v1, moves to v2 or keeps both (laneChoice: seam block id -> 'v1'|'v2'|'both').
+  let lineFlips = {};
+  let callerVer = {};
+  let laneChoice = {};
+  // Acknowledged warnings (both modes): warning id -> note ('' = no note)
+  let ackWarn = {};
+  const openWarnings = new Set();   // warning notes shown open on the canvas
+  let needName = new Set();         // container keys highlighted after "Name them now" (print)
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
@@ -882,10 +942,13 @@
       case 'api':      // home plate, tapered on the entry (left) side
         return '<path class="n-shape" d="M26 -16H-11L-26 0L-11 16H26Z"></path>' +
                '<text class="n-text" x="6" y="4.5" text-anchor="middle">API</text>';
-      case 'process':  // a cog inside a hexagon
+      case 'process':  // "branching flow" inside a hexagon: start dot → decision diamond → two steps
         return '<path class="n-shape" d="M-11 -20H11L22 0L11 20H-11L-22 0Z"></path>' +
-               '<circle class="n-line" r="9.2" stroke-width="3.4" stroke-dasharray="3.6 3.63"></circle>' +
-               '<circle class="n-line" r="6" stroke-width="3.2"></circle>';
+               '<path class="n-line" stroke-width="1.8" d="M-10 0H-6.5M3.5 0L7 -6.5M3.5 0L7 6.5"></path>' +
+               '<circle class="n-dot" cx="-12" cy="0" r="2.6"></circle>' +
+               '<path class="n-line" stroke-width="1.8" stroke-linejoin="round" d="M-6.5 0L-1.5 -5L3.5 0L-1.5 5Z"></path>' +
+               '<rect class="n-dot" x="6" y="-11" width="6.5" height="6.5" rx="1.2"></rect>' +
+               '<rect class="n-dot" x="6" y="4.5" width="6.5" height="6.5" rx="1.2"></rect>';
       case 'topic':    // one publisher fanning out to many subscribers
         return '<rect class="n-shape" x="-20" y="-20" width="40" height="40" rx="10"></rect>' +
                '<path class="n-line" stroke-width="2" d="M-9 0 9 -11M-9 0H9M-9 0 9 11"></path>' +
@@ -925,6 +988,37 @@
     // An API is always a boundary: the front API (iPaaS A) calls the backend API,
     // which belongs to the next, downstream iPaaS — a separate container.
     'api-to-api':         { entry:{type:'api', owner:'ipaas', strong:true},     mid:[], exit:{type:'api', owner:'ipaas', strong:true, boundary:true} }
+  };
+
+  // A versioned block's "fan": two links that share one component, one solid and one dotted (a switch).
+  // In composite flow the user may swap them; both solid at once is not a valid pattern.
+  const fanCache = {};
+  function fanOf(v){
+    if(v.id in fanCache) return fanCache[v.id];
+    let res = null;
+    for(let a = 0; a < v.links.length && !res; a++) for(let b = a + 1; b < v.links.length && !res; b++){
+      const [f1, t1, s1] = v.links[a], [f2, t2, s2] = v.links[b];
+      if((s1 === 'dotted') === (s2 === 'dotted')) continue;
+      const shared = f1 === f2 ? f1 : t1 === t2 ? t1 : null;
+      if(!shared) continue;
+      const others = [f1 === shared ? t1 : f1, f2 === shared ? t2 : f2];
+      const typeOf = (k) => v.nodes.find(n => n.k === k).type;
+      res = { idx:[a, b], shared, other:others[0], keys:others, sharedType:typeOf(shared), otherType:typeOf(others[0]) };
+    }
+    return (fanCache[v.id] = res);
+  }
+  // Which warning applies when one component talks to two versions at once
+  function warnKind(sharedType, otherType){
+    if(otherType === 'topic' && sharedType === 'process') return 'publisher';
+    if(otherType === 'topic') return 'consumer';
+    if(otherType === 'api' || otherType === 'file' || sharedType === 'app') return 'caller';
+    return 'generic';
+  }
+  const WARN_TEXT = {
+    publisher:'Not a valid pattern \u2014 one process publishes two versions of the event at the same time. Each subscriber must now pick its version, so the version decision moves to the consumers and versioning loses its advantage. Use only as a short transition step.',
+    consumer:'Not a valid pattern \u2014 the same consumer receives two versions of the event. Acceptable only as a temporary state for a smooth transition at cutover; retire v1 as soon as possible.',
+    caller:'Not a valid pattern \u2014 one process calls two versions of the same API. The provider must run both versions for this one consumer, and the version decision is spread over the call logic. Use only as a short transition step.',
+    generic:'Not a valid pattern \u2014 one component is connected to two versions at the same time. Use only as a short transition step.'
   };
 
   function tilePath(w, h){
@@ -991,32 +1085,60 @@
         strong:!!spec.exit.strong, vblock: v ? i : null, bi:i, key:b.id + ':out', boundary: !!spec.exit.boundary };
       sets.push(exit); segs.push([last, exit]);
 
-      deferred.push({ segs, v, dim: dimUnversioned && !v && !pending.has(i) });
+      deferred.push({ segs, v, dim: dimUnversioned && !v && !pending.has(i), bid: b.id, flips: b.flips, i });
     });
 
-    deferred.forEach(({ segs, v, dim }) => {
+    // links carry their owner block (own), the keys of the components they join (k1, k2) and the
+    // version they belong to (ver) — composite flow uses them to pick connectors and colour by version
+    const verOf = (a, z) => (a && a.ver === 'v2') || (z && z.ver === 'v2') ? 'v2' : 'v1';
+    const warnings = [];
+    deferred.forEach(({ segs, v, dim, bid, flips, i }) => {
       if(v){
         // a versioned block says exactly which lane connects to which
         const stations = [segs[0][0], ...segs.map(sg => sg[1])];
         const at = (k) => {
-          for(const st of stations){ const n = st.nodes.find(n => n.key === k); if(n) return { x:st.x, y:st.cy + n.dy }; }
+          for(const st of stations){ const n = st.nodes.find(n => n.key === k); if(n) return { x:st.x, y:st.cy + n.dy, n, st }; }
           return null;
         };
-        v.links.forEach(([from, to, style]) => {
+        // composite flow: the user may swap a fan's dotted / solid lines (both solid = not a valid pattern)
+        const fan = fanOf(v);
+        const style = (li) => (v.links[li][2] === 'dotted') !== !!(flips && flips.includes(li)) ? 'dotted' : 'solid';
+        const mine = [];
+        v.links.forEach(([from, to], li) => {
           const a = at(from), z = at(to);
-          if(a && z) links.push({ x1:a.x, y1:a.y, x2:z.x, y2:z.y, retired: style === 'dotted', dim:false });
+          if(!a || !z) return;
+          const l = { x1:a.x, y1:a.y, x2:z.x, y2:z.y, retired: style(li) === 'dotted', dim:false,
+            own:bid, k1:a.st.key, k2:z.st.key, ver:verOf(a.n, z.n), li, from, to };
+          if(fan && fan.idx.includes(li)){ l.tog = 'fan|' + bid + '|' + li; }
+          links.push(l); mine.push(l);
         });
+        if(fan && flips && flips.length){
+          // nodes follow their links: a retired v1 that is live again shows as live, a v2 whose link is dotted as retired
+          const live = (k) => mine.some(l => (l.from === k || l.to === k) && !l.retired);
+          stations.forEach(st => st.nodes.forEach(n => {
+            if(!fan.keys.includes(n.key)) return;
+            if(n.role === 'retired' && live(n.key)) n.role = 'unchanged';
+            else if(n.role !== 'retired' && !live(n.key)) n.role = 'retired';
+          }));
+          const both = mine.filter(l => fan.idx.includes(l.li));
+          if(both.length === 2 && both.every(l => !l.retired)){
+            both.forEach(l => { l.warn = 'fan|' + bid; });
+            const sh = at(fan.shared), other = at(fan.other);
+            warnings.push({ id:'fan|' + bid, kind: warnKind(fan.sharedType, fan.otherType), x: sh.x, y: sh.y, bid, ox: other.x });
+          }
+        }
       } else {
         segs.forEach(([A, B]) => A.nodes.forEach(a => B.nodes.forEach(z => links.push({
           x1:A.x, y1:A.cy + a.dy, x2:B.x, y2:B.cy + z.dy,
-          retired: a.role === 'retired' || z.role === 'retired', dim
+          retired: a.role === 'retired' || z.role === 'retired', dim, own:bid, k1:A.key, k2:B.key, ver:verOf(a, z)
         }))));
       }
     });
 
     if(callerSet) firstEntry.nodes.forEach(z => links.push({
       x1:callerSet.x, y1:callerSet.cy, x2:firstEntry.x, y2:firstEntry.cy + z.dy,
-      retired: z.role === 'retired', dim: dimUnversioned && firstEntry.vblock === null && !pending.has(0)
+      retired: z.role === 'retired', dim: dimUnversioned && firstEntry.vblock === null && !pending.has(0),
+      own:'caller', k1:callerSet.key, k2:firstEntry.key, ver:verOf(null, z)
     }));
 
     // Platform containers: consecutive connectors with the same owner form one
@@ -1058,7 +1180,7 @@
       key: st.key, caller: !!st.caller,
       skey: st.caller ? null : st.key, bis: (st.bis || [st.bi]).map(bi => blocks[bi].id).filter(Boolean)
     })));
-    return { containers, links, nodes };
+    return { containers, links, nodes, warnings };
   }
 
   function flowMarkup(model){
@@ -1070,14 +1192,18 @@
       const r = (v) => Math.round(v*100)/100;
       return 'M' + r(x) + ' ' + r(y) + 'L' + r(bx - uy*6) + ' ' + r(by + ux*6) + 'L' + r(bx + uy*6) + ' ' + r(by - ux*6) + 'Z';
     };
+    let hits = '';
     model.links.forEach(l => {
-      const cls = 'link' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '');
-      const acls = 'link-arrow' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '');
-      const to = model.nodes.find(n => Math.abs(n.x - l.x2) < 0.5 && Math.abs(n.y - l.y2) < 0.5);
+      const extra = (model.colorVersions && l.ver === 'v2' ? ' v2' : '') + (l.warn ? ' warn' + (ackWarn[l.warn] !== undefined ? ' acked' : '') : '');
+      const cls = 'link' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '') + extra;
+      const acls = 'link-arrow' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '') + extra;
+      const data = (l.own && flowMode === 'composite' ? ' data-own="' + l.own + '" data-k1="' + l.k1 + '" data-k2="' + l.k2 + '"' : '') + (l.tog && flowMode === 'composite' ? ' data-tog="' + l.tog + '"' : '');
+      const to = l.toType ? { type:l.toType } : model.nodes.find(n => Math.abs(n.x - l.x2) < 0.5 && Math.abs(n.y - l.y2) < 0.5);
+      let d;
       if(l.pts){
         // straight segments with rounded bends (composite flow)
         const p = l.pts;
-        let d = 'M' + p[0][0] + ' ' + p[0][1];
+        d = 'M' + p[0][0] + ' ' + p[0][1];
         for(let i = 1; i < p.length; i++){
           if(i < p.length - 1){
             const [ax, ay] = p[i-1], [cx, cy] = p[i], [ex, ey] = p[i+1];
@@ -1087,36 +1213,41 @@
             d += 'L' + q1[0] + ' ' + q1[1] + 'Q' + cx + ' ' + cy + ' ' + q2[0] + ' ' + q2[1];
           } else d += 'L' + p[i][0] + ' ' + p[i][1];
         }
-        out += '<path class="' + cls + '" d="' + d + '"></path>';
+        out += '<path class="' + cls + '"' + data + ' d="' + d + '"></path>';
         // arrowhead on the last segment, right before the receiving symbol
         const [ax, ay] = p[p.length - 2], [zx, zy] = p[p.length - 1];
         const dx = zx - ax, dy = zy - ay, horiz = Math.abs(dx) >= Math.abs(dy);
         const gap = (to ? (horiz ? SYMBOLS[to.type].half : (SYMBOL_VHALF[to.type] || 20)) : 20) + 3;
         const seg = Math.hypot(dx, dy);
         if(seg - gap > 12) arrows += '<path class="' + acls + '" d="' + arrowPath(zx - dx/seg*gap, zy - dy/seg*gap, dx, dy) + '"></path>';
-        return;
-      }
-      const half = to ? SYMBOLS[to.type].half : 20;
-      const tx = l.x2 - half - 3;
-      if(l.y1 === l.y2){
-        out += '<line class="' + cls + '" x1="' + l.x1 + '" y1="' + l.y1 + '" x2="' + l.x2 + '" y2="' + l.y2 + '"></line>';
-        if(tx - 12 > l.x1) arrows += '<path class="' + acls + '" d="' + arrowPath(tx, l.y2, 1, 0) + '"></path>';
       } else {
-        const mx = (l.x1 + l.x2)/2;
-        out += '<path class="' + cls + '" d="M' + l.x1 + ' ' + l.y1 + 'C' + mx + ' ' + l.y1 + ' ' + mx + ' ' + l.y2 + ' ' + l.x2 + ' ' + l.y2 + '"></path>';
-        // a curve isn't level just before its end: find the point on the curve where the
-        // tip goes and turn the arrowhead along the curve's direction there
-        if(tx - 12 > l.x1){
-          const bx = (t) => { const u = 1 - t; return u*u*u*l.x1 + 3*u*u*t*mx + 3*u*t*t*mx + t*t*t*l.x2; };
-          let lo = 0, hi = 1;
-          for(let k = 0; k < 40; k++){ const m = (lo + hi)/2; if(bx(m) < tx) lo = m; else hi = m; }
-          const t = (lo + hi)/2, u = 1 - t;
-          const y = l.y1 + (l.y2 - l.y1)*t*t*(3 - 2*t);
-          const dx = 3*u*u*(mx - l.x1) + 3*t*t*(l.x2 - mx), dy = (l.y2 - l.y1)*6*t*u;
-          arrows += '<path class="' + acls + '" d="' + arrowPath(tx, y, dx, dy) + '"></path>';
+        const half = to ? SYMBOLS[to.type].half : 20;
+        const tx = l.x2 - half - 3;
+        if(l.y1 === l.y2){
+          d = 'M' + l.x1 + ' ' + l.y1 + 'L' + l.x2 + ' ' + l.y2;
+          out += '<line class="' + cls + '"' + data + ' x1="' + l.x1 + '" y1="' + l.y1 + '" x2="' + l.x2 + '" y2="' + l.y2 + '"></line>';
+          if(tx - 12 > l.x1) arrows += '<path class="' + acls + '" d="' + arrowPath(tx, l.y2, 1, 0) + '"></path>';
+        } else {
+          const mx = (l.x1 + l.x2)/2;
+          d = 'M' + l.x1 + ' ' + l.y1 + 'C' + mx + ' ' + l.y1 + ' ' + mx + ' ' + l.y2 + ' ' + l.x2 + ' ' + l.y2;
+          out += '<path class="' + cls + '"' + data + ' d="' + d + '"></path>';
+          // a curve isn't level just before its end: find the point on the curve where the
+          // tip goes and turn the arrowhead along the curve's direction there
+          if(tx - 12 > l.x1){
+            const bx = (t) => { const u = 1 - t; return u*u*u*l.x1 + 3*u*u*t*mx + 3*u*t*t*mx + t*t*t*l.x2; };
+            let lo = 0, hi = 1;
+            for(let k = 0; k < 40; k++){ const m = (lo + hi)/2; if(bx(m) < tx) lo = m; else hi = m; }
+            const t = (lo + hi)/2, u = 1 - t;
+            const y = l.y1 + (l.y2 - l.y1)*t*t*(3 - 2*t);
+            const dx = 3*u*u*(mx - l.x1) + 3*t*t*(l.x2 - mx), dy = (l.y2 - l.y1)*6*t*u;
+            arrows += '<path class="' + acls + '" d="' + arrowPath(tx, y, dx, dy) + '"></path>';
+          }
         }
       }
+      // a wide, invisible twin that catches clicks (picking a connector, swapping dotted / solid)
+      if(l.own && flowMode === 'composite') hits += '<path class="link-hit"' + data + ' d="' + d + '"></path>';
     });
+    out += hits;
     out += arrows;
     model.nodes.forEach(n => {
       const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '') +
@@ -1136,11 +1267,24 @@
           '<text x="' + (bx+25) + '" y="' + (by+13) + '" text-anchor="middle">v1 Δ</text></g>';
       }
       if(n.impact){
-        // dependent logic behind an end application's API / folder may be impacted
+        // dependent logic behind an end application's API / folder may be impacted (click to acknowledge)
+        const wid = 'impact|' + n.key, ack = ackWarn[wid] !== undefined;
         const bx = n.x - 58, by = n.y + 24;
-        out += '<g class="ibadge"><title>Dependent logic in the end application may be impacted</title><rect x="' + bx + '" y="' + by + '" width="116" height="18" rx="6"></rect>' +
-          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">⚠ dependent logic</text></g>';
+        out += '<g class="ibadge' + (ack ? ' acked' : '') + '" data-warn="' + wid + '"><title>' + (ack ? 'Acknowledged' + (ackWarn[wid] ? ': ' + escXml(ackWarn[wid]) : '') + ' \u2014 click to change' : 'Dependent logic in the end application may be impacted \u2014 click to acknowledge') + '</title><rect x="' + bx + '" y="' + by + '" width="116" height="18" rx="6"></rect>' +
+          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">' + (ack ? '\u2713 dependent logic' : '\u26A0 dependent logic') + '</text></g>';
       }
+    });
+    // both lines solid: not a valid pattern (click to read the note / acknowledge)
+    (model.warnings || []).forEach(w => {
+      const ack = ackWarn[w.id] !== undefined, bw = 132, bx = w.x - bw/2, by = w.y + (w.caller ? 0 : 30);
+      out += '<g class="wbadge' + (ack ? ' acked' : '') + '" data-warn="' + w.id + '" data-kind="' + w.kind + '"><title>' + escXml(WARN_TEXT[w.kind]) + '</title>' +
+        '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="18" rx="6"></rect>' +
+        '<text x="' + w.x + '" y="' + (by + 13) + '" text-anchor="middle">' + (ack ? '\u2713 not a valid pattern' : '\u26A0 not a valid pattern') + '</text></g>';
+    });
+    (model.notes || []).forEach(nt => {
+      const bw = nt.text.length * 6 + 16, bx = nt.x - bw - 34, by = nt.y - 36;   // left of the component, clear of the tile caption
+      out += '<g class="nbadge" data-note="' + nt.id + '"><rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="18" rx="6"></rect>' +
+        '<text x="' + nt.x + '" y="' + (by + 13) + '" text-anchor="middle">' + escXml(nt.text) + '</text></g>';
     });
     return out;
   }
@@ -1176,7 +1320,7 @@
     let out = '';
     model.containers.forEach((c, ci) => {
       const ext = c.owner === 'external' || c.owner === 'caller';
-      const cls = OWNERS[c.owner].cls + (c.dim ? ' dim' : '') + (c.impact ? ' impact' : '');
+      const cls = OWNERS[c.owner].cls + (c.dim ? ' dim' : '') + (c.impact ? ' impact' : '') + (editable && c.keys.some(k => needName.has(k)) && !containerLabel(c.keys) ? ' need-name' : '');
       if(c.rects){
         // one asset drawn as the union of several rectangles (composite flow: blocks joined at a process)
         const u = unionShape(c.rects);
@@ -1228,8 +1372,20 @@
       worldEl.appendChild(layer);
     }
     layer.innerHTML = flowMarkup(model);
-    if(versionTarget && versionTarget.pane === (worldEl === world ? 'base' : 'copy'))
-      layer.querySelectorAll('.node[data-skey="' + versionTarget.skey + '"]').forEach(n => n.classList.add('targeted'));
+    const vt = versionTarget;
+    if(vt && vt.pane === (worldEl === world ? 'base' : 'copy')){
+      layer.querySelectorAll('.node[data-skey="' + vt.skey + '"]').forEach(n => n.classList.add('targeted'));
+      if(flowMode === 'composite' && vt.conns){
+        // the component's connectors: clickable until one is picked, then the picked one stays lit
+        const at = (el) => el.dataset.k1 === vt.skey || el.dataset.k2 === vt.skey;
+        const sideOk = (own) => { const c = vt.conns.find(x => x.own === own); return c && (!vt.sideFilter || c.side === vt.sideFilter); };
+        layer.querySelectorAll('[data-own]').forEach(el => {
+          if(!at(el)) return;
+          if(!vt.conn && vt.conns.length > 1 && sideOk(el.dataset.own)) el.classList.add('pickable');
+          if(vt.conn && el.dataset.own === vt.conn && !el.classList.contains('link-hit')) el.classList.add('picked');
+        });
+      }
+    }
   }
 
   // Standalone pictures of a single block, for the library cards.
@@ -1886,7 +2042,7 @@
       const item = paletteItemsByVariantId[v.id];
       if(!item) return;
       // composite flow: no version is available until a component is selected; then only its versions
-      const ok = flowMode === 'composite' ? !!versionTarget && targetOptions(versionTarget).includes(v.id)
+      const ok = flowMode === 'composite' ? !!versionTarget && !!versionTarget.only && targetOptions(versionTarget).includes(v.id)
                                           : chainOrder.some(b => b.dataset.tpl === v.base);
       item.classList.toggle('off-flow', !ok);
       item.draggable = ok;
@@ -1927,15 +2083,165 @@
     stage.appendChild(clone);
     stage.style.transform = 'translate(' + ((W - (bb.r - bb.l)*sc)/2 - bb.l*sc) + 'px,' + ((H - (bb.b - bb.t)*sc)/2 - bb.t*sc) + 'px) scale(' + sc + ')';
     box.appendChild(stage);
+    return sc;
+  }
+  // ---------------------------------------------------------------
+  // Round 6 — the print report names the component each note applies to (both modes): numbered
+  // markers on the versioned diagram, one plain entry per affected component (name, platform,
+  // row): version change, decision, connector state, warnings. Unnamed components get auto labels.
+  // ---------------------------------------------------------------
+  const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
+  function printReport(){
+    const composite = flowMode === 'composite';
+    const nameOf = (b) => b.querySelector('.cblock-label').textContent;
+    const decisions = composite ? computeCompositeDecisions() : computeDecisions();
+    const rip = composite ? computeCompositeRipples() : computeRipples();
+    // every component in flow order (main flow first, then the branches), for auto labels and ordering
+    const comps = [], seen = new Set();
+    const addComp = (k, type) => { if(!k || seen.has(k)) return; seen.add(k); comps.push({ k, type }); };
+    const rowsList = [chainOrder].concat(branches.map(br => br.blocks));
+    rowsList.forEach(list => list.forEach(b => {
+      const spec = NODE_SPECS[b.dataset.tpl];
+      addComp(entryKeyOf(b), spec.entry.type);
+      spec.mid.forEach((m, mk) => addComp(b.dataset.id + ':m' + mk, m.type));
+      addComp(exitKeyOf(b), spec.exit.type);
+    }));
+    const callerList = composite ? compositeCallers() : (chainOrder[0] && callers[chainOrder[0].dataset.id] ? [{ id:'main', key:chainOrder[0].dataset.id + ':caller' }] : []);
+    callerList.forEach(c => addComp(c.key, 'app'));
+    const counter = {}, auto = {};
+    comps.forEach(c => { counter[c.type] = (counter[c.type] || 0) + 1; auto[c.k] = CONNECTOR_LABEL[c.type] + ' ' + counter[c.type]; });
+    const contOf = (k) => baseContainers.find(c => c.keys.includes(k));
+    const named = (k) => {
+      const c = contOf(k), lab = c && containerLabel(c.keys);
+      if(!lab) return null;
+      const ext = c.owner === 'external' || c.owner === 'caller';
+      if(ext) return lab.name ? { name:lab.name, platform:'' } : null;
+      return lab.asset || lab.platform ? { name:lab.asset || lab.platform, platform:lab.asset ? lab.platform : '' } : null;
+    };
+    const blockOfKey = (k) => allBlocks().find(b => entryKeyOf(b) === k || exitKeyOf(b) === k || k.startsWith(b.dataset.id + ':m'));
+    const rowName = (b) => { if(!b || chainOrder.includes(b)) return 'main flow'; const j = branches.indexOf(branchOf(b)); return 'branch ' + (j + 1); };
+    const typeOf = (k) => (comps.find(c => c.k === k) || {}).type;
+    const entries = {};
+    const add = (k, line) => { if(!k) return; (entries[k] = entries[k] || []).push(line); };
+    const ackLine = (id) => ackWarn[id] !== undefined ? ' — ⚠ acknowledged' + (ackWarn[id] ? ': ' + ackWarn[id] : '') : '';
+    const keyOfType = (b, type) => {
+      const spec = NODE_SPECS[b.dataset.tpl];
+      if(spec.entry.type === type) return entryKeyOf(b);
+      if(spec.exit.type === type) return exitKeyOf(b);
+      const mk = spec.mid.findIndex(m => m.type === type);
+      return mk >= 0 ? b.dataset.id + ':m' + mk : null;
+    };
+    // 1. versions applied
+    allBlocks().forEach(b => {
+      const v = variantsById[versionOverrides[b.dataset.id]];
+      if(!v) return;
+      const fan = fanOf(v), flips = lineFlips[b.dataset.id] || [];
+      v.nodes.filter(n => n.ver && n.ver !== 'v1').forEach(n => {
+        const k = keyOfType(b, n.type);
+        const sw = isSwitchAt(v, n.type);
+        add(k, CONNECTOR_LABEL[n.type] + ' ' + n.ver + ' — new version (breaking)' + (n.role === 'side' ? ', as a side-effect' : '') +
+          ': “' + variantLabelFor(v, b) + '” in ' + nameOf(b) + (sw ? ' · switch (v1 retired)' : ' · runs next to v1') + '.');
+        if(fan && composite && flips.length && n.role === 'primary'){
+          const live = (li) => (v.links[li][2] === 'dotted') === flips.includes(li);
+          add(k, fan.idx.every(live) ? '⚠ Both lines live — not a valid pattern (' + WARN_TEXT[warnKind(fan.sharedType, fan.otherType)].split(' — ')[1].split('.')[0] + ')' + ackLine('fan|' + b.dataset.id) + '.'
+                                    : 'Lines swapped: v1 stays live, v2 dotted.');
+        }
+      });
+    });
+    // 2. non-breaking changes
+    [...new Set([...rip.delta, ...manualDeltas])].forEach(k => add(k, 'Non-breaking change (Δ)' + (manualDeltas.has(k) ? ' — marked by hand.' : ' — absorbed from a contract change.')));
+    // 3. decisions
+    decisions.forEach(d => {
+      const nb = findBlock(d.blockId);
+      if(!nb) return;
+      const k = d.kind === 'ripple' ? d.skey : d.ckey || (d.side === 'downstream' ? entryKeyOf(nb) : exitKeyOf(nb));
+      const what = CONNECTOR_LABEL[d.type] + ' ' + d.ver;
+      if(d.kind === 'ripple') add(k, 'Decision pending: ' + nameOf(nb) + ' — absorb the contract change or pass it on?');
+      else if(d.kind === 'assess') add(k, d.resolved
+        ? nameOf(nb) + ' (' + rowName(nb) + '): ' + (d.choice === 'v1' ? 'stays on v1.' : d.choice === 'v2' ? 'moved to ' + what + '.' : 'keeps both v1 and v2 — ⚠ not a valid pattern' + ackLine('branch|' + d.blockId) + '.')
+        : 'Impacted: ' + nameOf(nb) + ' (' + rowName(nb) + ') stays on v1 — assessment pending.');
+      else add(k, 'Decision pending: how should ' + nameOf(nb) + ' handle ' + what + '?');
+    });
+    rip.asks.filter(a => a.resolved).forEach(a => {
+      const nb = findBlock(a.blockId);
+      add(a.skey, (nb ? nameOf(nb) : '') + ': ' + (a.choice.choice === 'absorb' ? 'absorbed the contract change here (Δ).' : 'passed it on' + (a.choice.code ? ' with a code change (Δ)' : ' untouched') + ' to ' + farLabel(a.far) + '.'));
+    });
+    // 4. callers of a versioned API / file, and dependent logic
+    if(composite){
+      const keys = new Set(Object.keys(entries));
+      callerList.forEach(c => { const k = anchorKey(c.anchor); if(k && keys.has(k) && (typeOf(k) === 'api' || typeOf(k) === 'file')) (keys.__c = keys.__c || {}, (keys.__c[k] = keys.__c[k] || []).push(c)); });
+      Object.entries(keys.__c || {}).forEach(([k, list]) => {
+        if(!allBlocks().some(b => { const v = variantsById[versionOverrides[b.dataset.id]]; return v && keyOfType(b, typeOf(k)) === k && v.nodes.some(n => n.type === typeOf(k) && n.ver === 'v2'); })) return;
+        add(k, 'Callers: ' + list.map(c => {
+          const lab = containerLabels[c.key], nm = lab && lab.name ? lab.name : auto[c.key];
+          const cv = callerVer[c.id] || 'v1';
+          return nm + (cv === 'v2' ? ' → v2' : cv === 'both' ? ' on v1 and v2 (⚠ not a valid pattern' + ackLine('caller|' + c.id) + ')' : ' stays on v1' + (rip.impact.has(c.key) ? ' (⚠ dependent logic)' : ''));
+        }).join(', ') + '.');
+        if(list.every(c => callerVer[c.id] === 'v2')) add(k, 'No caller left on v1 — v1 can be retired.');
+      });
+    }
+    [...rip.impact].forEach(k => add(k, '⚠ Dependent logic may be impacted' + ackLine('impact|' + k) + '.'));
+    // order and titles
+    const order = comps.map(c => c.k).filter(k => entries[k]);
+    Object.keys(entries).forEach(k => { if(!order.includes(k)) order.push(k); });
+    const list = order.map((k, i) => {
+      const nm = named(k), type = typeOf(k) || 'api', b = blockOfKey(k);
+      const cl = callerList.find(c => c.key === k);
+      const title = (nm ? nm.name + (nm.platform ? ' (' + nm.platform + ')' : '') : auto[k] + ' (unnamed)') +
+        (type === 'app' ? '' : ' · ' + CONNECTOR_LABEL[type]) + ' · ' + (cl ? 'calling application' : rowName(b));
+      return { num:i + 1, k, title, lines:entries[k], named:!!nm, skey: cl ? (composite ? 'xc|' + cl.id : null) : k, caller:!!cl };
+    });
+    return list;
+  }
+  function addMarkers(box, list){
+    const layer = box.querySelector('.flow-layer');
+    if(!layer) return;
+    let out = '';
+    const k = Math.max(1, 1 / (+box.dataset.sc || 1) * 0.55);     // markers stay readable however small the diagram is printed
+    list.forEach(e => {
+      const n = e.skey ? layer.querySelector('.node[data-skey="' + CSS.escape(e.skey) + '"]') : (e.caller ? layer.querySelector('.node.caller-node') : null);
+      if(!n) return;
+      const m = n.transform.baseVal.consolidate().matrix;
+      const x = m.e - 28*k, y = m.f - 28*k;
+      out += '<g class="ps-marker"><circle cx="' + x + '" cy="' + y + '" r="' + 11*k + '" style="stroke-width:' + 2*k + '"></circle><text x="' + x + '" y="' + (y + 4.5*k) + '" text-anchor="middle" style="font-size:' + 12*k + 'px">' + e.num + '</text></g>';
+    });
+    layer.insertAdjacentHTML('beforeend', out);
   }
   function printAssessment(prepareOnly){
     if(!chainOrder.length){ showToast('Build a flow first, then print the assessment.', true); return; }
+    needName = new Set();
+    // components the report names but nobody named yet: name them now, or print with auto labels
+    const report = printReport();
+    const unnamed = report.filter(e => !e.named);
+    if(unnamed.length && !prepareOnly){
+      let host = document.querySelector('.print-host');
+      if(!host){ host = document.createElement('div'); host.className = 'print-host'; document.body.appendChild(host); }
+      host.innerHTML = '<div class="pp-ask"><p></p><div class="pp-ask-btns"><button class="btn" data-pp="name">Name them now</button>' +
+        '<button class="btn" data-pp="auto">Print with auto labels</button><button class="btn" data-pp="cancel">Cancel</button></div></div>';
+      host.querySelector('p').textContent = unnamed.length + ' affected component' + (unnamed.length === 1 ? ' has' : 's have') + ' no name: ' +
+        unnamed.map(e => e.title.split(' (unnamed)')[0]).join(', ') + '. Name them now, or print with auto labels?';
+      host.classList.add('open');
+      const close = () => { host.classList.remove('open'); host.innerHTML = ''; };
+      host.querySelector('[data-pp=cancel]').addEventListener('click', close);
+      host.querySelector('[data-pp=auto]').addEventListener('click', () => { close(); buildPrint(report); });
+      host.querySelector('[data-pp=name]').addEventListener('click', () => {
+        close();
+        unnamed.forEach(e => { const c = baseContainers.find(c => c.keys.includes(e.k)); if(c) c.keys.forEach(k => needName.add(k)); });
+        document.getElementById('tabBaseFlow').click();
+        renderFlows();
+        showToast('Name the highlighted containers (click their label), then print again.');
+      });
+      return;
+    }
+    return buildPrint(report);
+  }
+  function buildPrint(report){
     const wasDark = !document.body.classList.contains('light-theme');
     if(wasDark) document.body.classList.add('light-theme');
     renderFlows();
     let host = document.querySelector('.print-host');
     if(!host){ host = document.createElement('div'); host.className = 'print-host'; document.body.appendChild(host); }
-    host.innerHTML = '<div class="pp-bar"><span class="pp-title">Print preview \u00B7 one page</span>' +
+    host.innerHTML = '<div class="pp-bar"><span class="pp-title">Print preview · one page</span>' +
       '<button class="btn" data-pp="print">Print / Save as PDF</button><button class="btn" data-pp="download">Download sheet</button>' +
       '<button class="btn" data-pp="close">Close</button></div>' +
       '<div class="pp-note">If no print dialog opens (some previews block printing), use Download sheet and open the file in your browser to print or save it as PDF.</div>' +
@@ -1946,55 +2252,27 @@
     host.querySelector('.pp-frame').appendChild(sheet);
     const name = (b) => b.querySelector('.cblock-label').textContent;
     const esc = (t) => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' })[c]);
-    const list = (items) => items.length ? '<ul>' + items.map(t => '<li>' + t + '</li>').join('') + '</ul>' : '<div class="ps-none">None</div>';
-    sheet.innerHTML = '<div class="ps-head"><h1>Pattern Bench \u00B7 Versioning assessment</h1><span>' +
-      esc(chainOrder.map(name).join(' \u2192 ')) + ' \u00B7 ' + new Date().toLocaleString() + '</span></div>';
+    sheet.innerHTML = '<div class="ps-head"><h1>Pattern Bench · Versioning assessment</h1><span>' +
+      esc(chainOrder.map(name).join(' → ')) + (branches.length ? ' · + ' + branches.length + ' branch' + (branches.length === 1 ? '' : 'es') : '') + ' · ' + new Date().toLocaleString() + '</span></div>';
     const W = 1040, H = 196;
     const pic = (tag, src) => {
       const box = document.createElement('div');
       box.className = 'ps-pic';
       box.innerHTML = '<div class="ps-tag">' + tag + '</div>';
       sheet.appendChild(box);
-      fitClone(src, box, W, H);
+      box.dataset.sc = fitClone(src, box, W, H) || 1;
+      return box;
     };
-    pic('Base flow', world);
+    const basePic = pic('Base flow', world);
     const hasCopy = canvasWrap.classList.contains('split');
-    if(hasCopy) pic('Versioned copy', vworld);
-    const versions = chainOrder.filter(b => versionOverrides[b.dataset.id]).map(b => {
-      const v = variantsById[versionOverrides[b.dataset.id]];
-      return '<b>' + esc(name(b)) + '</b>: ' + esc(v.label) + ' <i>(' + (v.change === 'contract' ? 'contract' : 'process') + ' change)</i>';
-    });
-    const pending = computeDecisions().map(d => {
-      const b = chainOrder[d.index];
-      return '<b>' + esc(name(b)) + '</b>: ' + (d.kind === 'ripple' ? 'contract change reaches its process \u2014 absorb or pass on?' : esc(CONNECTOR_LABEL[d.type] + ' ' + d.ver) + ' is new \u2014 how to handle it?');
-    });
-    const r = computeRipples();
-    const answered = r.asks.filter(a => a.resolved).map(a => {
-      const b = chainOrder[a.index];
-      return '<b>' + esc(name(b)) + '</b>: ' + (a.choice.choice === 'absorb' ? 'absorbed (v1 \u0394)' : 'passed on' + (a.choice.code ? ' with a code change (v1 \u0394)' : ' untouched') + ' to ' + esc(farLabel(a.far)));
-    });
-    const keyName = (k) => {
-      const [id, at] = k.split(':');
-      const b = chainOrder.find(x => x.dataset.id === id);
-      if(!b) return k;
-      if(at === 'caller') return 'Calling application of ' + name(b);
-      const spec = NODE_SPECS[b.dataset.tpl];
-      const t = at === 'in' ? spec.entry.type : at === 'out' ? spec.exit.type : spec.mid[+at.slice(1)].type;
-      return CONNECTOR_LABEL[t] + ' ' + (at === 'in' ? 'into ' : at === 'out' ? 'out of ' : 'in ') + name(b);
-    };
-    const marks = [...new Set([...r.delta, ...manualDeltas])].map(k => '\u0394 ' + esc(keyName(k)) + (manualDeltas.has(k) ? ' (non-breaking change, marked)' : ''));
-    const impacts = [...r.impact].map(k => '\u26A0 ' + esc(keyName(k)) + ': dependent logic may be impacted');
-    const names = Object.entries(containerLabels).filter(([k, v]) => v.platform || v.asset || v.name || v.process).map(([k, v]) =>
-      v.name !== undefined || v.process !== undefined
-        ? 'End application at ' + esc(keyName(k)) + ': <b>' + esc(v.name || '(unnamed)') + '</b>' + (v.process ? ' \u2014 ' + esc(v.process) : '')
-        : esc(keyName(k)) + ': <b>' + esc([v.platform, v.asset].filter(Boolean).join(' \u00B7 ')) + '</b>');
+    const markBox = hasCopy ? pic('Versioned copy · numbers match the notes below', vworld) : basePic;
+    addMarkers(markBox, report);
     const cols = document.createElement('div');
-    cols.className = 'ps-cols';
-    cols.innerHTML =
-      '<div><h2>Versions applied</h2>' + list(versions) + '</div>' +
-      '<div><h2>Decisions</h2>' + list([...answered, ...pending.map(t => t + ' <i>(pending)</i>')]) + '</div>' +
-      '<div><h2>Code changes &amp; impact</h2>' + list([...marks, ...impacts]) + '</div>' +
-      '<div><h2>Assets (containers)</h2>' + list(names) + '</div>';
+    cols.className = 'ps-cols ps-report';
+    cols.innerHTML = '<h2>What changes, per component</h2>' + (report.length
+      ? '<ol class="ps-entries">' + report.map(e => '<li><b><span class="ps-num">' + e.num + '</span> ' + esc(e.title) + '</b>' +
+          e.lines.map(l => '<div class="ps-line">' + esc(l) + '</div>').join('') + '</li>').join('') + '</ol>'
+      : '<div class="ps-none">No versions, decisions or marks yet.</div>');
     sheet.appendChild(cols);
     const restore = () => {
       document.removeEventListener('keydown', onKey, true);
@@ -2548,6 +2826,8 @@
     callerPrompt = null;
     rippleChoices = {};
     manualDeltas = new Set();
+    lineFlips = {}; callerVer = {}; laneChoice = {}; ackWarn = {};
+    openWarnings.clear();
     closeLabelEditor();
     selectedBlock = null;
     updateEmptyHint();
@@ -2714,10 +2994,12 @@
   const BRANCH_OFF_IN = 110; // a multi-source row ends this far left of it, clear of the junction line
   const JUNC = 60;           // multi-source links (and stacked callers) join this far left of the connector, then arrive level with it
   const CALLER_ROOM = 70;    // extra space left of a connector that also has multi-source links, for the junction line
-  const CALLER_DX = 130;     // a calling application sits this far left of the API / file it calls
+  const CALLER_DX = 200;     // a calling application sits this far left of the API / file it calls (its box stays clear of the junction lines)
   const ROW_GAP = 80;        // minimum clear space between two branches on one row
-  const CALLER_DY = [0, 90, -90, 180, -180, 270, -270];          // callers of a connector that starts its row
-  const CALLER_DY_BUSY = [140, -160, 230, -250, 320, -340];      // callers of a connector with a block on its left
+  const CALLER_DY = [0, 130, -130, 260, -260, 390, -390];        // callers of a connector that starts its row (stacked ~130 px apart)
+  const CALLER_DY_BUSY = [150, -150, 280, -280, 410, -410];      // callers of a connector with a block on its left
+  const CALLER_BOX = { hw:75, up:70, down:50 };                  // readable caller box: CALLER / name / business process above the icon
+  const JSTEP = 14;          // spacing between the junction / drop lines of connectors that meet at one component
   let compCallerPos = {};    // caller id -> rendered position
   // Every calling application in composite flow: the main flow's (v1.9) caller plus the added ones.
   function compositeCallers(){
@@ -2725,6 +3007,64 @@
     const list = [];
     if(first && callers[first.dataset.id]) list.push({ id:'main', key:first.dataset.id + ':caller', anchor:[{ block:first.dataset.id, side:'in' }] });
     return list.concat(extraCallers);
+  }
+
+  // Connectors that meet at one component never share a segment: each gets its own drop line (fan-out)
+  // or its own junction line and arrival (multi-source, callers) — they meet only at the arrowhead.
+  function separateConnectors(links){
+    const groups = {};
+    links.forEach(l => { if(l.jk && (l.pts || l.jd === 'in')) (groups[l.jk + '|' + l.jd] = groups[l.jk + '|' + l.jd] || []).push(l); });
+    Object.entries(groups).forEach(([gk, ls]) => {
+      if(gk.endsWith('|out')){
+        // drop lines: per side, the nearest row's line is the outermost (rightmost), so no drop line
+        // crosses another branch's row segment
+        [1, -1].forEach(side => {
+          const g = ls.filter(l => Math.sign(l.rowY - l.pts[0][1]) === side || (side === 1 && l.rowY === l.pts[0][1]))
+            .sort((a, b) => Math.abs(a.rowY - a.pts[0][1]) - Math.abs(b.rowY - b.pts[0][1]) || a.pts[0][1] - b.pts[0][1]);
+          const n = g.length, sp = n > 1 ? Math.min(JSTEP, 30/(n - 1)) : 0;
+          g.forEach((l, i) => {
+            const ox = ((n - 1)/2 - i) * sp;
+            l.pts[0][0] += ox; l.pts[1][0] += ox; l.x1 = l.pts[0][0];
+          });
+        });
+        return;
+      }
+      // multi-source / callers: arrival offsets per lane, junction lines per side
+      const vh = (t) => (SYMBOL_VHALF[t] || 18) - 4;
+      const side = (l) => l.sy < l.ty - 0.5 ? -1 : l.sy > l.ty + 0.5 ? 1 : 0;
+      const byLane = {};
+      ls.forEach(l => { (byLane[l.ty] = byLane[l.ty] || []).push(l); });
+      Object.values(byLane).forEach(g => {
+        const up = g.filter(l => side(l) < 0).sort((a, b) => (a.sy - a.ty) - (b.sy - b.ty));      // farthest above first
+        const dn = g.filter(l => side(l) > 0).sort((a, b) => (a.sy - a.ty) - (b.sy - b.ty));      // nearest below first
+        const lv = g.filter(l => side(l) === 0);
+        const sp = Math.min(8, vh(g[0].toType) / Math.max(up.length, dn.length, 1));
+        up.forEach((l, i) => { l.ya = l.ty - (up.length - i) * sp; });
+        dn.forEach((l, i) => { l.ya = l.ty + (i + 1) * sp; });
+        lv.forEach((l, i) => { l.ya = l.ty + (i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i/2) * sp); });
+      });
+      // several connectors from one source (a caller on v1 and v2): their legs leave it at different heights
+      const bySrc = {};
+      ls.forEach(l => { const k = l.sx + ',' + l.sy; (bySrc[k] = bySrc[k] || []).push(l); });
+      Object.values(bySrc).forEach(g => {
+        g.forEach(l => { l.off = 0; });
+        if(g.length < 2) return;
+        g.filter(l => l.ya > l.sy).sort((a, b) => a.ya - b.ya).forEach((l, i) => { l.off = (i + 1) * 8; });
+        g.filter(l => l.ya < l.sy).sort((a, b) => b.ya - a.ya).forEach((l, i) => { l.off = -(i + 1) * 8; });
+      });
+      // junction lines: per side the line that arrives nearest the centre is the outermost (leftmost)
+      const ax = ls[0].tx, below = ls.filter(l => l.ya > l.sy + l.off), above = ls.filter(l => l.ya < l.sy + l.off);
+      below.sort((a, b) => a.ya - b.ya); above.sort((a, b) => b.ya - a.ya);
+      const n = Math.max(below.length, above.length), sx = n > 1 ? Math.min(JSTEP, 44/(n - 1)) : 0;
+      [below, above].forEach(g => g.forEach((l, i) => { l.jx = ax - JUNC - (g.length - 1 - i) * sx; }));
+      ls.forEach(l => {
+        const hy = l.sy + l.off, pts = [[l.sx, l.sy]];
+        if(l.off){ const px = l.sx + (l.srcPad || 16); pts.push([px, l.sy], [px, hy]); }
+        if(Math.abs(l.ya - hy) < 0.5) pts.push([l.tx, l.ya]);
+        else pts.push([l.jx, hy], [l.jx, l.ya], [l.tx, l.ya]);
+        l.pts = pts; l.x2 = l.tx; l.y2 = l.ya;
+      });
+    });
   }
 
   // One layout for both views. The base view (versions off) places the branch tiles on the
@@ -2738,6 +3078,7 @@
     const tiles = {};
     const geo0 = chainGeometry(withV);
     if(geo0.length) geo0[0].caller = false;          // composite draws every caller the same way (below)
+    geo0.forEach(g => { g.flips = withV ? lineFlips[g.id] || null : null; });
     const top0 = chainOrder.length ? parseFloat(chainOrder[0].style.top) : 0;
     chainOrder.forEach(b => { tiles[b.dataset.id] = { left:parseFloat(b.style.left), top:top0, w:parseFloat(b.style.width), h:hOf(b), variant:variantOf(b) }; });
     const cl = compositeCallers();
@@ -2755,7 +3096,7 @@
     if(trunk0.nodes.length){
       const xs = trunk0.nodes.map(n => n.x);
       const tspan = { L:Math.min(...xs) - 60, R:Math.max(...xs) + 60 };
-      if(chainOrder[0] && callersAt[anchorKey([{ block:chainOrder[0].dataset.id, side:'in' }])]) tspan.L -= CALLER_DX + CALLER_ROOM + 40;
+      if(chainOrder[0] && callersAt[anchorKey([{ block:chainOrder[0].dataset.id, side:'in' }])]) tspan.L -= CALLER_DX + CALLER_BOX.hw + CALLER_ROOM + 20;
       rows.set(0, [{ ...tspan, key:null }]);
     }
     const occupied = (lv) => rows.get(lv) || [];
@@ -2776,7 +3117,7 @@
       if(br.kind === 'out'){ L = ax - 24; R = ax + BRANCH_OFF - SEAM_X + W + TILE_D + 40; }
       else {
         L = ax - BRANCH_OFF_IN - SEAM_X - W - 40; R = dropX + 24;
-        if(callersAt[sideKey({ block:br.blocks[0].dataset.id, side:'in' }, 0)]) L -= CALLER_DX + CALLER_ROOM + 40;   // room for its calling applications
+        if(callersAt[sideKey({ block:br.blocks[0].dataset.id, side:'in' }, 0)]) L -= CALLER_DX + CALLER_BOX.hw + CALLER_ROOM + 20;   // room for its calling applications
       }
       const gap = ROW_GAP;
       const freeAt = (k) => occupied(k).every(o => o.R + gap < L || o.L - gap > R) &&
@@ -2836,6 +3177,20 @@
     };
     chainOrder.forEach(b => grow(0, hOf(b)));
     plans.forEach(pl => pl.br.blocks.forEach(b => grow(pl.k, hOf(b))));
+    // rows make room for their stacks of calling applications, so a third or fourth caller pushes the
+    // neighbouring rows away instead of overlapping them
+    const rowLevel = (b) => chainOrder.includes(b) ? 0 : (branchOf(b) ? branchOf(b).row : null);
+    const busyAt = (k) => allBlocks().some(b => exitKeyOf(b) === k && rowLevel(b) === level[k]);
+    const callerDys = (k, n) => { const dys = busyAt(k) ? CALLER_DY_BUSY : CALLER_DY; return [...Array(n)].map((_, i) => dys[i] ?? (i + 1) * 130); };
+    Object.entries(callersAt).forEach(([k, list]) => {
+      const lv = level[k];
+      if(lv === undefined) return;
+      const dys = callerDys(k, list.length);
+      const e = ext.get(lv) || { up:BLOCK_H/2 + 46, down:BLOCK_H/2 + 12, h:BLOCK_H };
+      e.up = Math.max(e.up, Math.max(0, ...dys.map(d => -d)) + CALLER_BOX.up + 12);
+      e.down = Math.max(e.down, Math.max(0, ...dys) + CALLER_BOX.down + 12);
+      ext.set(lv, e);
+    });
     const E = (lv) => ext.get(lv) || { up:BLOCK_H/2 + 46, down:BLOCK_H/2 + 12, h:BLOCK_H };
     const ROW_CLEAR = BRANCH_ROW - (BLOCK_H + 46 + 12);
     const yc = new Map([[0, top0 + BLOCK_H/2]]);
@@ -2846,7 +3201,7 @@
     // ---- pass 2: draw
     const pendIdx = (list) => new Set(list.map((b, i) => pending.has(b.dataset.id) ? i : -1).filter(i => i >= 0));
     const trunk = buildFlowModel(geo0, withV, pendIdx(chainOrder));
-    const all = { containers:trunk.containers.slice(), links:trunk.links.slice(), nodes:trunk.nodes.slice() };
+    const all = { containers:trunk.containers.slice(), links:trunk.links.slice(), nodes:trunk.nodes.slice(), warnings:trunk.warnings.slice(), notes:[], colorVersions:withV };
     const lanes = {}, pos = {};
     const note = (m) => m.nodes.forEach(n => { if(n.skey){ (lanes[n.skey] = lanes[n.skey] || []).push(n); } });
     const canon = (k) => { const ls = lanes[k] || []; return ls.find(n => n.ver !== 'v2' && n.role !== 'retired') || ls.find(n => n.ver !== 'v2') || ls[0]; };
@@ -2864,26 +3219,49 @@
       if(!a){ br.blocks.forEach(b => { tiles[b.dataset.id] = { hidden:true }; }); return; }
       const top = yc.get(k) - BLOCK_H/2;
       br.blocks.forEach((b, i) => { tiles[b.dataset.id] = { left:lefts[i], top, w:parseFloat(b.style.width), h:hOf(b), variant:variantOf(b) }; });
-      const geo = br.blocks.map((b, i) => ({ id:b.dataset.id, left:lefts[i], top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:variantOf(b), caller:false }));
+      const geo = br.blocks.map((b, i) => ({ id:b.dataset.id, left:lefts[i], top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:variantOf(b), caller:false,
+        flips: withV ? lineFlips[b.dataset.id] || null : null }));
       const m = buildFlowModel(geo, withV, pendIdx(br.blocks));
       // The shared component is drawn once, on its own row. The branch's link to it becomes
       // straight segments: a drop line from the component to the row, then along the row.
       const hidden = m.nodes.filter(n => n.key === hk);
       m.nodes = m.nodes.filter(n => n.key !== hk);
-      m.links.forEach(l => {
+      // which lane(s) of the shared component this branch uses: its own version decides (v2 → v2 lane);
+      // a branch that stays unversioned there follows its assessment (stay on v1 / move to v2 / keep both)
+      const seamB = br.kind === 'out' ? br.blocks[0] : br.blocks[br.blocks.length - 1];
+      const choice = laneChoice[seamB.dataset.id];
+      const v2Lane = withV ? (lanes[key] || []).find(n => n.ver === 'v2') : null;
+      const lanesFor = (h) => {
+        if(h.ver && h.ver !== 'v1') return [pickLane(key, h.ver)];
+        const v1 = pickLane(key, null);
+        if(!v2Lane || !choice || choice === 'v1') return [v1];
+        return choice === 'v2' ? [v2Lane] : [v1, v2Lane];
+      };
+      const bothKind = a.type === 'topic' ? (br.kind === 'out' ? 'consumer' : 'publisher') : (a.type === 'api' || a.type === 'file') ? 'caller' : 'generic';
+      m.links.slice().forEach(l => {
         const hs = hidden.find(h => near(l.x1, l.y1, h)), he = hidden.find(h => near(l.x2, l.y2, h));
-        if(hs){
-          const al = pickLane(key, hs.ver);
-          l.pts = [[al.x, al.y], [al.x, hs.y], [l.x2, l.y2]]; l.x1 = al.x; l.y1 = al.y;
-          if(al.role === 'retired') l.retired = true;
-        }
-        // multi-source: along the row to the junction line, up / down to the component's level,
-        // then into it from the left — the same way the calling applications arrive
-        if(he){
-          const al = pickLane(key, he.ver);
-          l.pts = [[l.x1, l.y1], [dropX, l.y1], [dropX, al.y], [al.x, al.y]]; l.x2 = al.x; l.y2 = al.y;
-          if(al.role === 'retired') l.retired = true;
-        }
+        if(!hs && !he) return;
+        const h = hs || he;
+        const ls = lanesFor(h);
+        ls.forEach((al, li) => {
+          const c = li === 0 ? l : Object.assign({}, l);
+          if(li > 0) m.links.push(c);
+          if(al.role === 'retired') c.retired = true;
+          if(al.ver === 'v2') c.ver = 'v2';
+          if(ls.length > 1){ c.warn = 'branch|' + seamB.dataset.id; }
+          if(hs){
+            // fan-out: a drop line from the component to the row, then along the row
+            c.pts = [[al.x, al.y], [al.x, hs.y], [l.x2, l.y2]]; c.x1 = al.x; c.y1 = al.y; c.k1 = key;
+            c.jk = key; c.jd = 'out'; c.rowY = hs.y;
+          } else {
+            // multi-source: along the row to a junction line, up / down to the component's level,
+            // then into it from the left — the same way the calling applications arrive
+            c.sx = l.x1; c.sy = l.y1; c.x2 = al.x; c.y2 = al.y; c.k2 = key;
+            c.pts = [[l.x1, l.y1], [dropX, l.y1], [dropX, al.y], [al.x, al.y]];
+            c.jk = key; c.jd = 'in'; c.tx = al.x; c.ty = al.y; c.toType = al.type;
+          }
+        });
+        if(ls.length > 1) all.warnings.push({ id:'branch|' + seamB.dataset.id, kind:bothKind, x:h.x, y:h.y, bid:seamB.dataset.id });
       });
       const h0 = hidden[0];
       m.containers = m.containers.filter(c => {
@@ -2894,7 +3272,7 @@
         return true;
       });
       note(m);
-      all.containers.push(...m.containers); all.links.push(...m.links); all.nodes.push(...m.nodes);
+      all.containers.push(...m.containers); all.links.push(...m.links); all.nodes.push(...m.nodes); all.warnings.push(...m.warnings);
       binfo.push({ br, key, a, k, dropX, nb: br.kind === 'in' ? m.nodes[m.nodes.length - 1] : m.nodes[0] });
     });
     Object.keys(lanes).forEach(k => { pos[k] = canon(k); });
@@ -2922,25 +3300,39 @@
       if(cb){ cK.keys = cK.keys.concat(cb.keys); all.containers.splice(all.containers.indexOf(cb), 1); }
     });
 
-    // ---- calling applications, stacked left of the API / file they call
+    // ---- calling applications, stacked left of the API / file they call. On a versioned API / file each
+    // caller has a connector to v1 and to v2: one solid (live), one dotted — clicking swaps them, and
+    // callers may mix (some on v1, others on v2); one caller on both at once is not a valid pattern
     const callerPos = {};
     Object.entries(callersAt).forEach(([k, list]) => {
       const t = pos[k];
       if(!t) return;
-      // a component with a block on its left (a target API / folder, a seam): callers sit above / below
-      const busy = all.links.some(l => !l.pts && Math.abs(l.y1 - t.y) < 0.5 && near(l.x2, l.y2, t) && l.x1 < t.x);
-      const dys = busy ? CALLER_DY_BUSY : CALLER_DY;
+      const dys = callerDys(k, list.length);
+      const ls = lanes[k] || [];
+      const v1L = ls.find(n => !n.ver || n.ver === 'v1') || t, v2L = withV ? ls.find(n => n.ver === 'v2') : null;
       list.forEach((c, i) => {
-        const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = t.y + (dys[i] ?? (i + 1) * 90);
+        const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = t.y + dys[i];
         callerPos[c.id] = { x:cx, y:cy };
-        const dim = withV;
+        const dim = withV && !v2L;
+        const cv = (v2L && callerVer[c.id]) || 'v1';
         all.nodes.push({ x:cx, y:cy, type:'app', owner:'caller', role:null, ver:null, dim, key:c.key, caller:true,
           skey:'xc|' + c.id, bis:[] });
-        all.links.push(cy === t.y ? { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim }
-          : { x1:cx, y1:cy, x2:t.x, y2:t.y, retired:false, dim, pts:[[cx, cy], [t.x - JUNC, cy], [t.x - JUNC, t.y], [t.x, t.y]] });
-        all.containers.push({ x1:cx - 38, x2:cx + 38, y1:cy - 42, y2:cy + 24, owner:'caller', keys:[c.key], dim });
+        const targets = v2L ? [[v1L, cv !== 'v2', 'v1'], [v2L, cv !== 'v1', 'v2']] : [[v1L, true, 'v1']];
+        targets.forEach(([al, live, ver]) => {
+          const l = { x1:cx, y1:cy, x2:al.x, y2:al.y, retired:!live, dim, own:'xc|' + c.id, k1:c.key, k2:k, ver,
+            jk:k, jd:'in', tx:al.x, ty:al.y, toType:al.type, sx:cx, sy:cy, srcPad:CALLER_BOX.hw - 30 };
+          if(v2L) l.tog = 'caller|' + c.id + '|' + ver;
+          if(cv === 'both') l.warn = 'caller|' + c.id;
+          all.links.push(l);
+        });
+        if(cv === 'both') all.warnings.push({ id:'caller|' + c.id, kind:'caller', x:cx, y:cy + CALLER_BOX.down + 12, caller:c.id });
+        all.containers.push({ x1:cx - CALLER_BOX.hw, x2:cx + CALLER_BOX.hw, y1:cy - CALLER_BOX.up, y2:cy + CALLER_BOX.down, owner:'caller', keys:[c.key], dim });
       });
+      // every caller moved to v2: nothing calls v1 any more, it can be retired
+      if(v2L && list.every(c => callerVer[c.id] === 'v2')) all.notes.push({ x:v1L.x, y:v1L.y, text:'no caller left on v1', id:'retirable|' + k });
     });
+
+    separateConnectors(all.links);
     return { model:all, tiles, pos, callerPos };
   }
 
@@ -3096,7 +3488,7 @@
   // Export / history: composite fields are only written in composite mode with branches,
   // so a single flow serialises exactly as in v1.9.
   function withComposite(flow){
-    if(flowMode !== 'composite' || (!branches.length && !extraCallers.length)) return flow;
+    if(flowMode !== 'composite' || (!branches.length && !extraCallers.length && !Object.keys(lineFlips).length)) return flow;
     const refOf = (id) => {
       let i = chainOrder.findIndex(b => b.dataset.id === id);
       if(i >= 0) return 't' + i;
@@ -3122,6 +3514,11 @@
     branches.forEach((br, j) => br.blocks.forEach((b, i) => {
       if(versionOverrides[b.dataset.id]) flow.branchVersions.push({ ref:'b' + j + '.' + i, variant:versionOverrides[b.dataset.id] });
     }));
+    // round 6: swapped fan lines, callers' versions, branches' assessments (only where still meaningful)
+    flow.lineFlips = Object.entries(lineFlips).filter(([id, l]) => l.length && versionOverrides[id]).map(([id, l]) => ({ ref:refOf(id), links:l.slice() })).filter(x => x.ref);
+    flow.callerVer = compositeCallers().filter(c => callerVer[c.id] && callerVer[c.id] !== 'v1')
+      .map(c => ({ caller: c.id === 'main' ? 'main' : extraCallers.indexOf(c), ver: callerVer[c.id] }));
+    flow.laneChoice = Object.entries(laneChoice).map(([id, c]) => ({ ref:refOf(id), choice:c })).filter(x => x.ref);
     // contract-ripple answers per path (source>path)
     flow.compositeRipples = Object.entries(rippleChoices).filter(([k, r]) => k.includes('>') && versionOverrides[k.split('>')[0]] === r.vid)
       .map(([k, r]) => { const [a, b] = k.split('>'); return { src:refOf(a), path:refOf(b), choice:r.choice, code:r.code ?? null }; })
@@ -3142,7 +3539,7 @@
            typeof c.name !== 'string' || typeof c.process !== 'string' || c.name.length > 80 || c.process.length > 120)
           return 'Flow file has an invalid calling application.';
     }
-    if(f.branches === undefined) return null;
+    if(f.branches === undefined) f = Object.assign({}, f, { branches:[] });
     if(!Array.isArray(f.branches)) return 'Flow file has an invalid branch list.';
     const nbAll = f.branches.length;
     if(f.branchVersions !== undefined){
@@ -3162,6 +3559,13 @@
            !(r.code === null || r.code === undefined || typeof r.code === 'boolean'))
           return 'Flow file has an invalid ripple entry.';
     }
+    if(f.lineFlips !== undefined && (!Array.isArray(f.lineFlips) || !f.lineFlips.every(x => x && refOk({ ref:x.ref, side:'in' }, nbAll) &&
+       Array.isArray(x.links) && x.links.every(i => Number.isInteger(i) && i >= 0 && i < 8)))) return 'Flow file has an invalid line entry.';
+    if(f.callerVer !== undefined && (!Array.isArray(f.callerVer) || !f.callerVer.every(x => x && ['v1', 'v2', 'both'].includes(x.ver) &&
+       (x.caller === 'main' || (Number.isInteger(x.caller) && x.caller >= 0 && x.caller < (Array.isArray(f.callers) ? f.callers.length : 0))))))
+      return 'Flow file has an invalid caller version.';
+    if(f.laneChoice !== undefined && (!Array.isArray(f.laneChoice) || !f.laneChoice.every(x => x && refOk({ ref:x.ref, side:'in' }, nbAll) && ['v1', 'v2', 'both'].includes(x.choice))))
+      return 'Flow file has an invalid assessment.';
     if(f.branches.length && !f.blocks.length) return 'Flow file has branches but no main flow.';
     for(let j = 0; j < f.branches.length; j++){
       const br = f.branches[j];
@@ -3208,6 +3612,9 @@
       extraCallers.push({ id, key:id + ':caller', anchor: fc.anchor.map(a => ({ block:idOf(a.ref), side:a.side })) });
       if(fc.name || fc.process) containerLabels[id + ':caller'] = { name: fc.name, process: fc.process };
     });
+    (f.lineFlips || []).forEach(x => { lineFlips[idOf(x.ref)] = x.links.slice(); });
+    (f.callerVer || []).forEach(x => { const c = x.caller === 'main' ? 'main' : extraCallers[x.caller] && extraCallers[x.caller].id; if(c) callerVer[c] = x.ver; });
+    (f.laneChoice || []).forEach(x => { laneChoice[idOf(x.ref)] = x.choice; });
   }
 
   // ---------------------------------------------------------------
@@ -3226,6 +3633,12 @@
     return allBlocks().filter(b => entryKeyOf(b) === key || exitKeyOf(b) === key ||
       NODE_SPECS[b.dataset.tpl].mid.some((m, mk) => b.dataset.id + ':m' + mk === key));
   }
+  // the block on a branch row that sits on the shared component (its seam with the component)
+  function isSeamOf(n, key){
+    const br = branchOf(n);
+    if(!br || anchorKey(br.anchor) !== key) return false;
+    return br.kind === 'out' ? br.blocks[0] === n : br.blocks[br.blocks.length - 1] === n;
+  }
   // a switch: no v1 of that component stays in use (v1 retired); otherwise v1 and v2 run in parallel
   const isSwitchAt = (v, type) => !v.nodes.some(n => n.type === type && n.ver === 'v1' && n.role !== 'retired');
 
@@ -3239,11 +3652,15 @@
         const nn = newNodeOf(v, type);
         if(!nn || !key) return;
         const sw = isSwitchAt(v, type);
-        // the in-row neighbour is asked as in v1.9; other branches at the component only if it's a switch
-        const asked = who(key).filter(n => n !== B).filter(n => {
-          if(!inRowNeighbour(B, n) && !sw) return false;
-          const nv = variantsById[versionOverrides[n.dataset.id]];
-          return !(nv && newNodeOf(nv, type));
+        // the in-row neighbour is asked as in v1.9; other branches at the component are asked if it's a
+        // switch — on a parallel version they stay on v1 but are flagged as impacted (assess, round 6)
+        const carries = (n) => { const nv = variantsById[versionOverrides[n.dataset.id]]; return !!(nv && newNodeOf(nv, type)); };
+        const others = who(key).filter(n => n !== B && !carries(n));
+        const asked = others.filter(n => inRowNeighbour(B, n) || sw);
+        others.filter(n => !inRowNeighbour(B, n) && !sw && isSeamOf(n, key)).forEach(n => {
+          const ch = laneChoice[n.dataset.id] || null;
+          out.push({ key:n.dataset.id + '|assess|' + B.dataset.id, kind:'assess', blockId:n.dataset.id, sourceId:B.dataset.id, side, type,
+            ver:nn.ver, options:[], choice:ch, resolved:!!ch, cross:true, sw:false, count:others.length, ckey:key });
         });
         asked.forEach(n => {
           const nv = variantsById[versionOverrides[n.dataset.id]];
@@ -3273,7 +3690,7 @@
       // a new version of an API / file reaches its calling applications directly
       if(pn && (pn.type === 'api' || pn.type === 'file')){
         const key = spec.entry.type === pn.type ? entryKeyOf(B) : spec.exit.type === pn.type ? exitKeyOf(B) : null;
-        if(key) callersOn(key).forEach(c => out.impact.add(c.key));
+        if(key) callersOn(key).filter(c => callerVer[c.id] !== 'v2').forEach(c => out.impact.add(c.key));   // a caller on v2 adopted the new contract
       }
       if(!handsToSharedProcess(v)) return;
       const dir = spec.exit.type === 'process' ? 'downstream' : spec.entry.type === 'process' ? 'upstream' : null;
@@ -3324,7 +3741,14 @@
     selectedCopy = null;
     updateLayout();
     if(!active){ highlightSuggestions([]); refreshLibrary(); return; }
-    const decisions = computeCompositeDecisions();
+    let allDecisions = computeCompositeDecisions();
+    // an assessment belongs to the parallel version that prompted it: gone with it
+    const assessed = new Set(allDecisions.filter(d => d.kind === 'assess').map(d => d.blockId));
+    if(Object.keys(laneChoice).some(id => !assessed.has(id))){
+      Object.keys(laneChoice).forEach(id => { if(!assessed.has(id)) delete laneChoice[id]; });
+      allDecisions = computeCompositeDecisions();
+    }
+    const decisions = allDecisions.filter(d => !(d.kind === 'assess' && d.resolved));
     const pendingIds = new Set(decisions.map(d => d.blockId));
     const L = compositeLayout({ versions:true, pending:pendingIds });
 
@@ -3343,10 +3767,10 @@
       if(vid){
         const v = variantsById[vid];
         el.dataset.variant = vid;
-        el.title = v.label + ' — ' + v.purpose;
+        el.title = variantTitleFor(v, b);
         el.innerHTML = tileSvg(t.w, t.h) + '<div class="vcaption"></div><div class="cblock-label"></div>' +
           '<div class="delete-x" title="Remove this version">×</div>';
-        el.querySelector('.vcaption').textContent = v.label;
+        el.querySelector('.vcaption').textContent = variantLabelFor(v, b);
         el.addEventListener('pointerdown', (e) => {
           e.stopPropagation();
           if(e.target.classList.contains('delete-x')) return;
@@ -3388,7 +3812,8 @@
       hit.forEach(n => { n.affected = true; n.dim = false; });
     });
     renderFlowLayer(vworld, model);
-    const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...decisions]);
+    const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...allDecisions]);
+    renderWarnCards(model);
     renderTargetCard(vworld);
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
@@ -3404,6 +3829,20 @@
   // blocks are dimmed stand-ins; a versioned block takes its base block's place
   // at the same x and is the only thing in the copy you can select. Deleting a
   // base block drops its version too.
+  // Round 6: "Target API" only where the API really ends the flow. An API between two blocks is a
+  // boundary into the next iPaaS: it reads "API v2", and the title says who provides / consumes it.
+  function apiIsMiddle(b){
+    if(!b || NODE_SPECS[b.dataset.tpl].exit.type !== 'api') return false;
+    if(flowMode === 'composite') return takersOf(exitKeyOf(b)).length > 0;
+    const i = chainOrder.indexOf(b);
+    return i >= 0 && i < chainOrder.length - 1;
+  }
+  function variantLabelFor(v, b){
+    return apiIsMiddle(b) ? v.label.replace(/Target API/g, 'API') : v.label;
+  }
+  function variantTitleFor(v, b){
+    return variantLabelFor(v, b) + ' \u2014 ' + v.purpose + (apiIsMiddle(b) ? ' (This API sits between two iPaaS assets: the next, downstream iPaaS provides it; this flow is its consumer.)' : '');
+  }
   function chainGeometry(withVersions){
     return chainOrder.map((b, i) => ({
       id: b.dataset.id, left: parseFloat(b.style.left), top: parseFloat(b.style.top), w: parseFloat(b.style.width),
@@ -3468,10 +3907,10 @@
       if(vid){
         const v = variantsById[vid];
         el.dataset.variant = vid;
-        el.title = v.label + ' — ' + v.purpose;
+        el.title = variantTitleFor(v, b);
         el.innerHTML = tileSvg(w, h) + '<div class="vcaption"></div><div class="cblock-label"></div>' +
           '<div class="delete-x" title="Remove this version">×</div>';
-        el.querySelector('.vcaption').textContent = v.label;
+        el.querySelector('.vcaption').textContent = variantLabelFor(v, b);
         el.addEventListener('pointerdown', (e) => {
           e.stopPropagation();
           if(e.target.classList.contains('delete-x')) return;
@@ -3501,6 +3940,7 @@
     model.containers.forEach(c => { if(c.keys.some(k => ripples.impact.has(k))){ c.impact = true; c.dim = false; } });
     renderFlowLayer(vworld, model);
     const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...decisions]);
+    renderWarnCards(model);
     renderTargetCard(vworld);
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
@@ -3519,6 +3959,7 @@
   let versionTarget = null;   // { pane, skey, type, x, y, blocks:[ids], only:id|null }
   const changesConnector = (v, type, role) => v.nodes.some(n => n.type === type && n.ver !== 'v1' && n.role === role);
   function targetOptions(t){
+    if(flowMode === 'composite' && !t.only) return [];      // composite: component + connector
     const ids = t.only ? [t.only] : t.blocks;
     const tpls = ids.map(id => findBlock(id)).filter(Boolean).map(b => b.dataset.tpl);
     let opts = VERSION_VARIANTS.filter(v => tpls.includes(v.base) && changesConnector(v, t.type, 'primary'));
@@ -3563,8 +4004,48 @@
       if(versionTarget.only){ versionTarget.only = null; renderFlows(); } else clearVersionTarget();
       return;
     }
-    setVersionTarget({ pane, skey:n.dataset.skey, type:n.dataset.type, x:m.e, y:m.f, blocks, only:null });
+    const t = { pane, skey:n.dataset.skey, type:n.dataset.type, x:m.e, y:m.f, blocks, only:null };
+    if(flowMode === 'composite'){
+      // round 6: the version applies to one connector of the component — a component with a single
+      // connector skips the step
+      t.conns = componentConnectors(n.dataset.skey);
+      t.conn = null; t.sideFilter = null;
+      if(t.conns.length === 1) pickConnector(t, t.conns[0].own, true);
+    }
+    setVersionTarget(t);
   }));
+  // Every connector of a component: the blocks touching it and its calling applications.
+  function componentConnectors(key){
+    const out = blocksAtComponent(key).map(b => ({
+      own: b.dataset.id,
+      side: exitKeyOf(b) === key ? 'upstream' : entryKeyOf(b) === key ? 'downstream' : 'in block',
+      label: b.querySelector('.cblock-label').textContent, row: branchOf(b) ? 'branch' : 'main flow'
+    }));
+    compositeCallers().filter(c => anchorKey(c.anchor) === key).forEach(c => {
+      const lab = containerLabels[c.key];
+      out.push({ own:'xc|' + c.id, side:'upstream', label: 'calling application' + (lab && lab.name ? ' ' + lab.name : ''), row:'caller', caller:c.id });
+    });
+    return out;
+  }
+  // Picking a connector sets the block the version applies to (a caller's connector: the block that
+  // carries the API / file — only that caller then moves to v2).
+  function pickConnector(t, own, quiet){
+    const c = (t.conns || []).find(x => x.own === own);
+    if(!c) return;
+    t.conn = own;
+    if(c.caller){
+      const owners = takersOf(t.skey).concat(feedersOf(t.skey));
+      t.only = owners.length ? owners[0].dataset.id : null;
+    } else t.only = own;
+    if(!quiet){ renderFlows(); refreshLibrary(); revealSuggestions(); }
+  }
+  [world, vworld].forEach(w => w.addEventListener('click', (e) => {
+    if(!canvasWrap.classList.contains('versioning') || flowMode !== 'composite') return;
+    const hit = e.target.closest && e.target.closest('.flow-layer .link-hit.pickable');
+    if(!hit || !versionTarget) return;
+    e.stopPropagation();
+    pickConnector(versionTarget, hit.dataset.own);
+  }, true));
 
   function closeButton(label, onClose){
     const x = document.createElement('button');
@@ -3576,9 +4057,125 @@
     return x;
   }
 
+  // Composite flow: the guide card is opaque, on top of everything, placed in free space next to the
+  // component, and says what is possible (no block list). With several connectors it first asks which one.
+  const SIDE_WORDS = {
+    topic:   { upstream:'publish into it', downstream:'consume it' },
+    api:     { upstream:'call it', downstream:'provide it' },
+    file:    { upstream:'write it', downstream:'read it' },
+    process: { upstream:'hand over to it', downstream:'continue from it' },
+    queue:   { upstream:'feed it', downstream:'take from it' }
+  };
+  function placeCard(worldEl, card, x, y){
+    // right of the component → above → below → left; the first side that covers no tile, else the least overlap
+    const w = card.offsetWidth, h = card.offsetHeight, g = 34;
+    const tiles = [...worldEl.querySelectorAll(':scope > .cblock')].filter(b => b.style.display !== 'none')
+      .map(b => { const hh = parseFloat(b.style.height) || b.offsetHeight || BLOCK_H;
+        return { l:parseFloat(b.style.left), t:parseFloat(b.style.top), r:parseFloat(b.style.left) + parseFloat(b.style.width) + TILE_D, b:parseFloat(b.style.top) + hh }; });
+    const cands = [[x + g, y - h/2], [x - w/2, y - g - h], [x - w/2, y + g], [x - g - w, y - h/2]];
+    const overlap = ([l, t]) => tiles.reduce((a, r) => a + Math.max(0, Math.min(l + w, r.r) - Math.max(l, r.l)) * Math.max(0, Math.min(t + h, r.b) - Math.max(t, r.t)), 0);
+    let best = cands.find(c => overlap(c) === 0);
+    if(!best) best = cands.slice().sort((a, b) => overlap(a) - overlap(b))[0];
+    card.style.left = best[0] + 'px'; card.style.top = best[1] + 'px';
+    card.dataset.place = ['right', 'above', 'below', 'left'][cands.indexOf(best)];
+  }
+  function renderCompositeTargetCard(worldEl, t){
+    const card = document.createElement('div');
+    card.className = 'decision-card target-card comp-target';
+    card.addEventListener('pointerdown', e => e.stopPropagation());
+    card.addEventListener('click', e => e.stopPropagation());
+    const T = CONNECTOR_LABEL[t.type];
+    const head = document.createElement('div');
+    head.className = 'dc-head';
+    head.textContent = 'Version this ' + T;
+    card.appendChild(closeButton('Close', clearVersionTarget));
+    const conns = t.conns || [];
+    const up = conns.filter(c => c.side === 'upstream'), dn = conns.filter(c => c.side === 'downstream'), mid = conns.filter(c => c.side === 'in block');
+    const words = SIDE_WORDS[t.type] || { upstream:'feed it', downstream:'take it' };
+    const q = document.createElement('p');
+    q.className = 'dc-q';
+    const parts = [];
+    if(up.length) parts.push(up.length + ' ' + words.upstream + ' (upstream)');
+    if(dn.length) parts.push(dn.length + ' ' + words.downstream + ' (downstream)');
+    if(mid.length) parts.push(mid.length + ' inside a block');
+    q.textContent = conns.length > 1 ? T + ' \u00B7 shared by ' + conns.length + ' flows \u2014 ' + parts.join(', ') + '.'
+                                     : T + ' \u00B7 ' + (parts[0] || 'one flow') + '.';
+    card.append(head, q);
+    const c = t.conn && conns.find(x => x.own === t.conn);
+    const note = document.createElement('p');
+    note.className = 'dc-note dc-on';
+    if(c){
+      note.textContent = c.caller ? 'Versioning on: the ' + c.label + ' (only this caller moves to v2; the others stay on v1).'
+                                  : 'Versioning on: ' + c.label + ' (' + c.row + ' \u00B7 ' + c.side + ').';
+      const n = targetOptions(t).length;
+      note.textContent += ' ' + (n ? n + ' matching version' + (n === 1 ? ' is' : 's are') + ' shown in the library.' : 'No versioned blocks are defined for this yet.');
+    } else note.textContent = 'Pick a connector \u2014 they are highlighted on the canvas. That sets upstream or downstream, and the library shows its versions.';
+    card.appendChild(note);
+    if(conns.length > 1){
+      // upstream / downstream (the library's Entry / Exit rows): narrows the highlighted connectors
+      const row = document.createElement('div');
+      row.className = 'dc-side';
+      [['upstream', 'Upstream', up], ['downstream', 'Downstream', dn]].forEach(([side, label, list]) => {
+        if(!list.length) return;
+        const btn = document.createElement('button');
+        btn.dataset.side = side;
+        const on = c ? c.side === side : t.sideFilter === side;
+        btn.className = on ? 'on' : '';
+        btn.innerHTML = '<span class="ds-dir">' + label + '</span>' + list.length + ' connector' + (list.length === 1 ? '' : 's');
+        btn.addEventListener('click', () => {
+          t.conn = null; t.only = null;
+          t.sideFilter = t.sideFilter === side && !c ? null : side;
+          if(list.length === 1){ pickConnector(t, list[0].own); return; }
+          renderFlows(); refreshLibrary();
+        });
+        row.appendChild(btn);
+      });
+      card.appendChild(row);
+    }
+    const rippleAsk = computeCompositeRipples().asks.find(a => a.resolved && a.skey === t.skey && (a.choice.choice === 'absorb' || a.choice.code));
+    if(rippleAsk){
+      const again = document.createElement('button');
+      again.className = 'dc-opt dc-mark'; again.dataset.action = 'ripple-again';
+      again.textContent = 'Change the ripple answer (absorb / pass on)';
+      again.addEventListener('click', () => { versionTarget = null; renderFlows(); setRipple(rippleAsk.rkey || rippleAsk.sourceId, null); });
+      card.appendChild(again);
+    }
+    const marked = manualDeltas.has(t.skey);
+    const mark = document.createElement('button');
+    mark.className = 'dc-opt dc-mark'; mark.dataset.action = 'mark';
+    mark.textContent = marked ? 'Remove the v1 \u0394 mark' : 'Non-breaking change \u00B7 mark v1 \u0394';
+    mark.addEventListener('click', () => {
+      if(marked) manualDeltas.delete(t.skey); else manualDeltas.add(t.skey);
+      versionTarget = null; renderFlows(); renderCopy(); recordHistory();
+      showToast(marked ? 'v1 \u0394 mark removed.' : T + ' marked: non-breaking change in the same version (v1 \u0394).');
+    });
+    card.appendChild(mark);
+    const actions = document.createElement('div');
+    actions.className = 'dc-actions';
+    if(c && conns.length > 1){
+      const other = document.createElement('button');
+      other.className = 'dc-link'; other.dataset.action = 'other';
+      other.textContent = 'Pick another connector';
+      other.addEventListener('click', () => { t.conn = null; t.only = null; t.sideFilter = null; renderFlows(); refreshLibrary(); });
+      actions.appendChild(other);
+    }
+    const clear = document.createElement('button');
+    clear.className = 'dc-link'; clear.dataset.action = 'clear';
+    clear.textContent = 'Clear';
+    clear.addEventListener('click', clearVersionTarget);
+    actions.appendChild(clear);
+    card.appendChild(actions);
+    worldEl.appendChild(card);
+    placeCard(worldEl, card, t.x, t.y);
+  }
+
   function renderTargetCard(worldEl){
     worldEl.querySelectorAll(':scope > .target-card').forEach(c => c.remove());
     const t = versionTarget;
+    if(t && flowMode === 'composite'){
+      if((worldEl === world) === (t.pane === 'base')) renderCompositeTargetCard(worldEl, t);
+      return;
+    }
     // gone once a side is chosen — the highlight and the glowing connector stay
     if(!t || (worldEl === world) !== (t.pane === 'base') || t.only) return;
     const card = document.createElement('div');
@@ -3708,6 +4305,15 @@
   const CONNECTOR_LABEL = { api:'API', process:'Process', topic:'Topic', queue:'Queue', file:'File', app:'Calling application' };
   const DECISION_W = 260;                 // keep in step with .decision-card's width
   const collapsedDecisions = new Set();   // decisions the user chose to leave open ("Decide later")
+  const openedDecisions = new Set();      // composite: pills the user opened (round 6 — non-switch questions start as pills)
+  const reopenAssess = new Set();         // composite: answered assessments opened again to change them
+  function setAssess(blockId, val, key){
+    laneChoice[blockId] = val;
+    reopenAssess.delete(key);
+    if(val === 'both') openWarnings.add('branch|' + blockId);
+    renderCopy();
+    recordHistory();
+  }
   let shownDecisions = new Set();         // decisions already on screen, so only new ones pull the view
   const newNodeOf = (v, type) => v.nodes.find(n => n.type === type && n.ver !== 'v1' && n.role !== 'retired');
 
@@ -3856,17 +4462,78 @@
       const y = nextY[d.blockId] ?? (parseFloat(b.style.top) + BLOCK_H + 14);
       const what = CONNECTOR_LABEL[d.type] + ' ' + d.ver;
       const name = b.querySelector('.cblock-label').textContent;
-      if(collapsedDecisions.has(d.key) && !(d.kind === 'ripple' && d.resolved)){
+      // composite flow (round 6, under review): a switch opens its card straight away; everything else
+      // (parallel versions, impacted branches) first appears as a pending pill
+      const defaultPill = flowMode === 'composite' && (d.kind === 'assess' || (!d.kind && !d.passed && d.sw === false));
+      if(d.kind === 'assess' && d.resolved && !reopenAssess.has(d.key)){
+        const pill = document.createElement('button');
+        pill.className = 'ripple-pill assess-pill' + (d.choice === 'both' ? ' warn' : '');
+        pill.dataset.key = d.key;
+        pill.style.left = (d.side === 'upstream' ? x + DECISION_W - 170 : x) + 'px'; pill.style.top = y + 'px';
+        pill.textContent = d.choice === 'v1' ? '\u2713 Stays on v1' : d.choice === 'v2' ? '\u2192 Moved to ' + CONNECTOR_LABEL[d.type] + ' v2' : '\u26A0 Keeps both (v1 + v2)';
+        pill.title = 'Click to change how ' + name + ' handles ' + what;
+        pill.addEventListener('pointerdown', e => e.stopPropagation());
+        pill.addEventListener('click', () => { reopenAssess.add(d.key); renderCopy(); });
+        vworld.appendChild(pill);
+        nextY[d.blockId] = y + 36;
+        return;
+      }
+      if((collapsedDecisions.has(d.key) || (defaultPill && !openedDecisions.has(d.key))) && !(d.kind === 'ripple' && d.resolved)){
         const pill = document.createElement('button');
         pill.className = 'decision-pill';
         pill.dataset.key = d.key;
         pill.style.left = (d.side === 'upstream' ? x + DECISION_W - 150 : x) + 'px'; pill.style.top = y + 'px';
-        pill.textContent = '\u26A0 Decision pending';
-        pill.title = d.kind === 'ripple' ? 'A contract change reaches the process shared with ' + name + '.' : what + ' is new. How should ' + name + ' handle it?';
+        pill.textContent = d.kind === 'assess' ? '\u26A0 Impacted \u00B7 assess' : '\u26A0 Decision pending';
+        pill.title = d.kind === 'ripple' ? 'A contract change reaches the process shared with ' + name + '.'
+          : d.kind === 'assess' ? what + ' now runs next to v1. ' + name + ' stays on v1 until you assess it.'
+          : what + ' is new. How should ' + name + ' handle it?';
         pill.addEventListener('pointerdown', e => e.stopPropagation());
-        pill.addEventListener('click', () => { collapsedDecisions.delete(d.key); renderCopy(); });
+        pill.addEventListener('click', () => { collapsedDecisions.delete(d.key); openedDecisions.add(d.key); renderCopy(); });
         vworld.appendChild(pill);
         nextY[d.blockId] = y + 38;
+        return;
+      }
+      if(d.kind === 'assess'){
+        const card = document.createElement('div');
+        card.className = 'decision-card assess-card';
+        card.dataset.key = d.key;
+        card.style.left = x + 'px'; card.style.top = y + 'px';
+        card.style.setProperty('--arrow-x', (d.side === 'upstream' ? DECISION_W - 40 : 22) + 'px');
+        card.addEventListener('pointerdown', e => e.stopPropagation());
+        const later = () => { collapsedDecisions.add(d.key); openedDecisions.delete(d.key); reopenAssess.delete(d.key); renderCopy(); };
+        const head = document.createElement('div');
+        head.className = 'dc-head';
+        head.textContent = '\u26A0 Impacted \u2014 new version next to v1';
+        card.appendChild(closeButton('Decide later', later));
+        const src = findBlock(d.sourceId);
+        const q = document.createElement('p');
+        q.className = 'dc-q';
+        q.textContent = what + ' (' + (src ? src.querySelector('.cblock-label').textContent : '') + ') now runs next to v1. ' + name + ' stays on v1 \u2014 assess how it should act.';
+        card.append(head, q);
+        if(d.count > 1){
+          const cn = document.createElement('p');
+          cn.className = 'dc-note dc-count';
+          cn.textContent = d.count + ' flows at this ' + CONNECTOR_LABEL[d.type] + ' \u2014 each assesses on its own.';
+          card.appendChild(cn);
+        }
+        [['v1', 'Stay on v1'], ['v2', 'Move to ' + what], ['both', 'Keep both (\u26A0 not a valid pattern)']].forEach(([val, label]) => {
+          const btn = document.createElement('button');
+          btn.className = 'dc-opt' + (d.choice === val ? ' on' : '') + (val === 'both' ? ' dc-warn' : '');
+          btn.dataset.assess = val;
+          btn.textContent = label;
+          btn.addEventListener('click', () => setAssess(d.blockId, val, d.key));
+          card.appendChild(btn);
+        });
+        const actions = document.createElement('div');
+        actions.className = 'dc-actions';
+        const lt = document.createElement('button');
+        lt.className = 'dc-link'; lt.dataset.action = 'later';
+        lt.textContent = 'Decide later';
+        lt.addEventListener('click', later);
+        actions.appendChild(lt);
+        card.appendChild(actions);
+        vworld.appendChild(card);
+        nextY[d.blockId] = y + card.offsetHeight + 12;
         return;
       }
       if(d.kind === 'ripple' && d.resolved){
@@ -3940,7 +4607,7 @@
       const head = document.createElement('div');
       head.className = 'dc-head';
       head.textContent = '\u26A0 Decision needed';
-      card.appendChild(closeButton('Decide later', () => { collapsedDecisions.add(d.key); renderCopy(); }));
+      card.appendChild(closeButton('Decide later', () => { collapsedDecisions.add(d.key); openedDecisions.delete(d.key); renderCopy(); }));
       const q = document.createElement('p');
       q.className = 'dc-q';
       q.textContent = d.passed ? 'A contract change was passed on to ' + CONNECTOR_LABEL[d.type] + '. How should ' + name + ' version it?'
@@ -3969,8 +4636,9 @@
         const btn = document.createElement('button');
         btn.className = 'dc-opt';
         btn.dataset.variant = vid;
-        btn.textContent = variantsById[vid].label;
-        btn.title = variantsById[vid].purpose;
+        const nbk = findBlock(d.blockId);
+        btn.textContent = variantLabelFor(variantsById[vid], nbk);
+        btn.title = variantTitleFor(variantsById[vid], nbk);
         btn.addEventListener('click', () => applyDecision(d.blockId, vid));
         card.appendChild(btn);
       });
@@ -3994,6 +4662,118 @@
     });
     return fresh;
   }
+
+  // ---------------------------------------------------------------
+  // Round 6 — swapping dotted / solid lines (composite flow) and warnings
+  // Clicking a line swaps it: a dotted line becomes solid; a solid one becomes dotted when the other
+  // is solid too, otherwise the two swap — so one of them always stays live. Both solid is not a valid
+  // pattern: amber lines, a ⚠ badge and a note. Any ⚠ can be acknowledged (both modes).
+  // ---------------------------------------------------------------
+  const swapRule = (xLive, yLive) => !xLive ? [true, yLive] : yLive ? [false, true] : [false, true];
+  function toggleLine(tog){
+    const [kind, id, sub] = tog.split('|');
+    let both = false;
+    if(kind === 'fan'){
+      const v = variantsById[versionOverrides[id]], fan = v && fanOf(v);
+      if(!fan) return;
+      const flips = lineFlips[id] || [];
+      const live = (li) => (v.links[li][2] === 'dotted') === flips.includes(li);
+      const x = +sub, y = fan.idx.find(i => i !== x);
+      const [nx, ny] = swapRule(live(x), live(y));
+      const want = { [x]:nx, [y]:ny };
+      lineFlips[id] = fan.idx.filter(li => want[li] !== (v.links[li][2] !== 'dotted'));
+      if(!lineFlips[id].length) delete lineFlips[id];
+      both = nx && ny;
+      if(both) openWarnings.add('fan|' + id);
+    } else if(kind === 'caller'){
+      const cv = callerVer[id] || 'v1';
+      const live = { v1: cv !== 'v2', v2: cv !== 'v1' };
+      const other = sub === 'v1' ? 'v2' : 'v1';
+      const [nx, ny] = swapRule(live[sub], live[other]);
+      const st = { [sub]:nx, [other]:ny };
+      callerVer[id] = st.v1 && st.v2 ? 'both' : st.v2 ? 'v2' : 'v1';
+      both = callerVer[id] === 'both';
+      if(both) openWarnings.add('caller|' + id);
+    } else return;
+    renderCopy();
+    recordHistory();
+    if(both) showToast('Both lines are live — not a valid pattern (see the note).', true);
+  }
+
+  // Warning notes: open notes for both-solid lines, and the acknowledge card of any ⚠.
+  function warnTextOf(id, kind){
+    if(id.startsWith('impact|')) return 'Dependent logic in the end application may be impacted by the new version.';
+    return WARN_TEXT[kind] || WARN_TEXT.generic;
+  }
+  function renderWarnCards(model){
+    vworld.querySelectorAll(':scope > .warn-card').forEach(c => c.remove());
+    const live = new Set((model.warnings || []).map(w => w.id));
+    [...openWarnings].forEach(id => { if(!live.has(id) && !id.startsWith('impact|')) openWarnings.delete(id); });
+    openWarnings.forEach(id => {
+      const w = (model.warnings || []).find(x => x.id === id);
+      let x, y, kind = w ? w.kind : null;
+      if(w){ x = w.x - 130; y = w.y + (w.caller ? 24 : 54); }
+      else {
+        const n = id.startsWith('impact|') && model.nodes.find(nn => 'impact|' + nn.key === id && nn.impact);
+        if(!n) return;
+        x = n.x - 130; y = n.y + 48;
+      }
+      const card = document.createElement('div');
+      card.className = 'decision-card warn-card';
+      card.dataset.warn = id;
+      card.style.left = x + 'px'; card.style.top = y + 'px';
+      card.style.setProperty('--arrow-x', '122px');
+      card.addEventListener('pointerdown', e => e.stopPropagation());
+      card.addEventListener('click', e => e.stopPropagation());
+      const ack = ackWarn[id] !== undefined;
+      const head = document.createElement('div');
+      head.className = 'dc-head';
+      head.textContent = ack ? '✓ Warning acknowledged' : '⚠ Warning';
+      card.appendChild(closeButton('Close', () => { openWarnings.delete(id); renderCopy(); }));
+      const q = document.createElement('p');
+      q.className = 'dc-q';
+      q.textContent = warnTextOf(id, kind);
+      card.append(head, q);
+      const lab = document.createElement('label');
+      lab.className = 'dc-note';
+      lab.textContent = 'Note (optional)';
+      const inp = document.createElement('input');
+      inp.className = 'warn-note'; inp.maxLength = 120;
+      inp.placeholder = 'e.g. agreed with the owner, temporary at cutover';
+      inp.value = ack ? ackWarn[id] : '';
+      inp.addEventListener('keydown', e => { e.stopPropagation(); if(e.key === 'Enter') save(); });
+      lab.appendChild(inp);
+      card.appendChild(lab);
+      const save = () => { ackWarn[id] = inp.value.trim(); openWarnings.delete(id); renderCopy(); recordHistory(); };
+      const btn = document.createElement('button');
+      btn.className = 'dc-opt'; btn.dataset.action = 'ack';
+      btn.textContent = ack ? 'Update the note' : 'Acknowledge';
+      btn.addEventListener('click', save);
+      card.appendChild(btn);
+      if(ack){
+        const un = document.createElement('button');
+        un.className = 'dc-link'; un.dataset.action = 'unack';
+        un.textContent = 'Remove the acknowledgement';
+        un.addEventListener('click', () => { delete ackWarn[id]; renderCopy(); recordHistory(); });
+        card.appendChild(un);
+      }
+      vworld.appendChild(card);
+    });
+  }
+  vworld.addEventListener('click', (e) => {
+    const badge = e.target.closest && e.target.closest('.flow-layer .wbadge, .flow-layer .ibadge');
+    if(badge && badge.dataset.warn){
+      e.stopPropagation();
+      if(openWarnings.has(badge.dataset.warn)) openWarnings.delete(badge.dataset.warn); else openWarnings.add(badge.dataset.warn);
+      renderCopy();
+      return;
+    }
+    if(flowMode !== 'composite') return;
+    const hit = e.target.closest && e.target.closest('.flow-layer .link-hit[data-tog]');
+    if(!hit || hit.classList.contains('pickable')) return;
+    e.stopPropagation();
+    toggleLine(hit.dataset.tog);
+  });
 
   // A new question must be readable: if its card runs off the bottom of the
   // copy pane, scroll the copy up — but never so far that the block leaves the view.
@@ -4124,9 +4904,11 @@
     if(!v) return;
     const baseLabel = templatesById[v.base].label;
     let target = null;
+    let viaCaller = null;
     if(versionTarget && targetOptions(versionTarget).includes(v.id)){
       const ids = versionTarget.only ? [versionTarget.only] : versionTarget.blocks;
       target = ids.map(id => findBlock(id)).find(b => b && b.dataset.tpl === v.base) || null;
+      if(versionTarget.conn && versionTarget.conn.startsWith('xc|')) viaCaller = versionTarget.conn.slice(3);
       versionTarget = null;
     }
     if(!target) target = blockAtPoint(clientX, clientY);
@@ -4139,6 +4921,7 @@
     }
     const first = Object.keys(versionOverrides).length === 0;
     versionOverrides[target.dataset.id] = v.id;
+    if(viaCaller) callerVer[viaCaller] = 'v2';      // picked on a calling application's connector: only that caller moves
     renderCopy();
     recordHistory();
     showToast(first ? 'Versioned copy created. The base flow stays as a small reference (top right).' : 'Version applied: ' + v.label + '.');
@@ -4162,7 +4945,35 @@
   const FLOW_FORMAT = 'pattern-bench-flow';
   const FLOW_VERSION = 1;
 
+  // Acknowledged warnings are keyed by block / caller ids; files store them by position.
+  function ackRefs(){
+    const map = {};
+    chainOrder.forEach((b, i) => { map[b.dataset.id] = 't' + i; });
+    branches.forEach((br, j) => br.blocks.forEach((b, i) => { map[b.dataset.id] = 'b' + j + '.' + i; }));
+    extraCallers.forEach((c, i) => { map[c.id] = 'c' + i; });
+    return map;
+  }
+  function encodeAcks(){
+    const map = ackRefs();
+    return Object.entries(ackWarn).map(([id, note]) => {
+      let ok = true;
+      const enc = id.replace(/block-\d+|xc-\d+/g, m => { if(!map[m]){ ok = false; return m; } return '@' + map[m]; });
+      return ok ? { id:enc, note } : null;
+    }).filter(Boolean);
+  }
+  function decodeAcks(list){
+    if(!list) return;
+    const inv = {};
+    Object.entries(ackRefs()).forEach(([id, ref]) => { inv[ref] = id; });
+    list.forEach(a => { const id = a.id.replace(/@(t\d+|b\d+\.\d+|c\d+)/g, (m, r) => inv[r] || m); if(!id.includes('@')) ackWarn[id] = a.note; });
+  }
   function serializeFlow(){
+    const f = serializeFlowBase();
+    const acks = encodeAcks();
+    if(acks.length) f.acks = acks;
+    return f;
+  }
+  function serializeFlowBase(){
     const first = chainOrder[0];
     const byCreation = chainOrder.map((b, i) => i)
       .sort((a, b) => +chainOrder[a].dataset.seq - +chainOrder[b].dataset.seq);
@@ -4268,7 +5079,9 @@
     if(f.marks !== undefined &&
        (!Array.isArray(f.marks) || !f.marks.every(m => m && Number.isInteger(m.block) && m.block >= 0 && m.block < f.blocks.length && /^(in|out|m\d)$/.test(m.at))))
       return 'Flow file has an invalid change mark.';
-    if(f.branches !== undefined || f.callers !== undefined) return validateBranches(f);
+    if(f.acks !== undefined && (!Array.isArray(f.acks) || !f.acks.every(a => a && typeof a.id === 'string' && /^(impact|fan|branch|caller)\|/.test(a.id) &&
+       a.id.length <= 80 && typeof a.note === 'string' && a.note.length <= 120))) return 'Flow file has an invalid acknowledgement.';
+    if(f.branches !== undefined || f.callers !== undefined || f.lineFlips !== undefined) return validateBranches(f);
     return null;
   }
 
@@ -4312,7 +5125,8 @@
       if(versionOverrides[id]) rippleChoices[id] = { vid: versionOverrides[id], choice: r.choice, code: r.code };
     });
     (f.marks || []).forEach(m => manualDeltas.add(chainOrder[m.block].dataset.id + ':' + m.at));
-    if((f.branches && f.branches.length) || (f.callers && f.callers.length)) loadBranches(f);
+    if((f.branches && f.branches.length) || (f.callers && f.callers.length) || f.mode === 'composite') loadBranches(f);
+    decodeAcks(f.acks);
     if(flowMode === 'composite' && !chainOrder.length) setFlowMode('single');
     deselectAll();
     updateEmptyHint();

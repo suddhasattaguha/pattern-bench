@@ -136,11 +136,13 @@ with sync_playwright() as p:
     check('an iPaaS still asks for platform and asset', pg.locator('.label-editor input[name=platform]').count() == 1)
     pg.keyboard.press('Escape')
     pg.click('#printBtn')
+    if pg.locator('.print-host [data-pp=auto]').count(): pg.click('.print-host [data-pp=auto]')   # round 6: unnamed components → auto labels
     check('Print opens an in-app preview with Print / Download / Close', pg.is_visible('.print-host .pp-frame')
-          and pg.locator('.print-host [data-pp]').count() == 3 and 'S/4HANA' in pg.inner_text('.print-host .ps-cols'))
+          and pg.locator('.print-host [data-pp]').count() == 3 and pg.locator('.print-host .ps-entries li').count() >= 1
+          and 'Assets' not in pg.inner_text('.print-host .ps-cols'))   # round 6: no corner list of names; entries name the affected components
     with pg.expect_download() as dl: pg.click('.print-host [data-pp=download]')
     html = open(dl.value.path()).read()
-    check('Download sheet saves a standalone page with the sheet', html.startswith('<!doctype html>') and 'print-sheet' in html and 'S/4HANA' in html)
+    check('Download sheet saves a standalone page with the sheet', html.startswith('<!doctype html>') and 'print-sheet' in html and 'ps-entries' in html)
     pg.click('.print-host [data-pp=close]')
     check('Close returns to the app', not pg.is_visible('.print-host') and not ev("document.body.classList.contains('light-theme')"))
 

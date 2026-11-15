@@ -159,8 +159,8 @@ with sync_playwright() as p:
 
     # ---------- one-page print ----------
     ev("(()=>{ window.__restore = window.__debug.printAssessment(true); return 1; })()")
-    check('print sheet holds the base flow, the copy and the four lists', pg.locator('.print-host .ps-pic').count() == 2
-          and pg.locator('.print-host .ps-cols h2').count() == 4 and 'non-breaking change, marked' in pg.inner_text('.print-host .ps-cols'))
+    check('print sheet holds the base flow, the copy and the per-component report (round 6)', pg.locator('.print-host .ps-pic').count() == 2
+          and pg.locator('.print-host .ps-entries li').count() >= 1 and 'marked by hand' in pg.inner_text('.print-host .ps-cols'))
     pg.emulate_media(media='print')
     pg.pdf(path=D + 'a.pdf', format='A4', landscape=True, print_background=True)
     pdf = open(D + 'a.pdf', 'rb').read()

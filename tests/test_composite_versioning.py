@@ -47,11 +47,14 @@ with sync_playwright() as p:
     blocks_at = ev(f"{d}.versionTarget().blocks")
     check('selecting the topic selects every block touching it on any row (publisher + 3 consumers)',
           sorted(blocks_at) == sorted(['block-2', 'block-3', b4, b6]))
+    check('round 6 fix 2: with several connectors, the library stays empty until a connector is picked', visible_versions() == [])
+    pg.locator('#world .flow-layer .link-hit.pickable[data-own="block-2"]').first.click(force=True); pg.wait_for_timeout(100)
     vv = visible_versions()
     check('…the library shows only versions that change the topic', len(vv) > 0 and all(
         ev(f"{d}.variantsById['{v}'] && {d}.variantsById['{v}'].nodes.some(n=>n.type==='topic' && n.ver!=='v1')") for v in vv))
     card = pg.inner_text('#world .target-card').lower()
-    check('the target card lists the touching blocks with their side and row', 'upstream' in card and 'downstream' in card and 'branch' in card and 'main flow' in card)
+    check('round 6 fix 3: the guide card gives the assessment and the picked connector (no block list)',
+          'shared by 4 flows' in card and 'upstream' in card and 'downstream' in card and 'versioning on: process-to-publish' in card)
 
     # ---- step 1/2/4: a switch on the shared topic
     ev(f"{d}.dropVersion('p2t-contract-switch', 10, 10)"); pg.wait_for_timeout(150)
@@ -89,8 +92,8 @@ with sync_playwright() as p:
     pick('block-2:out', '#vworld') if ev("document.querySelector('#vworld .node')") else pick('block-2:out')
     ev(f"{d}.dropVersion('p2t-contract-parallel', 10, 10)"); pg.wait_for_timeout(100)
     ds = [x for x in decisions() if x.get('type') == 'topic']
-    check('decision (d): a parallel version leaves the other branches on v1 — only the in-row consumer is asked',
-          [x['blockId'] for x in ds] == ['block-3'])
+    check('decision (d) revised (round 6 fix 10): a parallel version asks the in-row consumer; the other branches stay on v1 and are flagged to assess',
+          [x['blockId'] for x in ds if not x.get('kind')] == ['block-3'] and sorted(x['blockId'] for x in ds if x.get('kind') == 'assess') == sorted([b4, b6]))
     ev(f"{d}.removeVersion('block-2')")
 
     # ---- versioning a block on a branch
