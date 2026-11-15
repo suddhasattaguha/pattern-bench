@@ -759,9 +759,9 @@
   }
   .confirm-box.show{ display:flex; }
   /* Export for registry (fix 17) */
-  .reg-overlay{ position:absolute; inset:0; z-index:90; background:rgba(5,12,22,0.55); display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:40px 0; }
+  .reg-overlay{ position:fixed; inset:0; z-index:200; background:rgba(5,12,22,0.55); display:flex; align-items:center; justify-content:center; padding:24px 0; box-sizing:border-box; }
   .reg-overlay[hidden]{ display:none; }
-  .reg-dialog{ width:640px; max-width:calc(100% - 40px); box-sizing:border-box; padding:18px 20px 16px; background:var(--panel); border:1.5px solid var(--panel-border);
+  .reg-dialog{ width:640px; max-width:calc(100% - 40px); max-height:calc(100vh - 48px); overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; padding:18px 20px 0; background:var(--panel); border:1.5px solid var(--panel-border);
     border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.45); font-family:var(--font-ui); color:var(--text-primary); }
   .reg-dialog h2{ margin:0 0 4px; font-size:17px; }
   .reg-dialog .rg-id{ font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin-bottom:12px; }
@@ -779,7 +779,8 @@
   .reg-dialog .rg-warn{ margin-top:12px; padding:8px 10px; border-radius:8px; border:1px solid var(--accent-amber); color:var(--text-primary); font-size:12px; }
   .reg-dialog .rg-warn b{ color:var(--accent-amber); }
   .reg-dialog .rg-none{ font-size:12px; color:var(--text-muted); }
-  .reg-dialog .rg-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  /* the buttons stay visible at the bottom while the dialog scrolls */
+  .reg-dialog .rg-actions{ position:sticky; bottom:0; display:flex; gap:8px; justify-content:flex-end; margin:16px -20px 0; padding:12px 20px 14px; background:var(--panel); border-top:1px solid var(--panel-border); }
   .reg-dialog .rg-err{ color:var(--danger); font-size:12px; margin-top:6px; min-height:14px; }
 
   ::-webkit-scrollbar{ width:10px; height:10px; }
@@ -5902,6 +5903,7 @@
 
   // the dialog: scenario details, the why of every versioning decision, component names, relations, warnings
   const regOverlay = document.getElementById('regOverlay'), regDialog = document.getElementById('regDialog');
+  document.body.appendChild(regOverlay);      // above everything, sized to the browser window (not the canvas)
   function closeRegistryDialog(){ regOverlay.hidden = true; regDialog.innerHTML = ''; }
   function openRegistryDialog(){
     if(chainOrder.length === 0){ showToast('Nothing to export — the canvas is empty.', true); return; }
@@ -6014,6 +6016,7 @@
   }
   document.getElementById('registryBtn').addEventListener('click', openRegistryDialog);
   regOverlay.addEventListener('pointerdown', e => { if(e.target === regOverlay) closeRegistryDialog(); });
+  regOverlay.addEventListener('wheel', e => e.stopPropagation(), { passive:true });
 
   document.getElementById('exportBtn').addEventListener('click', () => {
     if(chainOrder.length === 0){ showToast('Nothing to export — the canvas is empty.'); return; }

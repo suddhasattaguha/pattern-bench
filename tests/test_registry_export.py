@@ -113,6 +113,19 @@ with sync_playwright() as p:
           canvas['format'] == 'pattern-bench-flow' and canvas['scenario']['id'] == sid and canvas['scenario']['version'] == 1
           and {'key': '@t0:in', 'name': 'Order API'} in canvas['componentNames'] and ev(f"{d}.validateFlow({json.dumps(canvas)})") is None)
 
+    # ---- a small window: the dialog scrolls (mouse wheel) and its buttons stay visible
+    pg.set_viewport_size({'width': 1100, 'height': 600})
+    pg.click('#registryBtn'); pg.wait_for_timeout(100)
+    box = ev("(()=>{const r=document.getElementById('regDialog').getBoundingClientRect(); return [r.top, r.bottom, innerHeight]})()")
+    check('small window: the dialog fits in the window', box[0] >= 0 and box[1] <= box[2])
+    btn = ev("(()=>{const r=document.querySelector('#regDialog [data-a=export]').getBoundingClientRect(); return [r.top, r.bottom]})()")
+    check('small window: the Export button is visible without scrolling', btn[0] >= 0 and btn[1] <= box[2])
+    pg.mouse.move(550, 300); pg.mouse.wheel(0, 600); pg.wait_for_timeout(150)
+    check('small window: the mouse wheel scrolls the dialog (not the canvas)', ev("document.getElementById('regDialog').scrollTop") > 0)
+    if SHOT: pg.screenshot(path=os.path.join(SHOT, 'reg-dialog-small.png'))
+    pg.click('#regDialog [data-a=cancel]')
+    pg.set_viewport_size({'width': 2000, 'height': 1300})
+
     # ---- re-export: same id, version + 1; dialog prefilled
     pg.click('#registryBtn'); pg.wait_for_timeout(80)
     check('re-export: the dialog shows the id and the next version, fields prefilled',

@@ -467,4 +467,6 @@ Both modes:
   why) and `componentNames`, so re-exporting keeps the id and bumps the version. Both validated on load.
 - Refs: `slug(platform)/slug(asset)#type`, end applications `endapp/…`, callers `caller/…`.
 - The print uses component names. Both modes.
-- Tests: new `test_registry_export.py` 37 checks; all suites pass (504 checks).
+- The dialog fits the browser window and scrolls (mouse wheel, not the canvas); Cancel / Export stay
+  visible at its bottom.
+- Tests: new `test_registry_export.py` 40 checks; all suites pass (507 checks).
