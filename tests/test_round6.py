@@ -163,40 +163,39 @@ with sync_playwright() as p:
           and ev("[...document.querySelectorAll('#vworld .decision-pill')].filter(p=>p.textContent.includes('Impacted')).length") == 2)
     check('fix 10: the impacted component in those blocks is highlighted', ev("document.querySelectorAll('#vworld .flow-layer .node.affected').length") >= 3)
     pg.locator('#vworld .decision-pill').filter(has_text='Impacted').first.click()
-    check('fix 23: the assess card offers the library\'s version options for that block, then "Stay on v1" and "Keep both"',
+    check('notes 4 / 10: the impacted card asks to switch to v2 with the library\'s versions, or stay on v1 — no "Keep both"',
           pg.locator('#vworld .assess-card [data-vid]').count() >= 1 and pg.locator('#vworld .assess-card [data-assess=v1]').count() == 1
-          and pg.locator('#vworld .assess-card [data-assess=both]').count() == 1)
+          and pg.locator('#vworld .assess-card [data-assess=both]').count() == 0 and 'switch to topic v2' in pg.inner_text('#vworld .assess-card').lower())
     who = ev("document.querySelector('#vworld .assess-card').dataset.key.split('|')[0]")
+    other = b5 if who == b4 else b4
     ref = 'b0.0' if who == b4 else 'b1.0'
-    check('fix 20: the branch shows both connectors — v1 solid, v2 dotted — each clickable',
-          ev(f"document.querySelectorAll('#vworld .link-hit[data-tog^=\"branch|{who}|\"]').length") == 2
-          and ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v2\"]').classList.contains('retired')")
-          and not ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v1\"]').classList.contains('retired')"))
+    topic_lines = lambda bid: ev(f"[...document.querySelectorAll('#vworld .flow-layer path.link[data-own=\"{bid}\"]')].filter(l=>l.dataset.k1==='block-2:out'||l.dataset.k2==='block-2:out').length")
+    check('notes 6–9: an unversioned branch draws only the line it is on — no dotted line before a version is chosen', topic_lines(who) == 1)
     pg.click('#vworld .assess-card [data-assess=v1]'); pg.wait_for_timeout(100)
     check('…"Stay on v1" records the answer', ev(f"{d}.serializeFlow().laneChoice") == [{'ref': ref, 'choice': 'v1'}] and '✓ Stays on v1' in pg.inner_text('#vworld'))
-    tog = lambda t: (ev(f"document.querySelector('#vworld .link-hit[data-tog=\"{t}\"]').dispatchEvent(new MouseEvent('click', {{bubbles:true}}))"), pg.wait_for_timeout(120))
-    tog(f'branch|{who}|v2')
-    check('fix 20 / 21: clicking the dotted v2 line → both live: amber halo behind both, each line keeps its version colour, ⚠ + note',
-          ev("document.querySelectorAll('#vworld .flow-layer .link-halo').length") == 2
-          and ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v2\"]').classList.contains('v2')")
-          and not ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v1\"]').classList.contains('v2')")
-          and ev("document.querySelectorAll('#vworld .wbadge').length") == 1 and 'same consumer receives two versions' in pg.inner_text('#vworld .warn-card'))
-    tog(f'branch|{who}|v1')
-    check('fix 20: …clicking v1 makes it dotted — the branch moved to v2', ev(f"{d}.serializeFlow().laneChoice") == [{'ref': ref, 'choice': 'v2'}]
-          and '→ Moved to Topic v2' in pg.inner_text('#vworld') and ev("document.querySelectorAll('#vworld .link-halo').length") == 0)
     pg.locator('#vworld .decision-pill').filter(has_text='Impacted').first.click()
-    pg.click('#vworld .assess-card [data-assess=both]'); pg.wait_for_timeout(100)
-    check('fix 10: "keep both" on the other branch → halo, ⚠ badge and the warning note open', ev("document.querySelectorAll('#vworld .flow-layer .link.warn').length") == 2
+    pg.locator('#vworld .assess-card [data-vid*=switch]').first.click(); pg.wait_for_timeout(150)
+    check('note 4: switching applies the versioned block — exactly two lines per branch at the topic: v2 solid, v1 dotted',
+          topic_lines(other) == 2 and ev(f"document.querySelectorAll('#vworld .link-hit[data-tog^=\"fan|{other}|\"]').length") == 2
+          and ev(f"[...document.querySelectorAll('#vworld .link[data-tog^=\"fan|{other}|\"]')].filter(l=>l.classList.contains('retired')).length") == 1)
+    dot = ev(f"[...document.querySelectorAll('#vworld .link[data-tog^=\"fan|{other}|\"]')].find(l=>l.classList.contains('retired')).dataset.tog")
+    tog = lambda t: (ev(f"document.querySelector('#vworld .link-hit[data-tog=\"{t}\"]').dispatchEvent(new MouseEvent('click', {{bubbles:true}}))"), pg.wait_for_timeout(120))
+    tog(dot)
+    check('notes 10 / 21: toggling the dotted v1 line → both bold (keep both): amber halo, version colours kept, ⚠ + consumer note',
+          ev("document.querySelectorAll('#vworld .flow-layer .link-halo').length") == 2
           and ev("document.querySelectorAll('#vworld .wbadge').length") == 1 and 'same consumer receives two versions' in pg.inner_text('#vworld .warn-card'))
+    sol = ev(f"[...document.querySelectorAll('#vworld .link[data-tog^=\"fan|{other}|\"]')].find(l=>l.dataset.tog!=='{dot}').dataset.tog")
+    tog(sol); tog(sol)
+    check('note 10: each line toggles on its own (the other line keeps its state)', ev("document.querySelectorAll('#vworld .flow-layer .link-halo').length") == 2)
     segs = ev(f"({SEGS})('#vworld')")
     vert = [(round(a[0]), round(min(a[1], b[1])), round(max(a[1], b[1]))) for s in segs for a, b in zip(s, s[1:]) if abs(a[0] - b[0]) < 0.5 and abs(a[1] - b[1]) > 1]
     shared = [(u, v) for i, u in enumerate(vert) for v in vert[i+1:] if u[0] == v[0] and u[1] < v[2] and v[1] < u[2]]
     check('fix 1: in the versioned copy too, v1 and v2 lanes never share a drop line', not shared)
     shot('r6-parallel')
     flow = ev(f"{d}.serializeFlow()")
-    check('round-6 state saves and validates', ev(f"{d}.validateFlow({d}.serializeFlow())") is None and len(flow['laneChoice']) == 2)
+    check('round-6 state saves and validates', ev(f"{d}.validateFlow({d}.serializeFlow())") is None and len(flow['laneChoice']) == 1 and len(flow['lineFlips']) == 1)
     ev(f"{d}.loadFlow({json.dumps(flow)})"); pg.wait_for_timeout(150)
-    check('…and loads back (assessments, warning)', ev("document.querySelectorAll('#vworld .flow-layer .link.warn').length") == 2 and len(ev(f"{d}.serializeFlow().laneChoice")) == 2)
+    check('…and loads back (assessment, toggled lines, warning)', ev("document.querySelectorAll('#vworld .flow-layer .link.warn').length") == 2 and len(ev(f"{d}.serializeFlow().laneChoice")) == 1)
     pg.locator('#vworld .wbadge').click(); pg.wait_for_timeout(50)
     if not pg.locator('#vworld .warn-card').count(): pg.locator('#vworld .wbadge').click()
     pg.click('#vworld .warn-card [data-action=ack]'); pg.wait_for_timeout(100)
@@ -204,7 +203,7 @@ with sync_playwright() as p:
 
     B1, B2 = ev(f"{d}.chainOrder().map(b=>b.dataset.id)")[:2]
     # fix 5: switch on the publisher → swap dotted / solid
-    ev(f"{d}.removeVersion('{B2}')")
+    [ev(f"{d}.removeVersion('{k}')") for k in list(ev(f"Object.keys({d}.versionOverrides())"))]
     pick(B2 + ':out'); pg.click('#world .target-card .dc-side button[data-side=upstream]')
     ev(f"{d}.dropVersion('p2t-contract-switch', 10, 10)"); pg.wait_for_timeout(150)
     check('fix 15: a switch opens its cards straight away', ev("document.querySelectorAll('#vworld .decision-card:not(.target-card):not(.warn-card)').length") >= 1)
@@ -221,8 +220,8 @@ with sync_playwright() as p:
           and ev(f"{d}.serializeFlow().lineFlips") in (None, []))
     other = [t for t in togs if t != dotted][0]
     ev(f"document.querySelector('#vworld .link-hit[data-tog=\"{other}\"]').dispatchEvent(new MouseEvent('click', {{bubbles:true}}))"); pg.wait_for_timeout(150)
-    check('…clicking the only solid line swaps the two (one always stays live)', ev(f"document.querySelector('#vworld .link[data-tog=\"{other}\"]').classList.contains('retired')")
-          and not ev(f"document.querySelector('#vworld .link[data-tog=\"{dotted}\"]').classList.contains('retired')"))
+    check('…each line toggles on its own: the solid one turns dotted, the dotted one stays dotted', ev(f"document.querySelector('#vworld .link[data-tog=\"{other}\"]').classList.contains('retired')")
+          and ev(f"document.querySelector('#vworld .link[data-tog=\"{dotted}\"]').classList.contains('retired')"))
     ev(f"{d}.removeVersion('{B2}')")
 
     # fix 6: callers on a versioned API — per-caller v1 / v2
@@ -293,6 +292,49 @@ with sync_playwright() as p:
     check('…a branch\'s new Topic v2 sits right next to the shared v1 topic on the main flow (not on the branch row)',
           len(v2t) == 1 and v1x and abs(v2t[0][0] - v1x[0][0]) < 1 and abs(v2t[0][1] - 240) <= 80)
     if missing: print(missing)
+    # ===== defect notes (Test Defect Notes v2, Nov 15) =====
+    # note 3 / 6 / 7 / 11: a versioned branch draws one line per own lane — no extra lines; the shared topic shows "v1"
+    ev(f"(()=>{{const o={d}.versionOverrides(); Object.keys(o).forEach(k=>delete o[k]); o['block-4']='c2p-contract-dual'; o['block-5']='c2a-topic-switch'; {d}.renderCopy(); }})()")
+    n4 = ev("[...document.querySelectorAll('#vworld .flow-layer path.link[data-own=\"block-4\"]')].filter(l=>l.dataset.k1==='block-2:out').length")
+    n5 = ev("[...document.querySelectorAll('#vworld .flow-layer path.link[data-own=\"block-5\"]')].filter(l=>l.dataset.k1==='block-2:out').length")
+    check('notes 3 / 6 / 11: versioned branches draw exactly one line per version at the shared topic (2 each, not 3)', n4 == 2 and n5 == 2)
+    badges = ev("[...document.querySelectorAll('#vworld .flow-layer .node[data-skey=\"block-2:out\"]')].map(n=>{const b=n.nextElementSibling; return b && b.classList.contains('vbadge') ? b.textContent : ''})")
+    check('note 3: the shared topic shows its v1 label next to the new v2', 'v1' in badges and 'v2' in badges)
+    # note 2: every connector keeps its arrowhead, also the short angled ones into an API
+    arrows = ev("document.querySelectorAll('#vworld .flow-layer path.link-arrow').length")
+    links_n = ev("document.querySelectorAll('#vworld .flow-layer path.link, #vworld .flow-layer line.link').length")
+    check('note 2: every connector has its arrowhead', arrows == links_n)
+    # note 5: several changes reaching one branch → one impact flag, not one per change
+    ev(f"(()=>{{const o={d}.versionOverrides(); Object.keys(o).forEach(k=>delete o[k]); o['block-4']='c2p-contract-parallel'; o['block-6']='a2t-topic-switch'; {d}.renderCopy(); }})()")
+    ds = ev(f"{d}.compositeDecisions()")
+    ab = [x['blockId'] for x in ds if x.get('kind') == 'assess']
+    check('note 5: one impact flag per block, even when several changes reach it', len(ab) == len(set(ab)) and ev("[...document.querySelectorAll('#vworld .decision-pill')].filter(p=>p.textContent.includes('Impacted')).length") == len(ab))
+    # note 12: leaving versioning removes the guide card
+    pick('block-2:out', '#vworld'); pg.wait_for_timeout(80)
+    had = ev("document.querySelectorAll('.target-card').length")
+    pg.click('#tabBaseFlow'); pg.wait_for_timeout(80)
+    check('note 12: switching back to Base Flow Design removes the versioning card', had >= 1 and ev("document.querySelectorAll('.target-card').length") == 0)
+    # note 1: API-to-API — the backend API can be a target application's API (backend system = end application)
+    pg.goto(URL); pg.wait_for_timeout(100)
+    ev(f"{d}.append('process-to-api')") if False else None
+    for t in ['api-to-api']:
+        ev(f"{d}.append('{t}')")
+    ext0 = ev("document.querySelectorAll('#world .pcont.own-external').length")
+    pick('block-1:out'); pg.wait_for_timeout(80)
+    check('note 1: clicking the backend API of an API-to-API asks whether it is a target application\'s API', pg.locator('#world .backend-card [data-action=backend-on]').count() == 1)
+    pg.click('#world .backend-card [data-action=backend-on]'); pg.wait_for_timeout(100)
+    check('note 1: "yes" adds the backend system as an end application', ev("document.querySelectorAll('#world .pcont.own-external').length") > ext0
+          and ev(f"{d}.serializeFlow().backend") == ['t0'] and ev(f"{d}.validateFlow({d}.serializeFlow())") is None)
+    f1 = ev(f"{d}.serializeFlow()")
+    ev(f"{d}.loadFlow({json.dumps(f1)})"); pg.wait_for_timeout(100)
+    check('note 1: …saved and loaded with the flow', ev(f"{d}.serializeFlow().backend") == ['t0'])
+    ev(f"{d}.append('api-to-process')") if False else None
+    pg.click('#modeComposite'); pg.wait_for_timeout(50)
+    bid = ev(f"{d}.chainOrder()[0].dataset.id")
+    pick(bid + ':out'); pg.wait_for_timeout(80)
+    check('note 1: in Composite flow the backend API offers the same (remove the backend system)', pg.locator('#world .backend-card [data-action=backend-off]').count() == 1)
+    pg.click('#world .backend-card [data-action=backend-off]'); pg.wait_for_timeout(80)
+    check('note 1: …and removing it makes the backend API an iPaaS API again', 'backend' not in ev(f"{d}.serializeFlow()"))
     check('no page errors', not errs)
     if errs: print(errs)
     br.close()

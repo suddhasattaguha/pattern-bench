@@ -409,3 +409,21 @@ Both modes:
     apart; up- and down-going drop lines keep apart; multi-source rows and callers sit further out.
 - Stale lane choices / line swaps are cleared when their versions go.
 - Tests: `test_round6.py` 69 checks; all suites pass (407 checks).
+
+### v2.0 trial — fixes from "Test Defect Notes v2" (Nov 15)
+1. API-to-API: clicking its open backend API asks whether it is a target application's API; "yes"
+   adds the backend system as an end application (single and composite flow; saved as `backend`).
+2. Arrows into a component: sharp bends, every connector keeps its arrowhead (the short angled
+   join segment had dropped it); joins 58 px long.
+3. / 6. / 7. / 11. A versioned branch draws one line per own lane (no extra lines — a v1 lane got a
+   second line to v2); the dotted v1 starts at the shared v1; the shared topic shows its "v1" label.
+4. / 10. The impacted card asks "switch to v2?" with the library's versions (applying one gives
+   v2 solid + v1 dotted, toggleable) or "Stay on v1"; "Keep both" only by toggling the lines.
+5. One impact flag per block — the first change that reached it; none where the block already
+   has a decision.
+8. / 9. An unversioned branch draws only the line it is on — no dotted line before a version is
+   chosen. (A clone bug made a moved branch draw two dotted lines.)
+10. Every connector toggles dotted ↔ solid on its own; both solid = keep both (halo + warning).
+11. "No caller left on v1" note text sits inside its box.
+12. Leaving versioning (Base Flow Design) removes the versioning card.
+- Tests: `test_round6.py` 79 checks; all suites pass (417 checks).

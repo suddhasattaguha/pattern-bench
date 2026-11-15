@@ -905,6 +905,9 @@
   let ackWarn = {};
   const openWarnings = new Set();   // warning notes shown open on the canvas
   let needName = new Set();         // container keys highlighted after "Name them now" (print)
+  // API-to-API blocks whose backend API is a target application's API (its backend system = an end application)
+  let backendApp = new Set();
+  let backendPrompt = null;
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
@@ -1077,8 +1080,9 @@
         const st = { x:b.left + SEAM_X + m.at*b.w, cy, nodes: lanes.length ? lanes : [{ type:m.type, owner:m.owner, dy:0 }], strong:true, vblock: v ? i : null, bi:i, key:b.id + ':m' + mk };
         sets.push(st); segs.push([last, st]); last = st;
       });
+      const exitEnd = b.backend ? Object.assign({}, spec.exit, { owner:'external' }) : spec.exit;   // backend API of a target application
       const exit = { x:b.left + b.w + SEAM_X, cy,
-        nodes: v ? laneNodes(spec.exit) : [{ type:spec.exit.type, owner:spec.exit.owner, dy:0 }],
+        nodes: v ? laneNodes(exitEnd) : [{ type:exitEnd.type, owner:exitEnd.owner, dy:0 }],
         strong:!!spec.exit.strong, vblock: v ? i : null, bi:i, key:b.id + ':out', boundary: !!spec.exit.boundary };
       sets.push(exit); segs.push([last, exit]);
 
@@ -1206,7 +1210,7 @@
         for(let i = 1; i < p.length; i++){
           if(i < p.length - 1){
             const [ax, ay] = p[i-1], [cx, cy] = p[i], [ex, ey] = p[i+1];
-            const r1 = Math.min(10, Math.hypot(cx-ax, cy-ay)/2), r2 = Math.min(10, Math.hypot(ex-cx, ey-cy)/2);
+            const r1 = Math.min(4, Math.hypot(cx-ax, cy-ay)/2), r2 = Math.min(4, Math.hypot(ex-cx, ey-cy)/2);   // sharp bends
             const s = (a, b, r) => { const L = Math.hypot(b[0]-a[0], b[1]-a[1]) || 1; return [b[0] - (b[0]-a[0])/L*r, b[1] - (b[1]-a[1])/L*r]; };
             const q1 = s([ax, ay], [cx, cy], r1), q2 = s([ex, ey], [cx, cy], r2);
             d += 'L' + q1[0] + ' ' + q1[1] + 'Q' + cx + ' ' + cy + ' ' + q2[0] + ' ' + q2[1];
@@ -1218,7 +1222,7 @@
         const dx = zx - ax, dy = zy - ay, horiz = Math.abs(dx) >= Math.abs(dy);
         const gap = (to ? (horiz ? SYMBOLS[to.type].half : (SYMBOL_VHALF[to.type] || 20)) : 20) + 3;
         const seg = Math.hypot(dx, dy);
-        if(seg - gap > 12) arrows += '<path class="' + acls + '" d="' + arrowPath(zx - dx/seg*gap, zy - dy/seg*gap, dx, dy) + '"></path>';
+        if(seg - gap > 2) arrows += '<path class="' + acls + '" d="' + arrowPath(zx - dx/seg*gap, zy - dy/seg*gap, dx, dy) + '"></path>';   // every connector keeps its arrowhead
       } else {
         const half = to ? SYMBOLS[to.type].half : 20;
         const tx = l.x2 - half - 3;
@@ -1283,9 +1287,9 @@
         '<text x="' + w.x + '" y="' + (by + 13) + '" text-anchor="middle">' + (ack ? '\u2713 not a valid pattern' : '\u26A0 not a valid pattern') + '</text></g>';
     });
     (model.notes || []).forEach(nt => {
-      const bw = nt.text.length * 6 + 16, bx = nt.x - bw - 34, by = nt.y - 36;   // left of the component, clear of the tile caption
+      const bw = nt.text.length * 6.2 + 18, bx = nt.x - bw - 34, by = nt.y - 36;   // left of the component, clear of the tile caption
       out += '<g class="nbadge" data-note="' + nt.id + '"><rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="18" rx="6"></rect>' +
-        '<text x="' + nt.x + '" y="' + (by + 13) + '" text-anchor="middle">' + escXml(nt.text) + '</text></g>';
+        '<text x="' + (bx + bw/2) + '" y="' + (by + 13) + '" text-anchor="middle">' + escXml(nt.text) + '</text></g>';
     });
     return out;
   }
@@ -2711,6 +2715,59 @@
     renderFlows();
     if(yes){ recordHistory(); showToast('Calling application added. Name it via its container label.'); }
   }
+  // Note 1 (Nov 15): an API-to-API block's backend API may be a target application's API — then its
+  // backend system is drawn as an end application (API-to-API inside iPaaS, or API to a target app).
+  function isOpenA2AExit(key){
+    const b = allBlocks().find(x => x.dataset.tpl === 'api-to-api' && exitKeyOf(x) === key);
+    return b && !takersOf(key).length ? b : null;
+  }
+  function setBackend(id, on){
+    if(on) backendApp.add(id); else backendApp.delete(id);
+    backendPrompt = null; branchPoint = null;
+    renderFlows(); renderCopy(); recordHistory();
+    showToast(on ? 'Backend system added as an end application. Name it via its container label.' : 'Backend system removed \u2014 the backend API is an iPaaS API again.');
+  }
+  function backendCard(worldEl, b, x, y){
+    const card = document.createElement('div');
+    card.className = 'decision-card backend-card';
+    card.style.left = x + 'px'; card.style.top = y + 'px';
+    card.style.setProperty('--arrow-x', '40px');
+    card.addEventListener('pointerdown', e => e.stopPropagation());
+    card.addEventListener('click', e => e.stopPropagation());
+    const on = backendApp.has(b.dataset.id);
+    const head = document.createElement('div');
+    head.className = 'dc-head';
+    head.textContent = on ? 'Backend system' : 'Backend API \u2014 target application?';
+    card.appendChild(closeButton('Close', () => { backendPrompt = null; branchPoint = null; renderFlows(); }));
+    const q = document.createElement('p');
+    q.className = 'dc-q';
+    q.textContent = on ? 'The backend API belongs to a target application (end application). Name it via its container label.'
+                       : 'Is this backend API a target application\u2019s API? Then the backend system is added as an end application \u2014 otherwise it stays an API of the next iPaaS.';
+    card.append(head, q);
+    const opt = (label, act, fn) => { const bt = document.createElement('button'); bt.className = 'dc-opt'; bt.dataset.action = act; bt.textContent = label; bt.addEventListener('click', fn); card.appendChild(bt); };
+    if(on) opt('Remove the backend system', 'backend-off', () => setBackend(b.dataset.id, false));
+    else {
+      opt('Yes \u2014 add the backend system (end application)', 'backend-on', () => setBackend(b.dataset.id, true));
+      opt('No \u2014 it stays an iPaaS API', 'backend-no', () => { backendPrompt = null; branchPoint = null; renderFlows(); });
+    }
+    worldEl.appendChild(card);
+  }
+  function renderBackendCard(){
+    world.querySelectorAll(':scope > .backend-card').forEach(c => c.remove());
+    if(flowMode !== 'single' || !backendPrompt) return;
+    const b = chainOrder[chainOrder.length - 1];
+    if(!b || b.dataset.id !== backendPrompt || b.dataset.tpl !== 'api-to-api'){ backendPrompt = null; return; }
+    backendCard(world, b, parseFloat(b.style.left) + parseFloat(b.style.width) - 120, parseFloat(b.style.top) + BLOCK_H + 14);
+  }
+  world.addEventListener('click', (e) => {
+    if(canvasWrap.classList.contains('versioning') || flowMode !== 'single') return;
+    const n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
+    const b = chainOrder[chainOrder.length - 1];
+    if(!n || !b || b.dataset.tpl !== 'api-to-api' || n.dataset.skey !== b.dataset.id + ':out') return;
+    e.stopPropagation();
+    backendPrompt = b.dataset.id;
+    renderFlows();
+  });
   function renderCallerCard(){
     world.querySelectorAll(':scope > .caller-card').forEach(c => c.remove());
     const b = chainOrder[0];
@@ -2827,7 +2884,7 @@
     callerPrompt = null;
     rippleChoices = {};
     manualDeltas = new Set();
-    lineFlips = {}; callerVer = {}; laneChoice = {}; ackWarn = {};
+    lineFlips = {}; callerVer = {}; laneChoice = {}; ackWarn = {}; backendApp = new Set(); backendPrompt = null;
     openWarnings.clear();
     closeLabelEditor();
     selectedBlock = null;
@@ -3001,7 +3058,7 @@
   const CALLER_DY_BUSY = [150, -150, 280, -280, 410, -410];      // callers of a connector with a block on its left
   const CALLER_BOX = { hw:75, up:70, down:50 };                  // readable caller box: CALLER / name / business process above the icon
   const JSTEP = 16;          // spacing between the junction / drop lines of connectors that meet at one component
-  const JOIN = 34;           // connectors meeting at one entry point end in their own angled straight segment this long
+  const JOIN = 58;           // connectors meeting at one entry point end in their own angled straight segment this long
   let compCallerPos = {};    // caller id -> rendered position
   // Every calling application in composite flow: the main flow's (v1.9) caller plus the added ones.
   function compositeCallers(){
@@ -3249,7 +3306,7 @@
       if(!a){ br.blocks.forEach(b => { tiles[b.dataset.id] = { hidden:true }; }); return; }
       const top = yc.get(k) - BLOCK_H/2;
       br.blocks.forEach((b, i) => { tiles[b.dataset.id] = { left:lefts[i], top, w:parseFloat(b.style.width), h:hOf(b), variant:variantOf(b) }; });
-      const geo = br.blocks.map((b, i) => ({ id:b.dataset.id, left:lefts[i], top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:variantOf(b), caller:false,
+      const geo = br.blocks.map((b, i) => ({ id:b.dataset.id, left:lefts[i], top, w:parseFloat(b.style.width), tpl:b.dataset.tpl, variant:variantOf(b), caller:false, backend:backendApp.has(b.dataset.id),
         flips: withV ? lineFlips[b.dataset.id] || null : null }));
       const m = buildFlowModel(geo, withV, pendIdx(br.blocks));
       // The shared component is drawn once, on its own row. The branch's link to it becomes
@@ -3261,7 +3318,8 @@
         const dir = yc.get(k) > a.y ? 1 : -1;
         const lane = { x:a.x, y:a.y + dir * 2 * LANE, type:a.type, owner:a.owner, role:n.role, ver:n.ver, dim:false,
           key:key + '#' + n.ver, caller:false, skey:key, bis:a.bis || [] };
-        (lanes[key] = lanes[key] || []).push(lane);
+        (lanes[key] = lanes[key] || []).forEach(x => { if(!x.ver){ x.ver = 'v1'; x.role = x.role || 'unchanged'; } });   // the shared v1 shows its label
+        lanes[key].push(lane);
         all.nodes.push(lane);
         // the shared component's container takes in the new lane
         const cK = all.containers.find(c => c.keys.includes(key));
@@ -3276,12 +3334,11 @@
       const v2Lane = withV ? (lanes[key] || []).find(n => n.ver === 'v2') : null;
       // round 6 fix 20: a branch at a component with v1 and v2 shows BOTH connectors — the one it is on
       // solid, the other dotted — and clicking swaps them (both solid = not a valid pattern)
-      const cur = choice || 'v1';
+      const seamVersioned = !!variantOf(seamB);
       const lanesFor = (h) => {
-        if(h.ver && h.ver !== 'v1') return [[pickLane(key, h.ver), true, null]];
-        const v1 = pickLane(key, null);
-        if(!v2Lane) return [[v1, true, null]];
-        return [[v1, cur !== 'v2', 'v1'], [v2Lane, cur !== 'v1', 'v2']];
+        if(seamVersioned) return [[pickLane(key, h.ver && h.ver !== 'v1' ? h.ver : null), true, null]];   // its own lanes, one line each
+        if(v2Lane && choice === 'v2') return [[v2Lane, true, null]];
+        return [[pickLane(key, null), true, null]];
       };
       const bothKind = a.type === 'topic' ? (br.kind === 'out' ? 'consumer' : 'publisher') : (a.type === 'api' || a.type === 'file') ? 'caller' : 'generic';
       m.links.slice().forEach(l => {
@@ -3290,10 +3347,11 @@
         const h = hs || he;
         const ls = lanesFor(h);
         const both = ls.length > 1 && ls.every(x => x[1]);
+        const wasRetired = !!l.retired, orig = Object.assign({}, l);
         ls.forEach(([al, live, tv], li) => {
-          const c = li === 0 ? l : Object.assign({}, l);
+          const c = li === 0 ? l : Object.assign({}, orig);
           if(li > 0) m.links.push(c);
-          c.retired = !!l.retired || al.role === 'retired' || !live;
+          c.retired = wasRetired || al.role === 'retired' || !live;
           c.ver = al.ver === 'v2' ? 'v2' : 'v1';
           if(tv) c.tog = 'branch|' + seamB.dataset.id + '|' + tv;
           if(both){ c.warn = 'branch|' + seamB.dataset.id; }
@@ -3417,9 +3475,15 @@
   // On-canvas card for the picked connector: an API or file nothing feeds can also take a
   // calling application. A calling application's own card offers to remove it.
   function renderCompositeCard(){
-    world.querySelectorAll(':scope > .comp-card').forEach(c => c.remove());
+    world.querySelectorAll(':scope > .comp-card, :scope > .backend-card').forEach(c => c.remove());
     if(flowMode !== 'composite') return;
     let at = null, head, text, opts;
+    const a2a = branchPoint && !branchPoint.auto && isOpenA2AExit(branchPoint.key);
+    if(a2a && compPos[branchPoint.key]){
+      const at2 = compPos[branchPoint.key];
+      backendCard(world, a2a, at2.x - 40, at2.y + 40);
+      return;
+    }
     if(branchPoint && !branchPoint.auto && callableKeys.has(branchPoint.key) && compPos[branchPoint.key]){
       at = compPos[branchPoint.key];
       head = CONNECTOR_LABEL[branchPoint.type];
@@ -3737,7 +3801,16 @@
     const r = computeCompositeRipples();
     r.asks.filter(a => !a.resolved).forEach(a => out.push(a));
     r.forced.forEach(d => { if(!out.some(x => x.key === d.key)) out.push(d); });
-    return out;
+    // one impact flag per block: the first change that reached it (no stack of repeated warnings), and none
+    // where the block already has a real decision to make
+    const decided = new Set(out.filter(d => d.kind !== 'assess').map(d => d.blockId));
+    const seenAssess = new Set();
+    return out.filter(d => {
+      if(d.kind !== 'assess') return true;
+      if(decided.has(d.blockId) || seenAssess.has(d.blockId)) return false;
+      seenAssess.add(d.blockId);
+      return true;
+    });
   }
 
   // Contract ripple across the composite flow: every block that takes its input from (or feeds)
@@ -3762,7 +3835,7 @@
       const paths = (dir === 'downstream' ? takersOf(pkey) : feedersOf(pkey)).filter(n => n !== B && !versionOverrides[n.dataset.id]);
       paths.forEach(n => {
         const nspec = NODE_SPECS[n.dataset.tpl];
-        const far = dir === 'downstream' ? { type:nspec.exit.type, owner:nspec.exit.owner, key:exitKeyOf(n) }
+        const far = dir === 'downstream' ? { type:nspec.exit.type, owner:backendApp.has(n.dataset.id) ? 'external' : nspec.exit.owner, key:exitKeyOf(n) }
                                          : { type:nspec.entry.type, owner:nspec.entry.owner, key:entryKeyOf(n) };
         const cs = callersOn(far.key);
         if(cs.length && dir === 'upstream') far.caller = cs.map(c => c.key);
@@ -3911,7 +3984,7 @@
     return chainOrder.map((b, i) => ({
       id: b.dataset.id, left: parseFloat(b.style.left), top: parseFloat(b.style.top), w: parseFloat(b.style.width),
       tpl: b.dataset.tpl, variant: withVersions ? (versionOverrides[b.dataset.id] || null) : null,
-      caller: i === 0 && !!callers[b.dataset.id]
+      caller: i === 0 && !!callers[b.dataset.id], backend: backendApp.has(b.dataset.id)
     }));
   }
 
@@ -3934,8 +4007,15 @@
       const n = world.querySelector('.flow-layer .node[data-skey="' + firstId + ':in"]');
       if(n){ n.classList.add('can-add-caller'); n.insertAdjacentHTML('afterbegin', '<title>Called by an end application? Click to add it</title>'); }
     }
+    // an API-to-API block's backend API (open end) can be clicked: is it a target application's API?
+    const lastB = chainOrder[chainOrder.length - 1];
+    if(flowMode !== 'composite' && lastB && lastB.dataset.tpl === 'api-to-api'){
+      const n = world.querySelector('.flow-layer .node[data-skey="' + lastB.dataset.id + ':out"]');
+      if(n){ n.classList.add('can-add-caller'); n.insertAdjacentHTML('afterbegin', '<title>Backend API of a target application? Click to add the backend system</title>'); }
+    }
     renderTargetCard(world);
     renderCallerCard();
+    renderBackendCard();
     renderCopy();
     if(!canvasWrap.classList.contains('split')) highlightSuggestions([]);
     scheduleMini();
@@ -4040,7 +4120,10 @@
     const first = t && versionGrid.querySelector('.version-card.suggested');
     if(first) first.scrollIntoView({ block:'nearest', behavior:'smooth' });
   }
-  function clearVersionTarget(){ if(versionTarget){ versionTarget = null; renderFlows(); if(flowMode === 'composite') refreshLibrary(); } }
+  function clearVersionTarget(){
+    [world, vworld].forEach(w => w.querySelectorAll(':scope > .target-card').forEach(c => c.remove()));
+    if(versionTarget){ versionTarget = null; renderFlows(); if(flowMode === 'composite') refreshLibrary(); }
+  }
   world.addEventListener('click', (e) => {
     if(canvasWrap.classList.contains('versioning')) return;
     if(flowMode === 'composite') return;   // composite flow: connector clicks pick a branch point instead
@@ -4456,7 +4539,7 @@
       if(!n || versionOverrides[n.dataset.id]) return;   // nothing beyond, or the neighbour has its own version
       const nspec = NODE_SPECS[n.dataset.tpl];
       const skey = dir === 'downstream' ? b.dataset.id + ':out' : n.dataset.id + ':out';
-      const far = dir === 'downstream' ? { type:nspec.exit.type, owner:nspec.exit.owner, key:n.dataset.id + ':out' }
+      const far = dir === 'downstream' ? { type:nspec.exit.type, owner:backendApp.has(n.dataset.id) ? 'external' : nspec.exit.owner, key:n.dataset.id + ':out' }
                                        : { type:nspec.entry.type, owner:nspec.entry.owner, key:joinKey(j) };
       if(far.type === 'api' && far.owner !== 'external' && j === 0 && callers[n.dataset.id]) far.caller = n.dataset.id + ':caller';
       far.boundary = far.type === 'api' && (dir === 'downstream' ? !!chainOrder[j+1] : j > 0);   // joined: the next iPaaS's API
@@ -4561,7 +4644,7 @@
         pill.className = 'decision-pill';
         pill.dataset.key = d.key;
         pill.style.left = (d.side === 'upstream' ? x + DECISION_W - 150 : x) + 'px'; pill.style.top = y + 'px';
-        pill.textContent = d.kind === 'assess' ? '\u26A0 Impacted \u00B7 assess' : '\u26A0 Decision pending';
+        pill.textContent = d.kind === 'assess' ? '\u26A0 Impacted \u00B7 switch to v2?' : '\u26A0 Decision pending';
         pill.title = d.kind === 'ripple' ? 'A contract change reaches the process shared with ' + name + '.'
           : d.kind === 'assess' ? what + ' now runs next to v1. ' + name + ' stays on v1 until you assess it.'
           : what + ' is new. How should ' + name + ' handle it?';
@@ -4581,12 +4664,12 @@
         const later = () => { collapsedDecisions.add(d.key); openedDecisions.delete(d.key); reopenAssess.delete(d.key); renderCopy(); };
         const head = document.createElement('div');
         head.className = 'dc-head';
-        head.textContent = '\u26A0 Impacted \u2014 new version next to v1';
+        head.textContent = '\u26A0 Impacted \u2014 switch to ' + what + '?';
         card.appendChild(closeButton('Decide later', later));
         const src = findBlock(d.sourceId);
         const q = document.createElement('p');
         q.className = 'dc-q';
-        q.textContent = what + ' (' + (src ? src.querySelector('.cblock-label').textContent : '') + ') now runs next to v1. ' + name + ' stays on v1 \u2014 assess how it should act.';
+        q.textContent = what + ' (' + (src ? src.querySelector('.cblock-label').textContent : '') + ') now runs next to v1. Switch ' + name + ' to v2 with one of these versions (v2 solid, v1 dotted \u2014 click a line to toggle it), or stay on v1.';
         card.append(head, q);
         if(d.count > 1){
           const cn = document.createElement('p');
@@ -4603,8 +4686,7 @@
           btn.addEventListener('click', () => { laneChoice[d.blockId] = undefined; delete laneChoice[d.blockId]; reopenAssess.delete(d.key); applyDecision(d.blockId, vid); });
           card.appendChild(btn);
         });
-        const choices = [['v1', 'Stay on v1']];
-        if(d.lanes) choices.push(['both', 'Keep both (\u26A0 not a valid pattern)']);
+        const choices = [['v1', 'Stay on v1']];      // keep both comes only from toggling the lines
         choices.forEach(([val, label]) => {
           const btn = document.createElement('button');
           btn.className = 'dc-opt dc-plain' + (d.choice === val ? ' on' : '') + (val === 'both' ? ' dc-warn' : '');
@@ -4758,7 +4840,8 @@
   // is solid too, otherwise the two swap — so one of them always stays live. Both solid is not a valid
   // pattern: amber lines, a ⚠ badge and a note. Any ⚠ can be acknowledged (both modes).
   // ---------------------------------------------------------------
-  const swapRule = (xLive, yLive) => !xLive ? [true, yLive] : yLive ? [false, true] : [false, true];
+  // every connector toggles dotted ↔ solid on its own (Suddha, Nov 15); both solid = keep both (warning)
+  const swapRule = (xLive, yLive) => [!xLive, yLive];
   function toggleLine(tog){
     const [kind, id, sub] = tog.split('|');
     let both = false;
@@ -5069,6 +5152,7 @@
     const f = serializeFlowBase();
     const acks = encodeAcks();
     if(acks.length) f.acks = acks;
+    if(backendApp.size){ const map = ackRefs(); const refs = [...backendApp].map(id => map[id]).filter(Boolean); if(refs.length) f.backend = refs; }
     return f;
   }
   function serializeFlowBase(){
@@ -5179,6 +5263,8 @@
       return 'Flow file has an invalid change mark.';
     if(f.acks !== undefined && (!Array.isArray(f.acks) || !f.acks.every(a => a && typeof a.id === 'string' && /^(impact|fan|branch|caller)\|/.test(a.id) &&
        a.id.length <= 80 && typeof a.note === 'string' && a.note.length <= 120))) return 'Flow file has an invalid acknowledgement.';
+    if(f.backend !== undefined && (!Array.isArray(f.backend) || f.backend.length > 100 || !f.backend.every(r => typeof r === 'string' && /^(t\d+|b\d+\.\d+)$/.test(r))))
+      return 'Flow file has an invalid backend system entry.';
     if(f.branches !== undefined || f.callers !== undefined || f.lineFlips !== undefined) return validateBranches(f);
     return null;
   }
@@ -5225,6 +5311,7 @@
     (f.marks || []).forEach(m => manualDeltas.add(chainOrder[m.block].dataset.id + ':' + m.at));
     if((f.branches && f.branches.length) || (f.callers && f.callers.length) || f.mode === 'composite') loadBranches(f);
     decodeAcks(f.acks);
+    if(f.backend){ const inv = {}; Object.entries(ackRefs()).forEach(([id, ref]) => { inv[ref] = id; }); f.backend.forEach(r => { const id = inv[r]; const b = id && findBlock(id); if(b && b.dataset.tpl === 'api-to-api') backendApp.add(id); }); }
     if(flowMode === 'composite' && !chainOrder.length) setFlowMode('single');
     deselectAll();
     updateEmptyHint();
