@@ -432,10 +432,7 @@
   .link.v2{ stroke:var(--accent-version); }
   .link-arrow.v2{ fill:var(--accent-version); }
   .link.v2.retired, .link-arrow.v2.retired{ opacity:0.7; }
-  .link.warn{ stroke:var(--accent-amber); }
-  .link-arrow.warn{ fill:var(--accent-amber); opacity:1; }
-  .link.warn.retired{ stroke-dasharray:none; }
-  .link.warn.acked, .link-arrow.warn.acked{ stroke:var(--text-muted); fill:var(--text-muted); }
+  .link-halo{ fill:none; stroke:var(--accent-amber); stroke-width:10; opacity:0.45; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
   .link-hit{ fill:none; stroke:transparent; stroke-width:16; pointer-events:none; }
   .version-pane .flow-layer .link-hit[data-tog]{ pointer-events:stroke; cursor:pointer; }
   .flow-layer .link-hit.pickable{ pointer-events:stroke; cursor:pointer; }
@@ -1192,9 +1189,11 @@
       const r = (v) => Math.round(v*100)/100;
       return 'M' + r(x) + ' ' + r(y) + 'L' + r(bx - uy*6) + ' ' + r(by + ux*6) + 'L' + r(bx + uy*6) + ' ' + r(by - ux*6) + 'Z';
     };
-    let hits = '';
+    let hits = '', halos = '';
+    const linkStart = out.length;
     model.links.forEach(l => {
-      const extra = (model.colorVersions && l.ver === 'v2' ? ' v2' : '') + (l.warn ? ' warn' + (ackWarn[l.warn] !== undefined ? ' acked' : '') : '');
+      const acked = l.warn && ackWarn[l.warn] !== undefined;
+      const extra = (model.colorVersions && l.ver === 'v2' ? ' v2' : '') + (l.warn ? ' warn' + (acked ? ' acked' : '') : '');
       const cls = 'link' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '') + extra;
       const acls = 'link-arrow' + (l.retired ? ' retired' : '') + (l.dim ? ' dim' : '') + extra;
       const data = (l.own && flowMode === 'composite' ? ' data-own="' + l.own + '" data-k1="' + l.k1 + '" data-k2="' + l.k2 + '"' : '') + (l.tog && flowMode === 'composite' ? ' data-tog="' + l.tog + '"' : '');
@@ -1246,8 +1245,10 @@
       }
       // a wide, invisible twin that catches clicks (picking a connector, swapping dotted / solid)
       if(l.own && flowMode === 'composite') hits += '<path class="link-hit"' + data + ' d="' + d + '"></path>';
+      // both versions live (not a valid pattern): an amber halo behind the line — it keeps its version colour
+      if(l.warn && !acked) halos += '<path class="link-halo" d="' + d + '"></path>';
     });
-    out += hits;
+    out = out.slice(0, linkStart) + halos + out.slice(linkStart) + hits;
     out += arrows;
     model.nodes.forEach(n => {
       const cls = OWNERS[n.owner].cls + (n.role ? ' role-' + n.role : '') + (n.dim ? ' dim' : '') +
@@ -2991,15 +2992,16 @@
   let compPos = {};          // connector key -> rendered node (last composite render)
   let callerPick = null;     // calling application whose card is open (id)
   const BRANCH_OFF = 60;     // a fan-out row starts this far right of the shared connector, so the drop line stays clear of its tiles
-  const BRANCH_OFF_IN = 110; // a multi-source row ends this far left of it, clear of the junction line
+  const BRANCH_OFF_IN = 150; // a multi-source row ends this far left of it, clear of the junction line
   const JUNC = 60;           // multi-source links (and stacked callers) join this far left of the connector, then arrive level with it
   const CALLER_ROOM = 70;    // extra space left of a connector that also has multi-source links, for the junction line
-  const CALLER_DX = 200;     // a calling application sits this far left of the API / file it calls (its box stays clear of the junction lines)
+  const CALLER_DX = 220;     // a calling application sits this far left of the API / file it calls (its box stays clear of the junction lines)
   const ROW_GAP = 80;        // minimum clear space between two branches on one row
   const CALLER_DY = [0, 130, -130, 260, -260, 390, -390];        // callers of a connector that starts its row (stacked ~130 px apart)
   const CALLER_DY_BUSY = [150, -150, 280, -280, 410, -410];      // callers of a connector with a block on its left
   const CALLER_BOX = { hw:75, up:70, down:50 };                  // readable caller box: CALLER / name / business process above the icon
-  const JSTEP = 14;          // spacing between the junction / drop lines of connectors that meet at one component
+  const JSTEP = 16;          // spacing between the junction / drop lines of connectors that meet at one component
+  const JOIN = 34;           // connectors meeting at one entry point end in their own angled straight segment this long
   let compCallerPos = {};    // caller id -> rendered position
   // Every calling application in composite flow: the main flow's (v1.9) caller plus the added ones.
   function compositeCallers(){
@@ -3017,20 +3019,21 @@
     Object.entries(groups).forEach(([gk, ls]) => {
       if(gk.endsWith('|out')){
         // drop lines: per side, the nearest row's line is the outermost (rightmost), so no drop line
-        // crosses another branch's row segment
+        // crosses another branch's row segment; lines going up and down keep apart where they pass each other
+        const sides = [1, -1].filter(sd => ls.some(l => Math.sign(l.rowY - l.pts[0][1]) === sd));
+        const base = sides.length === 2 ? 9 : 0;
         [1, -1].forEach(side => {
           const g = ls.filter(l => Math.sign(l.rowY - l.pts[0][1]) === side || (side === 1 && l.rowY === l.pts[0][1]))
             .sort((a, b) => Math.abs(a.rowY - a.pts[0][1]) - Math.abs(b.rowY - b.pts[0][1]) || a.pts[0][1] - b.pts[0][1]);
-          const n = g.length, sp = n > 1 ? Math.min(JSTEP, 30/(n - 1)) : 0;
+          const n = g.length, sp = n > 1 ? Math.min(JSTEP, 44/(n - 1)) : 0;
           g.forEach((l, i) => {
-            const ox = ((n - 1)/2 - i) * sp;
+            const ox = ((n - 1)/2 - i) * sp + side * base;
             l.pts[0][0] += ox; l.pts[1][0] += ox; l.x1 = l.pts[0][0];
           });
         });
         return;
       }
       // multi-source / callers: arrival offsets per lane, junction lines per side
-      const vh = (t) => (SYMBOL_VHALF[t] || 18) - 4;
       const side = (l) => l.sy < l.ty - 0.5 ? -1 : l.sy > l.ty + 0.5 ? 1 : 0;
       const byLane = {};
       ls.forEach(l => { (byLane[l.ty] = byLane[l.ty] || []).push(l); });
@@ -3038,7 +3041,7 @@
         const up = g.filter(l => side(l) < 0).sort((a, b) => (a.sy - a.ty) - (b.sy - b.ty));      // farthest above first
         const dn = g.filter(l => side(l) > 0).sort((a, b) => (a.sy - a.ty) - (b.sy - b.ty));      // nearest below first
         const lv = g.filter(l => side(l) === 0);
-        const sp = Math.min(8, vh(g[0].toType) / Math.max(up.length, dn.length, 1));
+        const sp = 14;      // arrivals fan out before the entry point and angle into it
         up.forEach((l, i) => { l.ya = l.ty - (up.length - i) * sp; });
         dn.forEach((l, i) => { l.ya = l.ty + (i + 1) * sp; });
         lv.forEach((l, i) => { l.ya = l.ty + (i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i/2) * sp); });
@@ -3049,20 +3052,47 @@
       Object.values(bySrc).forEach(g => {
         g.forEach(l => { l.off = 0; });
         if(g.length < 2) return;
-        g.filter(l => l.ya > l.sy).sort((a, b) => a.ya - b.ya).forEach((l, i) => { l.off = (i + 1) * 8; });
-        g.filter(l => l.ya < l.sy).sort((a, b) => b.ya - a.ya).forEach((l, i) => { l.off = -(i + 1) * 8; });
+        g.filter(l => l.ya > l.sy).sort((a, b) => a.ya - b.ya).forEach((l, i) => { l.off = (i + 1) * 16; });
+        g.filter(l => l.ya < l.sy).sort((a, b) => b.ya - a.ya).forEach((l, i) => { l.off = -(i + 1) * 16; });
       });
       // junction lines: per side the line that arrives nearest the centre is the outermost (leftmost)
       const ax = ls[0].tx, below = ls.filter(l => l.ya > l.sy + l.off), above = ls.filter(l => l.ya < l.sy + l.off);
       below.sort((a, b) => a.ya - b.ya); above.sort((a, b) => b.ya - a.ya);
-      const n = Math.max(below.length, above.length), sx = n > 1 ? Math.min(JSTEP, 44/(n - 1)) : 0;
-      [below, above].forEach(g => g.forEach((l, i) => { l.jx = ax - JUNC - (g.length - 1 - i) * sx; }));
+      const n = Math.max(below.length, above.length), sx = n > 1 ? Math.min(JSTEP, 56/(n - 1)) : 0;
+      [below, above].forEach(g => g.forEach((l, i) => { l.jx = ax - JUNC - 10 - (g.length - 1 - i) * sx; }));
       ls.forEach(l => {
-        const hy = l.sy + l.off, pts = [[l.sx, l.sy]];
+        // apart all the way, then one angled straight segment into the component's entry point
+        const hy = l.sy + l.off, pts = [[l.sx, l.sy]], ex = l.tx - JOIN;
         if(l.off){ const px = l.sx + (l.srcPad || 16); pts.push([px, l.sy], [px, hy]); }
-        if(Math.abs(l.ya - hy) < 0.5) pts.push([l.tx, l.ya]);
-        else pts.push([l.jx, hy], [l.jx, l.ya], [l.tx, l.ya]);
-        l.pts = pts; l.x2 = l.tx; l.y2 = l.ya;
+        if(Math.abs(l.ya - hy) < 0.5) pts.push([ex, l.ya]);
+        else pts.push([l.jx, hy], [l.jx, l.ya], [ex, l.ya]);
+        pts.push([l.tx, l.ty]);
+        l.pts = pts; l.x2 = l.tx; l.y2 = l.ty;
+      });
+    });
+  }
+
+  // Two or more connectors ending at the same entry point (two versions into one queue, a fan's lines,
+  // branch drops): they run apart and each ends in its own angled straight segment into that point.
+  function joinConnectors(links){
+    const groups = {};
+    links.forEach(l => { if(l.jd === 'in') return; const k = Math.round(l.x2) + ',' + Math.round(l.y2); (groups[k] = groups[k] || []).push(l); });
+    Object.values(groups).forEach(g => {
+      if(g.length < 2) return;
+      const prevY = (l) => l.pts ? l.pts[l.pts.length - 2][1] : l.y1;
+      g.sort((a, b) => prevY(a) - prevY(b));
+      const n = g.length;
+      g.forEach((l, i) => {
+        const off = (i - (n - 1)/2) * 14, y = l.y2 + off, ex = l.x2 - JOIN;
+        if(l.pts){
+          const P = l.pts, last = P[P.length - 1], prev = P[P.length - 2];
+          if(Math.abs(prev[1] - last[1]) < 0.5 && P.length >= 3 && Math.abs(P[P.length - 3][0] - prev[0]) < 0.5) prev[1] = y;   // a drop line: end it at its own height
+          P.splice(P.length - 1, 0, [Math.max(prev[0] + 6, ex), y]);
+        } else {
+          if(Math.abs(off) < 0.5 && Math.abs(l.y1 - l.y2) < 0.5) return;
+          const mx = l.x1 + Math.max(10, (ex - l.x1) / 2);
+          l.pts = [[l.x1, l.y1], [mx, l.y1], [mx, y], [ex, y], [l.x2, l.y2]];
+        }
       });
     });
   }
@@ -3244,11 +3274,14 @@
       const seamB = br.kind === 'out' ? br.blocks[0] : br.blocks[br.blocks.length - 1];
       const choice = laneChoice[seamB.dataset.id];
       const v2Lane = withV ? (lanes[key] || []).find(n => n.ver === 'v2') : null;
+      // round 6 fix 20: a branch at a component with v1 and v2 shows BOTH connectors — the one it is on
+      // solid, the other dotted — and clicking swaps them (both solid = not a valid pattern)
+      const cur = choice || 'v1';
       const lanesFor = (h) => {
-        if(h.ver && h.ver !== 'v1') return [pickLane(key, h.ver)];
+        if(h.ver && h.ver !== 'v1') return [[pickLane(key, h.ver), true, null]];
         const v1 = pickLane(key, null);
-        if(!v2Lane || !choice || choice === 'v1') return [v1];
-        return choice === 'v2' ? [v2Lane] : [v1, v2Lane];
+        if(!v2Lane) return [[v1, true, null]];
+        return [[v1, cur !== 'v2', 'v1'], [v2Lane, cur !== 'v1', 'v2']];
       };
       const bothKind = a.type === 'topic' ? (br.kind === 'out' ? 'consumer' : 'publisher') : (a.type === 'api' || a.type === 'file') ? 'caller' : 'generic';
       m.links.slice().forEach(l => {
@@ -3256,12 +3289,14 @@
         if(!hs && !he) return;
         const h = hs || he;
         const ls = lanesFor(h);
-        ls.forEach((al, li) => {
+        const both = ls.length > 1 && ls.every(x => x[1]);
+        ls.forEach(([al, live, tv], li) => {
           const c = li === 0 ? l : Object.assign({}, l);
           if(li > 0) m.links.push(c);
-          if(al.role === 'retired') c.retired = true;
-          if(al.ver === 'v2') c.ver = 'v2';
-          if(ls.length > 1){ c.warn = 'branch|' + seamB.dataset.id; }
+          c.retired = !!l.retired || al.role === 'retired' || !live;
+          c.ver = al.ver === 'v2' ? 'v2' : 'v1';
+          if(tv) c.tog = 'branch|' + seamB.dataset.id + '|' + tv;
+          if(both){ c.warn = 'branch|' + seamB.dataset.id; }
           if(hs){
             // fan-out: a drop line from the component to the row, then along the row
             c.pts = [[al.x, al.y], [al.x, hs.y], [l.x2, l.y2]]; c.x1 = al.x; c.y1 = al.y; c.k1 = key;
@@ -3274,7 +3309,7 @@
             c.jk = key; c.jd = 'in'; c.tx = al.x; c.ty = al.y; c.toType = al.type;
           }
         });
-        if(ls.length > 1) all.warnings.push({ id:'branch|' + seamB.dataset.id, kind:bothKind, x:h.x, y:h.y, bid:seamB.dataset.id });
+        if(both) all.warnings.push({ id:'branch|' + seamB.dataset.id, kind:bothKind, x:h.x, y:h.y, bid:seamB.dataset.id });
       });
       const h0 = hidden[0];
       m.containers = m.containers.filter(c => {
@@ -3346,6 +3381,7 @@
     });
 
     separateConnectors(all.links);
+    joinConnectors(all.links);
     return { model:all, tiles, pos, callerPos };
   }
 
@@ -3670,15 +3706,29 @@
         const carries = (n) => { const nv = variantsById[versionOverrides[n.dataset.id]]; return !!(nv && newNodeOf(nv, type)); };
         const others = who(key).filter(n => n !== B && !carries(n));
         const asked = others.filter(n => inRowNeighbour(B, n) || sw);
-        others.filter(n => !inRowNeighbour(B, n) && !sw && isSeamOf(n, key)).forEach(n => {
+        const optionsFor = (n) => VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl &&
+          x.nodes.some(m => m.type === type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
+        // round 6 fix 18 / 23: on a parallel version EVERY other connector at the component shows the impact
+        // (main flow or branch, upstream or downstream) — an assess card with the same version options the
+        // library shows for that block, plus "Stay on v1" (and "Keep both" where a branch can draw both lines)
+        others.filter(n => !inRowNeighbour(B, n) && !sw).forEach(n => {
           const ch = laneChoice[n.dataset.id] || null;
           out.push({ key:n.dataset.id + '|assess|' + B.dataset.id, kind:'assess', blockId:n.dataset.id, sourceId:B.dataset.id, side, type,
-            ver:nn.ver, options:[], choice:ch, resolved:!!ch, cross:true, sw:false, count:others.length, ckey:key });
+            ver:nn.ver, options:optionsFor(n), lanes:isSeamOf(n, key), choice:ch, resolved:!!ch, cross:true, sw:false, count:others.length, ckey:key });
+        });
+        // peers on the same side of the component (other consumers of the topic when a consumer moves to
+        // v2, other publishers when a publisher does): never forced — flagged to assess, as fix 18 asks
+        const peers = (who === feedersOf ? takersOf : feedersOf)(key).filter(n => n !== B && !carries(n) && !others.includes(n) && !inRowNeighbour(B, n));
+        peers.forEach(n => {
+          if(out.some(x => x.key === n.dataset.id + '|assess|' + B.dataset.id)) return;
+          const ch = laneChoice[n.dataset.id] || null;
+          out.push({ key:n.dataset.id + '|assess|' + B.dataset.id, kind:'assess', blockId:n.dataset.id, sourceId:B.dataset.id,
+            side: side === 'upstream' ? 'downstream' : 'upstream', type, ver:nn.ver, options:optionsFor(n), lanes:isSeamOf(n, key),
+            choice:ch, resolved:!!ch, cross:true, sw:false, count:others.length + peers.length, ckey:key });
         });
         asked.forEach(n => {
           const nv = variantsById[versionOverrides[n.dataset.id]];
-          const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl &&
-            x.nodes.some(m => m.type === type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
+          const options = optionsFor(n);
           out.push({ key:n.dataset.id + '|' + side + '|' + B.dataset.id, blockId:n.dataset.id, sourceId:B.dataset.id, side, type,
             ver:nn.ver, options, current: nv ? nv.id : null, cross: !inRowNeighbour(B, n), sw, count: asked.length, ckey:key });
         });
@@ -3753,10 +3803,11 @@
     vworld.innerHTML = '';
     selectedCopy = null;
     updateLayout();
-    if(!active){ highlightSuggestions([]); refreshLibrary(); return; }
+    Object.keys(lineFlips).forEach(k => { if(!versionOverrides[k]) delete lineFlips[k]; });
+    if(!active){ laneChoice = {}; highlightSuggestions([]); refreshLibrary(); return; }
     let allDecisions = computeCompositeDecisions();
     // an assessment belongs to the parallel version that prompted it: gone with it
-    const assessed = new Set(allDecisions.filter(d => d.kind === 'assess').map(d => d.blockId));
+    const assessed = new Set(allDecisions.filter(d => d.kind === 'assess' || (!d.kind && d.ckey)).map(d => d.blockId));
     if(Object.keys(laneChoice).some(id => !assessed.has(id))){
       Object.keys(laneChoice).forEach(id => { if(!assessed.has(id)) delete laneChoice[id]; });
       allDecisions = computeCompositeDecisions();
@@ -4080,17 +4131,31 @@
     queue:   { upstream:'feed it', downstream:'take from it' }
   };
   function placeCard(worldEl, card, x, y){
-    // right of the component → above → below → left; the first side that covers no tile, else the least overlap
-    const w = card.offsetWidth, h = card.offsetHeight, g = 34;
+    // round 6 fix 19: at a corner of the component first (upper-right → lower-right → upper-left →
+    // lower-left), then right / above / below / left; a place is free only if it covers no tile and no
+    // connector — otherwise the place with the least overlap
+    const w = card.offsetWidth, h = card.offsetHeight, g = 30;
     const tiles = [...worldEl.querySelectorAll(':scope > .cblock')].filter(b => b.style.display !== 'none')
       .map(b => { const hh = parseFloat(b.style.height) || b.offsetHeight || BLOCK_H;
         return { l:parseFloat(b.style.left), t:parseFloat(b.style.top), r:parseFloat(b.style.left) + parseFloat(b.style.width) + TILE_D, b:parseFloat(b.style.top) + hh }; });
-    const cands = [[x + g, y - h/2], [x - w/2, y - g - h], [x - w/2, y + g], [x - g - w, y - h/2]];
-    const overlap = ([l, t]) => tiles.reduce((a, r) => a + Math.max(0, Math.min(l + w, r.r) - Math.max(l, r.l)) * Math.max(0, Math.min(t + h, r.b) - Math.max(t, r.t)), 0);
-    let best = cands.find(c => overlap(c) === 0);
-    if(!best) best = cands.slice().sort((a, b) => overlap(a) - overlap(b))[0];
-    card.style.left = best[0] + 'px'; card.style.top = best[1] + 'px';
-    card.dataset.place = ['right', 'above', 'below', 'left'][cands.indexOf(best)];
+    // sample points along every connector
+    const pts = [];
+    worldEl.querySelectorAll(':scope > .flow-layer .link').forEach(el => {
+      try {
+        const L = el.getTotalLength();
+        for(let s = 0; s <= L; s += 14){ const p = el.getPointAtLength(s); pts.push([p.x, p.y]); }
+      } catch(e){}
+    });
+    const cands = [[x + g, y - g - h], [x + g, y + g], [x - g - w, y - g - h], [x - g - w, y + g],
+                   [x + g + 10, y - h/2], [x - w/2, y - g - h - 10], [x - w/2, y + g + 10], [x - g - 10 - w, y - h/2]];
+    const names = ['upper-right', 'lower-right', 'upper-left', 'lower-left', 'right', 'above', 'below', 'left'];
+    const cost = ([l, t]) => tiles.reduce((a, r) => a + Math.max(0, Math.min(l + w, r.r) - Math.max(l, r.l)) * Math.max(0, Math.min(t + h, r.b) - Math.max(t, r.t)), 0)
+      + 600 * pts.filter(([px, py]) => px > l - 4 && px < l + w + 4 && py > t - 4 && py < t + h + 4).length;
+    const costs = cands.map(cost);
+    let i = costs.findIndex(c => c === 0);
+    if(i < 0) i = costs.indexOf(Math.min(...costs));
+    card.style.left = cands[i][0] + 'px'; card.style.top = cands[i][1] + 'px';
+    card.dataset.place = names[i];
   }
   function renderCompositeTargetCard(worldEl, t){
     const card = document.createElement('div');
@@ -4529,9 +4594,20 @@
           cn.textContent = d.count + ' flows at this ' + CONNECTOR_LABEL[d.type] + ' \u2014 each assesses on its own.';
           card.appendChild(cn);
         }
-        [['v1', 'Stay on v1'], ['v2', 'Move to ' + what], ['both', 'Keep both (\u26A0 not a valid pattern)']].forEach(([val, label]) => {
+        // the same versions the library shows for this block + connector, applied straight from the card
+        d.options.forEach(vid => {
           const btn = document.createElement('button');
-          btn.className = 'dc-opt' + (d.choice === val ? ' on' : '') + (val === 'both' ? ' dc-warn' : '');
+          btn.className = 'dc-opt'; btn.dataset.vid = vid;
+          btn.textContent = variantLabelFor(variantsById[vid], b);
+          btn.title = variantTitleFor(variantsById[vid], b);
+          btn.addEventListener('click', () => { laneChoice[d.blockId] = undefined; delete laneChoice[d.blockId]; reopenAssess.delete(d.key); applyDecision(d.blockId, vid); });
+          card.appendChild(btn);
+        });
+        const choices = [['v1', 'Stay on v1']];
+        if(d.lanes) choices.push(['both', 'Keep both (\u26A0 not a valid pattern)']);
+        choices.forEach(([val, label]) => {
+          const btn = document.createElement('button');
+          btn.className = 'dc-opt dc-plain' + (d.choice === val ? ' on' : '') + (val === 'both' ? ' dc-warn' : '');
           btn.dataset.assess = val;
           btn.textContent = label;
           btn.addEventListener('click', () => setAssess(d.blockId, val, d.key));
@@ -4707,6 +4783,15 @@
       callerVer[id] = st.v1 && st.v2 ? 'both' : st.v2 ? 'v2' : 'v1';
       both = callerVer[id] === 'both';
       if(both) openWarnings.add('caller|' + id);
+    } else if(kind === 'branch'){
+      const cv = laneChoice[id] || 'v1';
+      const live = { v1: cv !== 'v2', v2: cv !== 'v1' };
+      const other = sub === 'v1' ? 'v2' : 'v1';
+      const [nx, ny] = swapRule(live[sub], live[other]);
+      const st = { [sub]:nx, [other]:ny };
+      laneChoice[id] = st.v1 && st.v2 ? 'both' : st.v2 ? 'v2' : 'v1';
+      both = laneChoice[id] === 'both';
+      if(both) openWarnings.add('branch|' + id);
     } else return;
     renderCopy();
     recordHistory();

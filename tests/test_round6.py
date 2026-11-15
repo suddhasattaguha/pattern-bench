@@ -121,8 +121,8 @@ with sync_playwright() as p:
     check('fix 4: rows make room — no caller box overlaps a tile', not any(inter(c, t) for c in cboxes for t in rects))
     # fix 1: separate paths at the API (3 callers + 1 multi-source flow) and at the topic (fan-out)
     segs = ev(f"({SEGS})('#world')")
-    ends = [tuple(map(round, s[-1])) for s in segs]
-    check('fix 1: connectors arriving at one component all end at different points (meet only at the arrowhead)', len(ends) == len(set(ends)))
+    lasts = [(tuple(map(round, s[-2])), tuple(map(round, s[-1]))) for s in segs if len(s) >= 2]
+    check('fix 1 / 20: connectors meeting at one component each end in their own segment (they meet only at the entry point)', len(lasts) == len(set(lasts)))
     vert = [(round(a[0]), round(min(a[1], b[1])), round(max(a[1], b[1]))) for s in segs for a, b in zip(s, s[1:]) if abs(a[0] - b[0]) < 0.5 and abs(a[1] - b[1]) > 1]
     shared = [(u, v) for i, u in enumerate(vert) for v in vert[i+1:] if u[0] == v[0] and u[1] < v[2] and v[1] < u[2]]
     check('fix 1: no two connectors share a vertical segment (junction / drop lines)', not shared)
@@ -163,14 +163,30 @@ with sync_playwright() as p:
           and ev("[...document.querySelectorAll('#vworld .decision-pill')].filter(p=>p.textContent.includes('Impacted')).length") == 2)
     check('fix 10: the impacted component in those blocks is highlighted', ev("document.querySelectorAll('#vworld .flow-layer .node.affected').length") >= 3)
     pg.locator('#vworld .decision-pill').filter(has_text='Impacted').first.click()
-    check('fix 10: the assess card offers stay on v1 / move to v2 / keep both', pg.locator('#vworld .assess-card [data-assess]').count() == 3)
+    check('fix 23: the assess card offers the library\'s version options for that block, then "Stay on v1" and "Keep both"',
+          pg.locator('#vworld .assess-card [data-vid]').count() >= 1 and pg.locator('#vworld .assess-card [data-assess=v1]').count() == 1
+          and pg.locator('#vworld .assess-card [data-assess=both]').count() == 1)
     who = ev("document.querySelector('#vworld .assess-card').dataset.key.split('|')[0]")
-    pg.click('#vworld .assess-card [data-assess=v2]'); pg.wait_for_timeout(100)
-    check('…"move to v2" connects that branch to the v2 lane (violet) and records the answer',
-          ev(f"{d}.serializeFlow().laneChoice") == [{'ref': 'b0.0' if who == b4 else 'b1.0', 'choice': 'v2'}] and '→ Moved to Topic v2' in pg.inner_text('#vworld'))
+    ref = 'b0.0' if who == b4 else 'b1.0'
+    check('fix 20: the branch shows both connectors — v1 solid, v2 dotted — each clickable',
+          ev(f"document.querySelectorAll('#vworld .link-hit[data-tog^=\"branch|{who}|\"]').length") == 2
+          and ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v2\"]').classList.contains('retired')")
+          and not ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v1\"]').classList.contains('retired')"))
+    pg.click('#vworld .assess-card [data-assess=v1]'); pg.wait_for_timeout(100)
+    check('…"Stay on v1" records the answer', ev(f"{d}.serializeFlow().laneChoice") == [{'ref': ref, 'choice': 'v1'}] and '✓ Stays on v1' in pg.inner_text('#vworld'))
+    tog = lambda t: (ev(f"document.querySelector('#vworld .link-hit[data-tog=\"{t}\"]').dispatchEvent(new MouseEvent('click', {{bubbles:true}}))"), pg.wait_for_timeout(120))
+    tog(f'branch|{who}|v2')
+    check('fix 20 / 21: clicking the dotted v2 line → both live: amber halo behind both, each line keeps its version colour, ⚠ + note',
+          ev("document.querySelectorAll('#vworld .flow-layer .link-halo').length") == 2
+          and ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v2\"]').classList.contains('v2')")
+          and not ev(f"document.querySelector('#vworld .link[data-tog=\"branch|{who}|v1\"]').classList.contains('v2')")
+          and ev("document.querySelectorAll('#vworld .wbadge').length") == 1 and 'same consumer receives two versions' in pg.inner_text('#vworld .warn-card'))
+    tog(f'branch|{who}|v1')
+    check('fix 20: …clicking v1 makes it dotted — the branch moved to v2', ev(f"{d}.serializeFlow().laneChoice") == [{'ref': ref, 'choice': 'v2'}]
+          and '→ Moved to Topic v2' in pg.inner_text('#vworld') and ev("document.querySelectorAll('#vworld .link-halo').length") == 0)
     pg.locator('#vworld .decision-pill').filter(has_text='Impacted').first.click()
     pg.click('#vworld .assess-card [data-assess=both]'); pg.wait_for_timeout(100)
-    check('fix 10: "keep both" → amber lines, ⚠ badge and the warning note open', ev("document.querySelectorAll('#vworld .flow-layer .link.warn').length") == 2
+    check('fix 10: "keep both" on the other branch → halo, ⚠ badge and the warning note open', ev("document.querySelectorAll('#vworld .flow-layer .link.warn').length") == 2
           and ev("document.querySelectorAll('#vworld .wbadge').length") == 1 and 'same consumer receives two versions' in pg.inner_text('#vworld .warn-card'))
     segs = ev(f"({SEGS})('#vworld')")
     vert = [(round(a[0]), round(min(a[1], b[1])), round(max(a[1], b[1]))) for s in segs for a, b in zip(s, s[1:]) if abs(a[0] - b[0]) < 0.5 and abs(a[1] - b[1]) > 1]
@@ -263,6 +279,13 @@ with sync_playwright() as p:
             have = set(ev("[...document.querySelectorAll('#vworld .flow-layer .node')].filter(n=>{const b=n.nextElementSibling; return b && b.classList.contains('vbadge') && b.textContent==='v2'}).map(n=>n.dataset.type)"))
             if need - have: missing.append((tpl, v, sorted(need - have)))
     check('every new version (v2) a block brings is drawn, on the main flow and on every branch', not missing)
+    # fix 18: a branch's parallel Topic v2 shows its impact on EVERY other connector (publisher + main-flow consumer too)
+    ev(f"(()=>{{const o={d}.versionOverrides(); Object.keys(o).forEach(k=>delete o[k]); o['block-4']='c2p-contract-parallel'; {d}.renderCopy(); }})()")
+    ds = ev(f"{d}.compositeDecisions()")
+    flagged = sorted(x['blockId'] for x in ds if x.get('type') == 'topic')
+    check('fix 18: a branch\'s parallel Topic v2 flags the publisher, the main-flow consumer and the other branches', all(b in flagged for b in ['block-2', 'block-3', 'block-5', 'block-6']))
+    pub = [x for x in ds if x['blockId'] == 'block-2' and x.get('type') == 'topic'][0]
+    check('fix 18 / 23: the publisher\'s card offers its own versions that bring Topic v2', len(pub['options']) >= 1 and not pub.get('lanes'))
     ev(f"(()=>{{const o={d}.versionOverrides(); Object.keys(o).forEach(k=>delete o[k]); o['block-5']='c2a-topic-switch'; {d}.renderCopy(); }})()")
     tp = ev("[...document.querySelectorAll('#vworld .flow-layer .node[data-type=topic]')].map(n=>{const m=n.transform.baseVal.consolidate().matrix; const b=n.nextElementSibling; return [m.e, m.f, b && b.classList.contains('vbadge') ? b.textContent : '']})")
     v1x = [t for t in tp if t[2] != 'v2' and abs(t[1] - 240) < 1]

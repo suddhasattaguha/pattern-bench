@@ -389,3 +389,23 @@ Both modes:
   disappeared. It is now drawn as a lane right next to the shared v1 component (on the branch's side),
   inside its container; the branch connects to it like to any lane, other branches can join it, and the
   retired v1 link stays dotted. Regression checks over every version on every row, and on placement.
+
+### v2.0 trial — round 6 follow-up: fixes 18–24 (Nov 15, evening)
+18. A new version on one connector shows its impact on every other connector at the component:
+    publishers and main-flow blocks too, and same-side peers (other consumers / publishers) — each
+    flagged "⚠ Impacted · assess" (pill on a parallel version).
+19. Guide card placed at a corner of the component first (upper-right → lower-right → upper-left →
+    lower-left, then the sides); a place counts as free only if it covers no tile and no connector.
+20. A branch at a component with v1 and v2 (consumer or upstream, e.g. Process-to-API calling a versioned
+    API) shows both connectors — the one it is on solid, the other dotted — on separate paths; click to swap.
+    Connectors meeting at one entry point run apart and each ends in its own angled straight segment.
+21. Both lines live: lines keep their version colours; the invalid state is an amber halo behind them
+    plus the ⚠ badge and note.
+22. Acknowledged warning no longer paints bent connectors as a filled shape (the style filled the line,
+    not only its arrowhead); acknowledged = normal colours, no halo.
+23. The assess card offers the same version options the library shows for that block + connector,
+    then "Stay on v1" and (where a branch can draw both lines) "Keep both".
+24. More spacing: 16 px between junction / drop lines, 14 px arrival fan, a caller's v1 / v2 legs 16 px
+    apart; up- and down-going drop lines keep apart; multi-source rows and callers sit further out.
+- Stale lane choices / line swaps are cleared when their versions go.
+- Tests: `test_round6.py` 69 checks; all suites pass (407 checks).
