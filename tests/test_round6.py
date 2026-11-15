@@ -236,7 +236,8 @@ with sync_playwright() as p:
     cv = ev(f"{d}.serializeFlow().callerVer")
     check('fix 2d / 6: that caller alone is on v2, the others stay on v1', len(cv) == 1 and cv[0]['ver'] == 'v2')
     check('fix 6: every caller has a v1 and a v2 connector (one solid, one dotted)', ev("document.querySelectorAll('#vworld .link-hit[data-tog^=\"caller|\"]').length") == 6)
-    check('fix 6: the caller on v2 has no ⚠ dependent logic; the others keep it', ev("document.querySelectorAll('#vworld .ibadge').length") == 2)
+    check('fix 6 / R7 note 1: the caller on v2 gets "⚠ calls new version"; the others keep ⚠ dependent logic',
+          ev("document.querySelectorAll('#vworld .ibadge:not(.adopt)').length") == 2 and ev("document.querySelectorAll('#vworld .ibadge.adopt').length") == 1)
     others_c = ev("[...new Set([...document.querySelectorAll('#vworld .link-hit[data-tog^=\"caller|\"]')].map(h=>h.dataset.tog.split('|')[1]))]")
     for c in others_c:
         if c != cid:

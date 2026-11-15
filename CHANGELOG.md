@@ -427,3 +427,27 @@ Both modes:
 11. "No caller left on v1" note text sits inside its box.
 12. Leaving versioning (Base Flow Design) removes the versioning card.
 - Tests: `test_round6.py` 79 checks; all suites pass (417 checks).
+
+### v2.0 trial — fixes from "Test Defect Notes v2 round 7" (Nov 15)
+1. A caller moved to the new API version (v2 or both) gets "⚠ calls new version" — its logic
+   probably changes; acknowledgeable, saved, and listed in the print.
+2. A v2 component is never versioned again (click says why).
+3. Composite flow: once a version gives a component a v2 on a connector, that connector is locked
+   until the versioned block is removed (×); dropping another version on a versioned block is
+   refused — except the next step of that same version. Single flow keeps v1.9's replace-on-drop.
+4. Platform frames are at least 160 px wide (a lone process / topic / API has room for its name).
+5. / 6. Consume-to-API next steps: "Topic v2 · own Queue v2 · Target API v2" (two topics, two
+   queues, two APIs) after "Target API v2 · own Queue v2", and "Topic v2 · Target API v2 · Queue
+   switches" after "push switches". Offered only as that next step (`extends`); the block's lines at
+   the topic pick as one connector with that single option.
+7. API-to-API versions draw front API → backend API (lanes of a block whose entry and exit share a
+   type were mapped to the entry only — loops, doubled lines, missing arrows). An unversioned block
+   between two v1 / v2 seams joins v1 → v1 and v2 → v2 (no crossing pairs).
+8. Callers of a connector with a block on its left stack clear of that row's tallest tile (and a
+   decision pill) — rows beyond move to make room.
+9. / 11. Every v2 component is solid; side-effect v2 differs only by its lighter fill (legend too).
+10. Composite flow: clicking a calling application in versioning opens "Change in the calling
+    application" — non-breaking (Δ) or breaking (the API it calls is flagged "Caller change ·
+    version API?" with its API versions or "Stay on v1"); saved as `callerChange`, printed.
+- A version applied from the library clears the stale guide card.
+- Tests: new `test_round7.py` 48 checks; all suites pass (465 checks).

@@ -454,7 +454,7 @@
   /* Versioning roles override the platform colour — violet means versioning, nothing else. */
   .node.role-primary{ --n-stroke:var(--accent-version); --n-fill:var(--accent-version); --n-glyph:var(--ver-ink); }
   .node.role-side{ --n-stroke:var(--accent-version); --n-fill:var(--ver-fill); --n-glyph:var(--ver-glyph); }
-  .node.role-side .n-shape{ stroke-dasharray:5 4; }
+  /* fix R7-9: every v2 component is drawn solid — side-effect only differs by its lighter fill */
   .node.role-retired{ --n-stroke:var(--text-muted); --n-fill:var(--vtile); --n-glyph:var(--text-muted); }
   .node.role-retired .n-shape{ stroke-dasharray:2 4; }
   .n-shape{ fill:var(--n-fill); stroke:var(--n-stroke); stroke-width:2; stroke-linejoin:round; }
@@ -465,7 +465,7 @@
   .vbadge text{ fill:var(--text-primary); font-family:var(--font-mono); font-size:11px; font-weight:700; }
   .vbadge.role-primary rect{ fill:var(--accent-version); stroke:var(--accent-version); }
   .vbadge.role-primary text{ fill:var(--ver-ink); }
-  .vbadge.role-side rect{ fill:var(--vtile); stroke:var(--accent-version); stroke-dasharray:3 2; }
+  .vbadge.role-side rect{ fill:var(--vtile); stroke:var(--accent-version); }
   .vbadge.role-side text{ fill:var(--ver-glyph); }
   .vbadge.role-retired text{ fill:var(--text-muted); }
   .vcaption-text{ fill:var(--ver-glyph); font-family:var(--font-ui); font-size:11px; font-weight:600; }
@@ -622,6 +622,11 @@
   .canvas-wrap.versioning .flow-layer .dbadge[data-skey]:hover rect{ stroke-width:2.5; }
   .ibadge rect{ fill:var(--accent-amber); stroke:none; }
   .ibadge text{ fill:#1b1306; font-family:var(--font-ui); font-size:10.5px; font-weight:700; }
+  .cbadge rect{ fill:var(--panel); stroke:var(--accent-teal); stroke-width:1.2; }
+  .cbadge text{ fill:var(--accent-teal); font-family:var(--font-ui); font-size:10.5px; font-weight:700; }
+  .cbadge.breaking rect{ fill:var(--accent-version); stroke:var(--accent-version); }
+  .cbadge.breaking text{ fill:var(--ver-ink); }
+  .version-pane .flow-layer .cbadge{ pointer-events:all; cursor:pointer; }
   .pcont.impact{ stroke:var(--accent-amber); stroke-width:2.5; stroke-opacity:1; }
   .flow-layer .node.impact{ filter:drop-shadow(0 0 4px var(--accent-amber)); }
   .ripple-pill{
@@ -828,7 +833,7 @@
       <div class="pane-tag" id="copyTag">Versioned copy</div>
       <div class="version-legend">
         <span class="legend-item"><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="var(--accent-version)"/></svg>Changed</span>
-        <span class="legend-item"><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--accent-version)" stroke-width="1.6" stroke-dasharray="3 2"/></svg>Side-effect</span>
+        <span class="legend-item"><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--ver-fill)" stroke="var(--accent-version)" stroke-width="1.6"/></svg>Side-effect</span>
         <span class="legend-item"><svg width="24" height="6"><line x1="2" y1="3" x2="22" y2="3" stroke="var(--text-muted)" stroke-width="2.5" stroke-dasharray="1 6" stroke-linecap="round"/></svg>Retired</span>
         <span class="legend-item"><svg width="22" height="14"><rect x="1" y="1" width="20" height="12" rx="4" fill="none" stroke="var(--accent-teal)" stroke-width="1.5"/><text x="11" y="10.5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--accent-teal)">Δ</text></svg>Code change</span>
         <span class="legend-item"><svg width="14" height="14"><rect x="0" y="0" width="14" height="14" rx="4" fill="var(--accent-amber)"/><text x="7" y="11" text-anchor="middle" font-size="10" font-weight="700" fill="#1b1306">!</text></svg>Impact</span>
@@ -900,6 +905,9 @@
   // parallel version stays on v1, moves to v2 or keeps both (laneChoice: seam block id -> 'v1'|'v2'|'both').
   let lineFlips = {};
   let callerVer = {};
+  // round 7 (note 10): a change in a calling application itself — caller id -> 'minor' (non-breaking, Δ) | 'breaking'
+  let callerChange = {};
+  let callerCard = null;     // { id, pane, x, y } — the open caller-change card
   let laneChoice = {};
   // Acknowledged warnings (both modes): warning id -> note ('' = no note)
   let ackWarn = {};
@@ -908,6 +916,7 @@
   // API-to-API blocks whose backend API is a target application's API (its backend system = an end application)
   let backendApp = new Set();
   let backendPrompt = null;
+  const CONT_MIN_W = 160;   // narrowest platform frame (round 7: room for "MESSAGE BROKER" / "END APPLICATION")
   const TILE_D = 20;   // depth of a tile's arrow point (exit) and notch (entry)
   const SEAM_X = 15;   // where a seam's shared connector sits, measured from the downstream tile's left
   const LANE = 34;     // vertical offset of the two lanes inside a versioned block
@@ -990,6 +999,27 @@
     'api-to-api':         { entry:{type:'api', owner:'ipaas', strong:true},     mid:[], exit:{type:'api', owner:'ipaas', strong:true, boundary:true} }
   };
 
+  // round 7 (note 7): a variant's nodes at one end of its block. Where the entry and exit share a type
+  // (API-to-API: front API → backend API) the links say which is which — an entry node is never a link
+  // target, an exit node never a link source. Otherwise the type alone decides.
+  function variantEndNodes(v, spec, pos, type){
+    const all = v.nodes.filter(n => n.type === type);
+    if(spec.entry.type !== spec.exit.type || pos === 'mid') return all;
+    const isFrom = (k) => v.links.some(l => l[0] === k), isTo = (k) => v.links.some(l => l[1] === k);
+    return all.filter(n => pos === 'entry' ? !isTo(n.k) : !isFrom(n.k));
+  }
+  // round 7 (notes 2 / 3): the block's version already gives this component a new version
+  function versionedAt(b, key){
+    const v = variantsById[versionOverrides[b.dataset.id]];
+    if(!v) return false;
+    const spec = NODE_SPECS[b.dataset.tpl];
+    let pos = null, type = null;
+    if(entryKeyOf(b) === key){ pos = 'entry'; type = spec.entry.type; }
+    else if(exitKeyOf(b) === key){ pos = 'exit'; type = spec.exit.type; }
+    else spec.mid.forEach((m, mk) => { if(b.dataset.id + ':m' + mk === key){ pos = 'mid'; type = m.type; } });
+    return !!pos && variantEndNodes(v, spec, pos, type).some(n => n.ver !== 'v1');
+  }
+
   // A versioned block's "fan": two links that share one component, one solid and one dotted (a switch).
   // In composite flow the user may swap them; both solid at once is not a valid pattern.
   const fanCache = {};
@@ -1050,7 +1080,7 @@
       const spec = NODE_SPECS[b.tpl];
       const v = b.variant ? variantsById[b.variant] : null;
       const cy = b.top + BLOCK_H/2;
-      const laneNodes = (end) => v.nodes.filter(n => n.type === end.type)
+      const laneNodes = (end, pos) => variantEndNodes(v, spec, pos, end.type)
         .map(n => ({ type:end.type, owner:end.owner, dy:LANE_DY[n.lane], role:n.role, ver:n.ver, key:n.k }));
       let entry;
       if(i === 0){
@@ -1072,17 +1102,17 @@
           entry.nodes.forEach(n => { n.owner = 'ipaas'; });
         }
       }
-      if(v && entry.vblock === null){ entry.nodes = laneNodes(spec.entry); entry.vblock = i; if(entry.boundary) entry.nodes.forEach(n => { n.owner = 'ipaas'; }); }
+      if(v && entry.vblock === null){ entry.nodes = laneNodes(spec.entry, 'entry'); entry.vblock = i; if(entry.boundary) entry.nodes.forEach(n => { n.owner = 'ipaas'; }); }
       const segs = [];
       let last = entry;
       spec.mid.forEach((m, mk) => {
-        const lanes = v ? laneNodes(m) : [];
+        const lanes = v ? laneNodes(m, 'mid') : [];
         const st = { x:b.left + SEAM_X + m.at*b.w, cy, nodes: lanes.length ? lanes : [{ type:m.type, owner:m.owner, dy:0 }], strong:true, vblock: v ? i : null, bi:i, key:b.id + ':m' + mk };
         sets.push(st); segs.push([last, st]); last = st;
       });
       const exitEnd = b.backend ? Object.assign({}, spec.exit, { owner:'external' }) : spec.exit;   // backend API of a target application
       const exit = { x:b.left + b.w + SEAM_X, cy,
-        nodes: v ? laneNodes(exitEnd) : [{ type:exitEnd.type, owner:exitEnd.owner, dy:0 }],
+        nodes: v ? laneNodes(exitEnd, 'exit') : [{ type:exitEnd.type, owner:exitEnd.owner, dy:0 }],
         strong:!!spec.exit.strong, vblock: v ? i : null, bi:i, key:b.id + ':out', boundary: !!spec.exit.boundary };
       sets.push(exit); segs.push([last, exit]);
 
@@ -1129,10 +1159,29 @@
           }
         }
       } else {
-        segs.forEach(([A, B]) => A.nodes.forEach(a => B.nodes.forEach(z => links.push({
-          x1:A.x, y1:A.cy + a.dy, x2:B.x, y2:B.cy + z.dy,
-          retired: a.role === 'retired' || z.role === 'retired', dim, own:bid, k1:A.key, k2:B.key, ver:verOf(a, z)
-        }))));
+        // round 7 (note 7): between two seams that both carry v1 and v2 lanes, an unversioned block joins
+        // v1 to v1 and v2 to v2 (no crossing pairs); a lane without a partner joins the other side's v1
+        const vn = (n) => n.ver || 'v1';
+        segs.forEach(([A, B]) => {
+          const pairs = [];
+          A.nodes.forEach(a => {
+            let zs = B.nodes.filter(z => vn(z) === vn(a));
+            if(!zs.length) zs = B.nodes.filter(z => vn(z) === 'v1');
+            if(!zs.length) zs = B.nodes;
+            zs.forEach(z => pairs.push([a, z]));
+          });
+          B.nodes.forEach(z => {
+            if(pairs.some(p => p[1] === z)) return;
+            let as = A.nodes.filter(a => vn(a) === vn(z));
+            if(!as.length) as = A.nodes.filter(a => vn(a) === 'v1');
+            if(!as.length) as = A.nodes;
+            as.forEach(a => pairs.push([a, z]));
+          });
+          pairs.forEach(([a, z]) => links.push({
+            x1:A.x, y1:A.cy + a.dy, x2:B.x, y2:B.cy + z.dy,
+            retired: a.role === 'retired' || z.role === 'retired', dim, own:bid, k1:A.key, k2:B.key, ver:verOf(a, z)
+          }));
+        });
       }
     });
 
@@ -1156,8 +1205,11 @@
       const flush = () => {
         if(!run.length) return;
         const first = run[0], last = run[run.length - 1], owner = first.nodes[0].owner;
-        const x1 = first.x - SYMBOLS[first.nodes[0].type].half - 16;
-        const x2 = last.x + SYMBOLS[last.nodes[0].type].half + 16;
+        let x1 = first.x - SYMBOLS[first.nodes[0].type].half - 16;
+        let x2 = last.x + SYMBOLS[last.nodes[0].type].half + 16;
+        // round 7 (note 4): a platform with a single component (only a process, only a topic) is framed
+        // wide enough for its name
+        if(x2 - x1 < CONT_MIN_W){ const c = (x1 + x2) / 2; x1 = c - CONT_MIN_W/2; x2 = c + CONT_MIN_W/2; }
         let over = tiles.filter(t => t.x2 > x1 + 6 && t.x1 < x2 - 6);
         if(!over.length) over = [tiles[0]];   // the caller sits left of the first tile
         const active = run.some(st => st.vblock !== null || pending.has(st.bi));
@@ -1275,8 +1327,17 @@
         // dependent logic behind an end application's API / folder may be impacted (click to acknowledge)
         const wid = 'impact|' + n.key, ack = ackWarn[wid] !== undefined;
         const bx = n.x - 58, by = n.y + 24;
-        out += '<g class="ibadge' + (ack ? ' acked' : '') + '" data-warn="' + wid + '"><title>' + (ack ? 'Acknowledged' + (ackWarn[wid] ? ': ' + escXml(ackWarn[wid]) : '') + ' \u2014 click to change' : 'Dependent logic in the end application may be impacted \u2014 click to acknowledge') + '</title><rect x="' + bx + '" y="' + by + '" width="116" height="18" rx="6"></rect>' +
-          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">' + (ack ? '\u2713 dependent logic' : '\u26A0 dependent logic') + '</text></g>';
+        // round 7 (note 1): a caller that moved to a new API version probably changes its own logic
+        const what = n.adopt ? 'calls new version' : 'dependent logic';
+        const tip = n.adopt ? 'The calling application now calls the new version \u2014 its logic probably changes' : 'Dependent logic in the end application may be impacted';
+        out += '<g class="ibadge' + (n.adopt ? ' adopt' : '') + (ack ? ' acked' : '') + '" data-warn="' + wid + '"><title>' + (ack ? 'Acknowledged' + (ackWarn[wid] ? ': ' + escXml(ackWarn[wid]) : '') + ' \u2014 click to change' : tip + ' \u2014 click to acknowledge') + '</title><rect x="' + (n.adopt ? bx - 12 : bx) + '" y="' + by + '" width="' + (n.adopt ? 140 : 116) + '" height="18" rx="6"></rect>' +
+          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">' + (ack ? '\u2713 ' : '\u26A0 ') + what + '</text></g>';
+      }
+      if(n.cchange){
+        // round 7 (note 10): a change in the calling application itself
+        const by = n.y + (n.impact ? 46 : 24), br = n.cchange === 'breaking';
+        out += '<g class="cbadge' + (br ? ' breaking' : '') + '" data-skey="' + (n.skey || '') + '"><title>' + (br ? 'Breaking change in the calling application' : 'Non-breaking change in the calling application (same version)') + ' \u2014 click the caller to change</title><rect x="' + (n.x - 58) + '" y="' + by + '" width="116" height="18" rx="6"></rect>' +
+          '<text x="' + n.x + '" y="' + (by+13) + '" text-anchor="middle">' + (br ? '\u26A0 breaking change' : '\u0394 non-breaking') + '</text></g>';
       }
     });
     // both lines solid: not a valid pattern (click to read the note / acknowledge)
@@ -1383,7 +1444,7 @@
       if(flowMode === 'composite' && vt.conns){
         // the component's connectors: clickable until one is picked, then the picked one stays lit
         const at = (el) => el.dataset.k1 === vt.skey || el.dataset.k2 === vt.skey;
-        const sideOk = (own) => { const c = vt.conns.find(x => x.own === own); return c && (!vt.sideFilter || c.side === vt.sideFilter); };
+        const sideOk = (own) => { const c = vt.conns.find(x => x.own === own); return c && !c.locked && (!vt.sideFilter || c.side === vt.sideFilter); };
         layer.querySelectorAll('[data-own]').forEach(el => {
           if(!at(el)) return;
           if(!vt.conn && vt.conns.length > 1 && sideOk(el.dataset.own)) el.classList.add('pickable');
@@ -1572,7 +1633,7 @@
   // Each variant belongs to one base pattern and keeps that pattern's seams.
   // Node roles drive the styling:
   //   primary   — the object whose version actually changed (solid violet)
-  //   side      — versioned only as a side-effect of that change (dashed violet)
+  //   side      — versioned only as a side-effect of that change (solid violet outline, light fill)
   //   unchanged — stays on v1 (normal colours)
   //   retired   — v1 object/link being phased out (faded, dotted link)
   // ---------------------------------------------------------------
@@ -1803,6 +1864,27 @@
               {k:'a1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
               {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
       links:[ ['t','q1','solid'], ['q1','a1','solid'], ['t','q2','solid'], ['q2','a2','solid'] ] },
+    // round 7 (notes 5 / 6): the target API already has a v2 and now the topic gets one too. Offered only
+    // as the next step of the matching API version (extends) — never on a plain Consume-to-API.
+    { id:'c2a-topic-api-parallel', base:'consume-to-api', route:'exit', change:'contract', extends:['c2a-api-parallel'],
+      label:'Topic v2 · own Queue v2 · Target API v2',
+      purpose:'Topic v2 next to v1 while the target API also runs v1 and v2: two topics, two queues, two APIs — Topic v1 → Queue v1 → API v1 and Topic v2 → Queue v2 → API v2.',
+      nodes:[ {k:'t1', type:'topic', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'q1', type:'queue', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'a1', type:'api', lane:'top', ver:'v1', role:'unchanged'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'},
+              {k:'q2', type:'queue', lane:'bot', ver:'v2', role:'side'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['t1','q1','solid'], ['q1','a1','solid'], ['t2','q2','solid'], ['q2','a2','solid'] ] },
+    { id:'c2a-topic-api-switch', base:'consume-to-api', route:'exit', change:'contract', extends:['c2a-api-switch'],
+      label:'Topic v2 · Target API v2 · Queue switches',
+      purpose:'Topic and target API both move to v2 with one queue: the queue now subscribes to Topic v2 and pushes to API v2. Its links to Topic v1 and API v1 are retired.',
+      nodes:[ {k:'t1', type:'topic', lane:'top', ver:'v1', role:'retired'},
+              {k:'t2', type:'topic', lane:'bot', ver:'v2', role:'primary'},
+              {k:'q',  type:'queue', lane:'mid', ver:'v1', role:'unchanged'},
+              {k:'a1', type:'api', lane:'top', ver:'v1', role:'retired'},
+              {k:'a2', type:'api', lane:'bot', ver:'v2', role:'primary'} ],
+      links:[ ['t1','q','dotted'], ['t2','q','solid'], ['q','a1','dotted'], ['q','a2','solid'] ] },
 
     // API-to-API (Entry-Route): the front API of one iPaaS calls the backend API of the next.
     { id:'a2a-own-backend', base:'api-to-api', route:'entry', change:'contract',
@@ -2180,11 +2262,17 @@
         add(k, 'Callers: ' + list.map(c => {
           const lab = containerLabels[c.key], nm = lab && lab.name ? lab.name : auto[c.key];
           const cv = callerVer[c.id] || 'v1';
-          return nm + (cv === 'v2' ? ' → v2' : cv === 'both' ? ' on v1 and v2 (⚠ not a valid pattern' + ackLine('caller|' + c.id) + ')' : ' stays on v1' + (rip.impact.has(c.key) ? ' (⚠ dependent logic)' : ''));
+          return nm + (cv === 'v2' ? ' → v2 (⚠ the calling application probably changes' + ackLine('impact|' + c.key) + ')' : cv === 'both' ? ' on v1 and v2 (⚠ not a valid pattern' + ackLine('caller|' + c.id) + ')' : ' stays on v1' + (rip.impact.has(c.key) ? ' (⚠ dependent logic)' : ''));
         }).join(', ') + '.');
         if(list.every(c => callerVer[c.id] === 'v2')) add(k, 'No caller left on v1 — v1 can be retired.');
       });
     }
+    if(composite) callerList.forEach(c => {
+      const ch = callerChange[c.id], k = anchorKey(c.anchor);
+      if(!ch || !k) return;
+      const lab = containerLabels[c.key], nm = lab && lab.name ? lab.name : auto[c.key];
+      add(k, nm + ': ' + (ch === 'breaking' ? '⚠ breaking change in the calling application — the API needs a version decision.' : 'non-breaking change in the calling application (Δ, same version).'));
+    });
     [...rip.impact].forEach(k => add(k, '⚠ Dependent logic may be impacted' + ackLine('impact|' + k) + '.'));
     // order and titles
     const order = comps.map(c => c.k).filter(k => entries[k]);
@@ -2884,7 +2972,7 @@
     callerPrompt = null;
     rippleChoices = {};
     manualDeltas = new Set();
-    lineFlips = {}; callerVer = {}; laneChoice = {}; ackWarn = {}; backendApp = new Set(); backendPrompt = null;
+    lineFlips = {}; callerVer = {}; callerChange = {}; callerCard = null; laneChoice = {}; ackWarn = {}; backendApp = new Set(); backendPrompt = null;
     openWarnings.clear();
     closeLabelEditor();
     selectedBlock = null;
@@ -3268,7 +3356,15 @@
     // neighbouring rows away instead of overlapping them
     const rowLevel = (b) => chainOrder.includes(b) ? 0 : (branchOf(b) ? branchOf(b).row : null);
     const busyAt = (k) => allBlocks().some(b => exitKeyOf(b) === k && rowLevel(b) === level[k]);
-    const callerDys = (k, n) => { const dys = busyAt(k) ? CALLER_DY_BUSY : CALLER_DY; return [...Array(n)].map((_, i) => dys[i] ?? (i + 1) * 130); };
+    // round 7 (note 8): a connector with a block on its left stacks its callers clear of that row's
+    // tallest tile — a versioned (taller) tile pushes them, and the rows beyond, further out
+    const callerDys = (k, n) => {
+      if(!busyAt(k)) return [...Array(n)].map((_, i) => CALLER_DY[i] ?? (i + 1) * 130);
+      const half = ((ext.get(level[k]) || {}).h || BLOCK_H) / 2;
+      const pill = half > BLOCK_H / 2 ? 44 : 0;      // a versioned row: room for a decision pill under its tiles
+      const dn = Math.max(CALLER_DY_BUSY[0], half + CALLER_BOX.up + 16 + pill), up = Math.max(-CALLER_DY_BUSY[1], half + 46 + CALLER_BOX.down + 10);
+      return [...Array(n)].map((_, i) => { const s = Math.floor(i / 2) * 130; return i % 2 === 0 ? dn + s : -(up + s); });
+    };
     Object.entries(callersAt).forEach(([k, list]) => {
       const lv = level[k];
       if(lv === undefined) return;
@@ -3417,7 +3513,7 @@
       const ls = lanes[k] || [];
       const v1L = ls.find(n => !n.ver || n.ver === 'v1') || t, v2L = withV ? ls.find(n => n.ver === 'v2') : null;
       list.forEach((c, i) => {
-        const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = t.y + dys[i];
+        const cx = t.x - CALLER_DX - (inAt.has(k) ? CALLER_ROOM : 0), cy = (yc.has(level[k]) ? yc.get(level[k]) : t.y) + dys[i];
         callerPos[c.id] = { x:cx, y:cy };
         const dim = withV && !v2L;
         const cv = (v2L && callerVer[c.id]) || 'v1';
@@ -3529,6 +3625,7 @@
     callerPick = null;
     if(id === 'main'){ const f = chainOrder[0]; if(f) delete callers[f.dataset.id]; }
     else extraCallers = extraCallers.filter(c => c.id !== id);
+    delete callerChange[id]; delete callerVer[id];
     renderFlows();
     recordHistory();
   }
@@ -3631,6 +3728,9 @@
     flow.lineFlips = Object.entries(lineFlips).filter(([id, l]) => l.length && versionOverrides[id]).map(([id, l]) => ({ ref:refOf(id), links:l.slice() })).filter(x => x.ref);
     flow.callerVer = compositeCallers().filter(c => callerVer[c.id] && callerVer[c.id] !== 'v1')
       .map(c => ({ caller: c.id === 'main' ? 'main' : extraCallers.indexOf(c), ver: callerVer[c.id] }));
+    const cch = compositeCallers().filter(c => callerChange[c.id])
+      .map(c => ({ caller: c.id === 'main' ? 'main' : extraCallers.indexOf(c), change: callerChange[c.id] }));
+    if(cch.length) flow.callerChange = cch;
     flow.laneChoice = Object.entries(laneChoice).map(([id, c]) => ({ ref:refOf(id), choice:c })).filter(x => x.ref);
     // contract-ripple answers per path (source>path)
     flow.compositeRipples = Object.entries(rippleChoices).filter(([k, r]) => k.includes('>') && versionOverrides[k.split('>')[0]] === r.vid)
@@ -3677,6 +3777,9 @@
     if(f.callerVer !== undefined && (!Array.isArray(f.callerVer) || !f.callerVer.every(x => x && ['v1', 'v2', 'both'].includes(x.ver) &&
        (x.caller === 'main' || (Number.isInteger(x.caller) && x.caller >= 0 && x.caller < (Array.isArray(f.callers) ? f.callers.length : 0))))))
       return 'Flow file has an invalid caller version.';
+    if(f.callerChange !== undefined && (!Array.isArray(f.callerChange) || !f.callerChange.every(x => x && ['minor', 'breaking'].includes(x.change) &&
+       (x.caller === 'main' || (Number.isInteger(x.caller) && x.caller >= 0 && x.caller < (Array.isArray(f.callers) ? f.callers.length : 0))))))
+      return 'Flow file has an invalid caller change.';
     if(f.laneChoice !== undefined && (!Array.isArray(f.laneChoice) || !f.laneChoice.every(x => x && refOk({ ref:x.ref, side:'in' }, nbAll) && ['v1', 'v2', 'both'].includes(x.choice))))
       return 'Flow file has an invalid assessment.';
     if(f.branches.length && !f.blocks.length) return 'Flow file has branches but no main flow.';
@@ -3727,6 +3830,7 @@
     });
     (f.lineFlips || []).forEach(x => { lineFlips[idOf(x.ref)] = x.links.slice(); });
     (f.callerVer || []).forEach(x => { const c = x.caller === 'main' ? 'main' : extraCallers[x.caller] && extraCallers[x.caller].id; if(c) callerVer[c] = x.ver; });
+    (f.callerChange || []).forEach(x => { const c = x.caller === 'main' ? 'main' : extraCallers[x.caller] && extraCallers[x.caller].id; if(c) callerChange[c] = x.change; });
     (f.laneChoice || []).forEach(x => { laneChoice[idOf(x.ref)] = x.choice; });
   }
 
@@ -3770,7 +3874,7 @@
         const carries = (n) => { const nv = variantsById[versionOverrides[n.dataset.id]]; return !!(nv && newNodeOf(nv, type)); };
         const others = who(key).filter(n => n !== B && !carries(n));
         const asked = others.filter(n => inRowNeighbour(B, n) || sw);
-        const optionsFor = (n) => VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl &&
+        const optionsFor = (n) => VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && (!x.extends || stepFits(x, n)) &&
           x.nodes.some(m => m.type === type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
         // round 6 fix 18 / 23: on a parallel version EVERY other connector at the component shows the impact
         // (main flow or branch, upstream or downstream) — an assess card with the same version options the
@@ -3798,6 +3902,19 @@
         });
       });
     });
+    // round 7 (note 10): a breaking change in a calling application — the block it calls is asked whether
+    // its API (or folder) gets a new version, or stays on v1
+    compositeCallers().forEach(c => {
+      if(callerChange[c.id] !== 'breaking') return;
+      const k = anchorKey(c.anchor);
+      const n = k && takersOf(k).find(b => !versionOverrides[b.dataset.id]);
+      if(!n) return;
+      const type = NODE_SPECS[n.dataset.tpl].entry.type;
+      const ch = laneChoice[n.dataset.id] || null;
+      out.push({ key:n.dataset.id + '|assess|' + c.id, kind:'assess', blockId:n.dataset.id, sourceId:null, callerId:c.id, side:'downstream', type,
+        ver:'v2', options: VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && (!x.extends || stepFits(x, n)) && x.nodes.some(m => m.type === type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id),
+        lanes:false, choice:ch, resolved:!!ch, cross:true, sw:false, count:1, ckey:k });
+    });
     const r = computeCompositeRipples();
     r.asks.filter(a => !a.resolved).forEach(a => out.push(a));
     r.forced.forEach(d => { if(!out.some(x => x.key === d.key)) out.push(d); });
@@ -3816,8 +3933,13 @@
   // Contract ripple across the composite flow: every block that takes its input from (or feeds)
   // the shared process is its own path, asked absorb / pass on independently, one step at a time.
   function computeCompositeRipples(){
-    const out = { asks:[], delta:new Set(), impact:new Set(), forced:[], absorbed:{} };
+    const out = { asks:[], delta:new Set(), impact:new Set(), forced:[], absorbed:{}, adopt:new Set() };
     const callersOn = (key) => compositeCallers().filter(c => anchorKey(c.anchor) === key);
+    // round 7 (note 1): a caller on the new version of its API / file (v2 or both) probably changes its logic
+    compositeCallers().forEach(c => {
+      const k = anchorKey(c.anchor), cv = callerVer[c.id];
+      if(k && (cv === 'v2' || cv === 'both') && blocksAtComponent(k).some(b => versionedAt(b, k))) out.adopt.add(c.key);
+    });
     allBlocks().forEach(B => {
       const v = variantsById[versionOverrides[B.dataset.id]];
       if(!v) return;
@@ -3851,7 +3973,7 @@
         if(choice.choice === 'absorb' || choice.code){ out.delta.add(pkey); (out.absorbed[pkey] = out.absorbed[pkey] || []).push(n.dataset.id); }
         if(choice.choice === 'absorb') return;
         if(far.type === 'topic' || far.boundary){
-          const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && x.change === 'contract' &&
+          const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && (!x.extends || stepFits(x, n)) && x.change === 'contract' &&
             x.nodes.some(m => m.type === far.type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
           out.forced.push({ key:n.dataset.id + '|passed|' + B.dataset.id, blockId:n.dataset.id, sourceId:B.dataset.id, side:dir,
             type:far.type, ver:'v2', options, current:null, passed:true });
@@ -3869,7 +3991,7 @@
     const ids = new Set(allBlocks().map(b => b.dataset.id));
     Object.keys(versionOverrides).forEach(k => { if(!ids.has(k)) delete versionOverrides[k]; });
     Object.keys(rippleChoices).forEach(k => { if(k.includes('>') && k.split('>').some(id => !ids.has(id))) delete rippleChoices[k]; });
-    const active = Object.keys(versionOverrides).length > 0 || manualDeltas.size > 0;
+    const active = Object.keys(versionOverrides).length > 0 || manualDeltas.size > 0 || Object.keys(callerChange).length > 0;
     const wasActive = canvasWrap.classList.contains('split');
     const keepSelected = selectedCopy ? selectedCopy.dataset.baseId : null;
     canvasWrap.classList.toggle('split', active);
@@ -3931,8 +4053,15 @@
       if(n.type === 'process' && ripples.delta.has(n.skey) && n.role !== 'retired' && n.ver !== 'v2'){ n.delta = true; n.dim = false; }
       if(manualDeltas.has(n.skey) && n.role !== 'retired' && n.ver !== 'v2'){ n.delta = true; n.dim = false; }
       if(ripples.impact.has(n.key) && n.role !== 'retired'){ n.impact = true; n.dim = false; }
+      if(n.caller && ripples.adopt.has(n.key)){ n.impact = true; n.adopt = true; n.dim = false; }
+      if(n.caller && n.skey && callerChange[n.skey.slice(3)]){ n.cchange = callerChange[n.skey.slice(3)]; n.dim = false; }
     });
-    model.containers.forEach(c => { if(c.keys.some(k => ripples.impact.has(k))){ c.impact = true; c.dim = false; } });
+    model.containers.forEach(c => { if(c.keys.some(k => ripples.impact.has(k) || ripples.adopt.has(k))){ c.impact = true; c.dim = false; } });
+    // a caller with two markers (⚠ and its own change) gets a taller box
+    model.nodes.filter(n => n.caller && n.impact && n.cchange).forEach(n => {
+      const c = model.containers.find(x => x.owner === 'caller' && x.keys.includes(n.key));
+      if(c) c.y2 += 24;
+    });
     // the affected component inside each affected block is highlighted: its own symbol on that side,
     // or — when the shared component is drawn on another row — the block's nearest symbol on that side
     decisions.forEach(d => {
@@ -3951,7 +4080,7 @@
     renderFlowLayer(vworld, model);
     const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...allDecisions]);
     renderWarnCards(model);
-    renderTargetCard(vworld);
+    renderTargetCard(vworld); renderCallerChangeCard(vworld);
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
     revealDecisions(fresh);
@@ -4013,7 +4142,7 @@
       const n = world.querySelector('.flow-layer .node[data-skey="' + lastB.dataset.id + ':out"]');
       if(n){ n.classList.add('can-add-caller'); n.insertAdjacentHTML('afterbegin', '<title>Backend API of a target application? Click to add the backend system</title>'); }
     }
-    renderTargetCard(world);
+    renderTargetCard(world); renderCallerChangeCard(world);
     renderCallerCard();
     renderBackendCard();
     renderCopy();
@@ -4085,7 +4214,7 @@
     renderFlowLayer(vworld, model);
     const fresh = renderDecisions([...ripples.asks.filter(a => a.resolved), ...decisions]);
     renderWarnCards(model);
-    renderTargetCard(vworld);
+    renderTargetCard(vworld); renderCallerChangeCard(vworld);
     highlightSuggestions(decisions);
     if(!wasActive) openCopyView();
     revealDecisions(fresh);
@@ -4101,15 +4230,21 @@
   // dropped anywhere then lands on that block.
   // ---------------------------------------------------------------
   let versionTarget = null;   // { pane, skey, type, x, y, blocks:[ids], only:id|null }
+  // a block with a version only takes variants that extend it; a plain block never takes those (round 7)
+  const stepFits = (v, b) => versionOverrides[b.dataset.id] ? (v.extends || []).includes(versionOverrides[b.dataset.id]) : !v.extends;
   const changesConnector = (v, type, role) => v.nodes.some(n => n.type === type && n.ver !== 'v1' && n.role === role);
   function targetOptions(t){
     if(flowMode === 'composite' && !t.only) return [];      // composite: component + connector
     const ids = t.only ? [t.only] : t.blocks;
-    const tpls = ids.map(id => findBlock(id)).filter(Boolean).map(b => b.dataset.tpl);
-    let opts = VERSION_VARIANTS.filter(v => tpls.includes(v.base) && changesConnector(v, t.type, 'primary'));
+    const bs = ids.map(id => findBlock(id)).filter(Boolean);
+    // round 7 (notes 3 / 6): a block that already has a version only takes the next step of that version
+    // (variants that extend it); a plain block never sees those next steps
+    const fits = (v) => bs.some(b => b.dataset.tpl === v.base &&
+      (versionOverrides[b.dataset.id] ? (v.extends || []).includes(versionOverrides[b.dataset.id]) : !v.extends));
+    let opts = VERSION_VARIANTS.filter(v => fits(v) && changesConnector(v, t.type, 'primary'));
     // A queue never changes on its own (it follows its process), so fall back to
     // the versions where it is versioned as a side-effect.
-    if(!opts.length) opts = VERSION_VARIANTS.filter(v => tpls.includes(v.base) && changesConnector(v, t.type, 'side'));
+    if(!opts.length) opts = VERSION_VARIANTS.filter(v => fits(v) && changesConnector(v, t.type, 'side'));
     return opts.map(v => v.id);
   }
   function setVersionTarget(t){
@@ -4122,6 +4257,7 @@
   }
   function clearVersionTarget(){
     [world, vworld].forEach(w => w.querySelectorAll(':scope > .target-card').forEach(c => c.remove()));
+    if(callerCard){ callerCard = null; if(!versionTarget) renderFlows(); }
     if(versionTarget){ versionTarget = null; renderFlows(); if(flowMode === 'composite') refreshLibrary(); }
   }
   world.addEventListener('click', (e) => {
@@ -4139,11 +4275,31 @@
     let n = e.target.closest && e.target.closest('.flow-layer .node[data-skey]');
     const badge = !n && e.target.closest && e.target.closest('.flow-layer .dbadge[data-skey]');
     if(badge) n = [...w.querySelectorAll('.flow-layer .node[data-skey]')].find(x => x.dataset.skey === badge.dataset.skey && !/role-(retired)/.test(x.getAttribute('class')));
-    if(!n || n.dataset.type === 'app') return;
-    e.stopPropagation();
+    const cb = !n && e.target.closest && e.target.closest('.flow-layer .cbadge[data-skey]');
+    if(cb) n = w.querySelector('.flow-layer .node[data-skey="' + cb.dataset.skey + '"]');
+    if(!n) return;
     const pane = w === world ? 'base' : 'copy';
     const tr = n.transform.baseVal.consolidate();
     const m = tr ? tr.matrix : { e:0, f:0 };
+    if(n.dataset.type === 'app'){
+      // round 7 (note 10): a calling application can carry its own change — breaking or non-breaking
+      if(flowMode !== 'composite' || !n.dataset.skey.startsWith('xc|')) return;
+      e.stopPropagation();
+      const id = n.dataset.skey.slice(3);
+      [world, vworld].forEach(x => x.querySelectorAll(':scope > .target-card').forEach(c => c.remove()));
+      versionTarget = null;
+      const next = callerCard && callerCard.id === id && callerCard.pane === pane ? null : { id, pane, x:m.e, y:m.f };
+      if(next) document.getElementById('tabVersioned').click();
+      callerCard = next;
+      renderFlows(); refreshLibrary();
+      return;
+    }
+    e.stopPropagation();
+    // round 7 (note 2): a v2 component is the new version — it is never versioned again
+    if(/\brole-(primary|side)\b/.test(n.getAttribute('class') || '')){
+      showToast(CONNECTOR_LABEL[n.dataset.type] + ' v2 is already the new version \u2014 a v2 component can\u2019t be versioned again.', true);
+      return;
+    }
     // composite flow: every block touching the component, on any row
     const blocks = flowMode === 'composite' ? blocksAtComponent(n.dataset.skey).map(b => b.dataset.id) : n.dataset.blocks.split(',').filter(Boolean);
     if(versionTarget && versionTarget.skey === n.dataset.skey && versionTarget.pane === pane){
@@ -4151,13 +4307,23 @@
       if(versionTarget.only){ versionTarget.only = null; renderFlows(); } else clearVersionTarget();
       return;
     }
+    callerCard = null;
     const t = { pane, skey:n.dataset.skey, type:n.dataset.type, x:m.e, y:m.f, blocks, only:null };
     if(flowMode === 'composite'){
       // round 6: the version applies to one connector of the component — a component with a single
       // connector skips the step
       t.conns = componentConnectors(n.dataset.skey);
       t.conn = null; t.sideFilter = null;
-      if(t.conns.length === 1) pickConnector(t, t.conns[0].own, true);
+      // round 7 (note 3): once a version gives this component a v2 on a connector, that connector takes no
+      // further version until the versioned block is removed (× on its tile)
+      t.conns.forEach(c => { const b = !c.caller && findBlock(c.own); c.locked = !!(b && versionedAt(b, t.skey)); });
+      const open = t.conns.filter(c => !c.locked);
+      if(!open.length || open.every(c => c.caller)){
+        const by = t.conns.filter(c => c.locked).map(c => '\u201C' + c.label + '\u201D').join(', ');
+        showToast(CONNECTOR_LABEL[t.type] + ' already versioned by ' + by + ' \u2014 remove that version (\u00D7 on its tile) to version it again.', true);
+        return;
+      }
+      if(open.length === 1) pickConnector(t, open[0].own, true);
     }
     setVersionTarget(t);
   }));
@@ -4179,6 +4345,7 @@
   function pickConnector(t, own, quiet){
     const c = (t.conns || []).find(x => x.own === own);
     if(!c) return;
+    if(c.locked){ showToast('This connector already has a version \u2014 remove it (\u00D7 on its tile) to version it again.', true); return; }
     t.conn = own;
     if(c.caller){
       const owners = takersOf(t.skey).concat(feedersOf(t.skey));
@@ -4330,6 +4497,61 @@
     placeCard(worldEl, card, t.x, t.y);
   }
 
+  function callerName(id){
+    const c = compositeCallers().find(x => x.id === id);
+    const lab = c && containerLabels[c.key];
+    return lab && lab.name ? lab.name : 'The calling application';
+  }
+  // round 7 (note 10): change in a calling application — non-breaking (Δ, same version) or breaking
+  // (the API it calls gets a version decision)
+  function renderCallerChangeCard(worldEl){
+    const t = callerCard;
+    if(!t || flowMode !== 'composite' || (worldEl === world) !== (t.pane === 'base')) return;
+    if(!compositeCallers().some(c => c.id === t.id)){ callerCard = null; return; }
+    const card = document.createElement('div');
+    card.className = 'decision-card target-card cchange-card';
+    card.addEventListener('pointerdown', e => e.stopPropagation());
+    card.addEventListener('click', e => e.stopPropagation());
+    const head = document.createElement('div');
+    head.className = 'dc-head';
+    head.textContent = 'Change in the calling application';
+    card.appendChild(closeButton('Close', clearVersionTarget));
+    const q = document.createElement('p');
+    q.className = 'dc-q';
+    q.textContent = callerName(t.id) + ' \u2014 does its call change? A non-breaking change stays in the same version (\u0394); a breaking change asks the API it calls for a new version.';
+    card.appendChild(q);
+    const cur = callerChange[t.id];
+    [['minor', 'Non-breaking change \u00B7 mark \u0394'], ['breaking', 'Breaking change \u00B7 needs a new API version']].forEach(([val, label]) => {
+      const btn = document.createElement('button');
+      btn.className = 'dc-opt' + (cur === val ? ' on' : '');
+      btn.dataset.change = val;
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        callerChange[t.id] = val;
+        callerCard = null;
+        renderFlows(); renderCopy(); recordHistory();
+        showToast(val === 'breaking' ? 'Breaking change recorded \u2014 the API it calls is flagged for a version decision.' : 'Non-breaking change recorded (\u0394, same version).');
+      });
+      card.appendChild(btn);
+    });
+    const actions = document.createElement('div');
+    actions.className = 'dc-actions';
+    if(cur){
+      const rm = document.createElement('button');
+      rm.className = 'dc-link'; rm.dataset.action = 'remove';
+      rm.textContent = 'Remove the change';
+      rm.addEventListener('click', () => { delete callerChange[t.id]; callerCard = null; renderFlows(); renderCopy(); recordHistory(); });
+      actions.appendChild(rm);
+    }
+    const clear = document.createElement('button');
+    clear.className = 'dc-link'; clear.dataset.action = 'clear';
+    clear.textContent = 'Clear';
+    clear.addEventListener('click', clearVersionTarget);
+    actions.appendChild(clear);
+    card.appendChild(actions);
+    worldEl.appendChild(card);
+    placeCard(worldEl, card, t.x, t.y);
+  }
   function renderTargetCard(worldEl){
     worldEl.querySelectorAll(':scope > .target-card').forEach(c => c.remove());
     const t = versionTarget;
@@ -4494,7 +4716,7 @@
         if(nv && newNodeOf(nv, type)) return;   // the neighbour already carries the new version: consistent
         // Suggest the neighbour's versioned blocks in which that new version is
         // the object that changed — i.e. the change reaches it through the shared connector.
-        const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl &&
+        const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && (!x.extends || stepFits(x, n)) &&
           x.nodes.some(m => m.type === type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
         out.push({ key: n.dataset.id + '|' + side, blockId: n.dataset.id, index: j, sourceId: b.dataset.id,
           side, type, ver: nn.ver, options, current: nv ? nv.id : null });
@@ -4555,7 +4777,7 @@
       // passed on: what the change lands on beyond the process
       if(far.type === 'topic' || far.boundary){
         // a topic, or an API between two iPaaS assets: that contract needs a version decision
-        const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && x.change === 'contract' &&
+        const options = VERSION_VARIANTS.filter(x => x.base === n.dataset.tpl && (!x.extends || stepFits(x, n)) && x.change === 'contract' &&
           x.nodes.some(m => m.type === far.type && m.ver !== 'v1' && m.role === 'primary')).map(x => x.id);
         out.forced.push({ key:n.dataset.id + '|passed', blockId:n.dataset.id, index:j, sourceId:b.dataset.id, side:dir,
           type:far.type, ver:'v2', options, current:null, passed:true });
@@ -4644,7 +4866,7 @@
         pill.className = 'decision-pill';
         pill.dataset.key = d.key;
         pill.style.left = (d.side === 'upstream' ? x + DECISION_W - 150 : x) + 'px'; pill.style.top = y + 'px';
-        pill.textContent = d.kind === 'assess' ? '\u26A0 Impacted \u00B7 switch to v2?' : '\u26A0 Decision pending';
+        pill.textContent = d.kind === 'assess' ? (d.callerId ? '\u26A0 Caller change \u00B7 version API?' : '\u26A0 Impacted \u00B7 switch to v2?') : '\u26A0 Decision pending';
         pill.title = d.kind === 'ripple' ? 'A contract change reaches the process shared with ' + name + '.'
           : d.kind === 'assess' ? what + ' now runs next to v1. ' + name + ' stays on v1 until you assess it.'
           : what + ' is new. How should ' + name + ' handle it?';
@@ -4664,12 +4886,14 @@
         const later = () => { collapsedDecisions.add(d.key); openedDecisions.delete(d.key); reopenAssess.delete(d.key); renderCopy(); };
         const head = document.createElement('div');
         head.className = 'dc-head';
-        head.textContent = '\u26A0 Impacted \u2014 switch to ' + what + '?';
+        head.textContent = d.callerId ? '\u26A0 Breaking change in the caller \u2014 version the ' + CONNECTOR_LABEL[d.type] + '?' : '\u26A0 Impacted \u2014 switch to ' + what + '?';
         card.appendChild(closeButton('Decide later', later));
         const src = findBlock(d.sourceId);
         const q = document.createElement('p');
         q.className = 'dc-q';
-        q.textContent = what + ' (' + (src ? src.querySelector('.cblock-label').textContent : '') + ') now runs next to v1. Switch ' + name + ' to v2 with one of these versions (v2 solid, v1 dotted \u2014 click a line to toggle it), or stay on v1.';
+        q.textContent = d.callerId
+          ? callerName(d.callerId) + ' changes its call in a breaking way. Give ' + name + ' a new ' + CONNECTOR_LABEL[d.type] + ' version with one of these, or stay on v1 (the change is handled inside v1).'
+          : what + ' (' + (src ? src.querySelector('.cblock-label').textContent : '') + ') now runs next to v1. Switch ' + name + ' to v2 with one of these versions (v2 solid, v1 dotted \u2014 click a line to toggle it), or stay on v1.';
         card.append(head, q);
         if(d.count > 1){
           const cn = document.createElement('p');
@@ -5094,14 +5318,34 @@
     }
     if(!target) target = blockAtPoint(clientX, clientY);
     if(target && target.dataset.tpl !== v.base) target = null;
+    if(!target && v.extends){
+      const ext = allBlocks().filter(b => v.extends.includes(versionOverrides[b.dataset.id]));
+      if(ext.length === 1) target = ext[0];
+    }
     if(!target){
       const matches = allBlocks().filter(b => b.dataset.tpl === v.base);
       if(matches.length === 0){ showToast('Add a ' + baseLabel + ' block to the base flow first.', true); return; }
       if(matches.length > 1){ showToast('Drop it onto the ' + baseLabel + ' block you want to version.', true); return; }
       target = matches[0];
     }
+    // round 7 (note 3, composite flow): a versioned block takes no other version until its version is
+    // removed — except the next step of that same version (a variant that extends it). Single flow keeps
+    // v1.9's replace-on-drop.
+    if(target && flowMode === 'composite'){
+      const cur = versionOverrides[target.dataset.id];
+      if(cur === v.id) return;
+      if(cur && !(v.extends || []).includes(cur)){
+        showToast('\u201C' + target.querySelector('.cblock-label').textContent + '\u201D already has a version (' + variantsById[cur].label + ') \u2014 remove it (\u00D7 on its tile) first.', true);
+        return;
+      }
+    }
+    if(target && v.extends && !v.extends.includes(versionOverrides[target.dataset.id])){
+      showToast(v.label + ' builds on ' + v.extends.map(x => variantsById[x].label).join(' / ') + ' \u2014 apply that version first.', true);
+      return;
+    }
     const first = Object.keys(versionOverrides).length === 0;
     versionOverrides[target.dataset.id] = v.id;
+    versionTarget = null;          // round 7: a stale guide card / connector list never outlives a version
     if(viaCaller) callerVer[viaCaller] = 'v2';      // picked on a calling application's connector: only that caller moves
     renderCopy();
     recordHistory();
@@ -5527,6 +5771,7 @@
     callable: () => [...callableKeys], addCaller,
     compositeDecisions: () => computeCompositeDecisions(), compositeRipples: () => computeCompositeRipples(), setRipple,
     renderCopy: () => renderCopy(), lineFlips: () => lineFlips,
+    applyVersion: (id, vid) => { versionOverrides[id] = vid; renderFlows(); renderCopy(); },
     blocksAt: (k) => blocksAtComponent(k).map(b => b.dataset.id), callersList: () => compositeCallers().map(c => ({ id:c.id, key:anchorKey(c.anchor) })), removeCaller };
 })();
 </script>
