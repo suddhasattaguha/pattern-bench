@@ -758,6 +758,29 @@
     box-shadow:0 6px 20px rgba(0,0,0,0.35);
   }
   .confirm-box.show{ display:flex; }
+  /* Export for registry (fix 17) */
+  .reg-overlay{ position:absolute; inset:0; z-index:90; background:rgba(5,12,22,0.55); display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:40px 0; }
+  .reg-overlay[hidden]{ display:none; }
+  .reg-dialog{ width:640px; max-width:calc(100% - 40px); box-sizing:border-box; padding:18px 20px 16px; background:var(--panel); border:1.5px solid var(--panel-border);
+    border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.45); font-family:var(--font-ui); color:var(--text-primary); }
+  .reg-dialog h2{ margin:0 0 4px; font-size:17px; }
+  .reg-dialog .rg-id{ font-family:var(--font-mono); font-size:12px; color:var(--text-muted); margin-bottom:12px; }
+  .reg-dialog h3{ margin:16px 0 6px; font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); }
+  .reg-dialog label{ display:block; font-size:12px; color:var(--text-muted); margin-top:8px; }
+  .reg-dialog input, .reg-dialog select, .reg-dialog textarea{ display:block; width:100%; box-sizing:border-box; margin-top:3px; padding:7px 8px; border-radius:6px;
+    border:1px solid var(--panel-border); background:var(--block-bg); color:var(--text-primary); font-family:var(--font-ui); font-size:13px; }
+  .reg-dialog textarea{ min-height:46px; resize:vertical; }
+  .reg-dialog .rg-row{ display:grid; grid-template-columns:1fr 1.3fr; gap:10px; align-items:center; margin-top:6px; font-size:12.5px; }
+  .reg-dialog .rg-row .rg-what{ color:var(--text-primary); }
+  .reg-dialog .rg-row .rg-sub{ display:block; color:var(--text-muted); font-size:11px; }
+  .reg-dialog .rg-row input{ margin-top:0; }
+  .reg-dialog .rg-rel{ display:grid; grid-template-columns:1.1fr 1.2fr 0.6fr auto; gap:8px; margin-top:6px; }
+  .reg-dialog .rg-rel input, .reg-dialog .rg-rel select{ margin-top:0; }
+  .reg-dialog .rg-warn{ margin-top:12px; padding:8px 10px; border-radius:8px; border:1px solid var(--accent-amber); color:var(--text-primary); font-size:12px; }
+  .reg-dialog .rg-warn b{ color:var(--accent-amber); }
+  .reg-dialog .rg-none{ font-size:12px; color:var(--text-muted); }
+  .reg-dialog .rg-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .reg-dialog .rg-err{ color:var(--danger); font-size:12px; margin-top:6px; min-height:14px; }
 
   ::-webkit-scrollbar{ width:10px; height:10px; }
   ::-webkit-scrollbar-track{ background:var(--panel); }
@@ -788,6 +811,7 @@
       <button class="btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷ Redo</button>
       <div class="divider"></div>
       <button class="btn" id="exportBtn" title="Save the current flow as a JSON file">Export</button>
+      <button class="btn" id="registryBtn" title="Export this scenario for the governance registry: a registry spec file + the canvas file">Export for registry</button>
       <button class="btn" id="importBtn" title="Load a flow from a JSON file">Import</button>
       <button class="btn" id="printBtn" title="Print the versioning assessment on one page (save as PDF)">Print</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
@@ -847,6 +871,7 @@
       <div class="mini-tag" id="miniTag">Versioned copy</div>
       <div class="mini-swap">⇄ click to swap</div>
     </div>
+    <div class="reg-overlay" id="regOverlay" hidden><div class="reg-dialog" id="regDialog" role="dialog" aria-label="Export for registry"></div></div>
     <div class="confirm-box" id="confirmBox"><span id="confirmMsg"></span><button class="btn danger" id="confirmOk">OK</button><button class="btn" id="confirmCancel">Cancel</button></div>
     <div class="empty-hint" id="staticHint">Drag any pattern from the library to start a flow. From there, only patterns that actually fit the open ends stay available — drop one anywhere and it docks into place automatically, upstream or downstream. Drag any block to move the whole flow. Double-click a label to rename, press <b>Delete</b> to remove an end block.</div>
     <div class="toast" id="toast"></div>
@@ -907,6 +932,11 @@
   let callerVer = {};
   // round 7 (note 10): a change in a calling application itself — caller id -> 'minor' (non-breaking, Δ) | 'breaking'
   let callerChange = {};
+  // fix 17 (registry export): component names (component key -> name) and the scenario's registry identity
+  // ({ id, version, name, description, author, tags, relations, why:{entry key -> text} }); both saved in the canvas file
+  let compNames = {};
+  const REL_TYPES = ['derivedFrom', 'supersedes', 'dependsOn', 'relatedTo'];
+  let scenarioMeta = null;
   let callerCard = null;     // { id, pane, x, y } — the open caller-change card
   let laneChoice = {};
   // Acknowledged warnings (both modes): warning id -> note ('' = no note)
@@ -2207,7 +2237,9 @@
     comps.forEach(c => { counter[c.type] = (counter[c.type] || 0) + 1; auto[c.k] = CONNECTOR_LABEL[c.type] + ' ' + counter[c.type]; });
     const contOf = (k) => baseContainers.find(c => c.keys.includes(k));
     const named = (k) => {
-      const c = contOf(k), lab = c && containerLabel(c.keys);
+      const c0 = contOf(k), lab0 = c0 && containerLabel(c0.keys);
+      if(compNames[k]) return { name:compNames[k], platform: lab0 && lab0.platform ? lab0.platform : '' };   // fix 17: the component's own name
+      const c = c0, lab = lab0;
       if(!lab) return null;
       const ext = c.owner === 'external' || c.owner === 'caller';
       if(ext) return lab.name ? { name:lab.name, platform:'' } : null;
@@ -2980,7 +3012,7 @@
     callerPrompt = null;
     rippleChoices = {};
     manualDeltas = new Set();
-    lineFlips = {}; callerVer = {}; callerChange = {}; callerCard = null; laneChoice = {}; ackWarn = {}; backendApp = new Set(); backendPrompt = null;
+    lineFlips = {}; callerVer = {}; callerChange = {}; callerCard = null; compNames = {}; scenarioMeta = null; laneChoice = {}; ackWarn = {}; backendApp = new Set(); backendPrompt = null;
     openWarnings.clear();
     closeLabelEditor();
     selectedBlock = null;
@@ -5394,6 +5426,19 @@
       return ok ? { id:enc, note } : null;
     }).filter(Boolean);
   }
+  // block / caller ids -> position refs (@t0, @b0.1, @c2) and back; null if an id has no position
+  function encodeRefs(id){
+    const map = ackRefs();
+    let ok = true;
+    const enc = id.replace(/block-\d+|xc-\d+/g, m => { if(!map[m]){ ok = false; return m; } return '@' + map[m]; });
+    return ok ? enc : null;
+  }
+  function decodeRefs(id){
+    const inv = {};
+    Object.entries(ackRefs()).forEach(([k, ref]) => { inv[ref] = k; });
+    const dec = id.replace(/@(t\d+|b\d+\.\d+|c\d+)/g, (m, r) => inv[r] || m);
+    return dec.includes('@') ? null : dec;
+  }
   function decodeAcks(list){
     if(!list) return;
     const inv = {};
@@ -5405,6 +5450,13 @@
     const acks = encodeAcks();
     if(acks.length) f.acks = acks;
     if(backendApp.size){ const map = ackRefs(); const refs = [...backendApp].map(id => map[id]).filter(Boolean); if(refs.length) f.backend = refs; }
+    const names = Object.entries(compNames).filter(([, n]) => n).map(([k, name]) => ({ key:encodeRefs(k), name })).filter(x => x.key);
+    if(names.length) f.componentNames = names;
+    if(scenarioMeta){
+      f.scenario = { id:scenarioMeta.id, version:scenarioMeta.version, name:scenarioMeta.name || '', description:scenarioMeta.description || '',
+        author:scenarioMeta.author || '', tags:(scenarioMeta.tags || []).slice(), relations:(scenarioMeta.relations || []).map(r => Object.assign({}, r)),
+        why:Object.entries(scenarioMeta.why || {}).filter(([, t]) => t).map(([k, text]) => ({ key:encodeRefs(k), text })).filter(x => x.key) };
+    }
     return f;
   }
   function serializeFlowBase(){
@@ -5517,6 +5569,20 @@
        a.id.length <= 80 && typeof a.note === 'string' && a.note.length <= 120))) return 'Flow file has an invalid acknowledgement.';
     if(f.backend !== undefined && (!Array.isArray(f.backend) || f.backend.length > 100 || !f.backend.every(r => typeof r === 'string' && /^(t\d+|b\d+\.\d+)$/.test(r))))
       return 'Flow file has an invalid backend system entry.';
+    const keyOk = (k) => typeof k === 'string' && k.length <= 60 && /^@(t\d+|b\d+\.\d+|c\d+):(in|out|m\d|caller)$/.test(k);
+    if(f.componentNames !== undefined && (!Array.isArray(f.componentNames) || f.componentNames.length > 500 ||
+       !f.componentNames.every(x => x && keyOk(x.key) && typeof x.name === 'string' && x.name.length <= 80)))
+      return 'Flow file has an invalid component name.';
+    if(f.scenario !== undefined){
+      const sc = f.scenario, str = (v, n) => typeof v === 'string' && v.length <= n;
+      if(!sc || typeof sc !== 'object' || !/^scn-[a-z0-9]{4,16}$/.test(sc.id || '') || !Number.isInteger(sc.version) || sc.version < 1 ||
+         !str(sc.name, 120) || !str(sc.description, 1000) || !str(sc.author, 80) ||
+         !Array.isArray(sc.tags) || sc.tags.length > 30 || !sc.tags.every(t => str(t, 40)) ||
+         !Array.isArray(sc.relations) || sc.relations.length > 30 || !sc.relations.every(r => r && REL_TYPES.includes(r.type) && /^scn-[a-z0-9]{4,16}$/.test(r.scenarioId || '') &&
+           (r.version === null || r.version === undefined || (Number.isInteger(r.version) && r.version >= 1))) ||
+         !Array.isArray(sc.why) || sc.why.length > 200 || !sc.why.every(w => w && typeof w.key === 'string' && w.key.length <= 80 && str(w.text, 500)))
+        return 'Flow file has an invalid registry scenario.';
+    }
     if(f.branches !== undefined || f.callers !== undefined || f.lineFlips !== undefined) return validateBranches(f);
     return null;
   }
@@ -5564,6 +5630,13 @@
     if((f.branches && f.branches.length) || (f.callers && f.callers.length) || f.mode === 'composite') loadBranches(f);
     decodeAcks(f.acks);
     if(f.backend){ const inv = {}; Object.entries(ackRefs()).forEach(([id, ref]) => { inv[ref] = id; }); f.backend.forEach(r => { const id = inv[r]; const b = id && findBlock(id); if(b && b.dataset.tpl === 'api-to-api') backendApp.add(id); }); }
+    (f.componentNames || []).forEach(x => { const k = decodeRefs(x.key); if(k) compNames[k] = x.name; });
+    if(f.scenario){
+      const why = {};
+      (f.scenario.why || []).forEach(w => { const k = decodeRefs(w.key); if(k) why[k] = w.text; });
+      scenarioMeta = { id:f.scenario.id, version:f.scenario.version, name:f.scenario.name, description:f.scenario.description, author:f.scenario.author,
+        tags:f.scenario.tags.slice(), relations:f.scenario.relations.map(r => Object.assign({}, r)), why };
+    }
     if(flowMode === 'composite' && !chainOrder.length) setFlowMode('single');
     deselectAll();
     updateEmptyHint();
@@ -5619,6 +5692,328 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove('show'), isError ? 5000 : 2500);
   }
+
+  // ---------------------------------------------------------------
+  // Fix 17 — Export for registry (schema pattern-bench.registry-entry v0.6). One export = two files:
+  // the registry spec (meaning: base flow, versioning decisions, impacts) and the normal canvas file,
+  // tied by scenario id + version. The scenario id is created at the first export and kept in the
+  // canvas file; every export bumps the version. Refs are generated from the platform / asset labels.
+  // ---------------------------------------------------------------
+  const REG_SCHEMA = 'pattern-bench.registry-entry', REG_SCHEMA_VERSION = '0.6';
+  const CONT_KIND = { ipaas:'iPaaS', broker:'broker', external:'endApp', caller:'caller' };
+  const COMP_OWNER = { ipaas:'integration', broker:'integration', external:'endApp', caller:'caller' };
+  const slug = (t) => String(t || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const newScenarioId = () => 'scn-' + Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+
+  // the base flow as components / links / containers (both modes), in flow order
+  function registryBase(){
+    const composite = flowMode === 'composite';
+    const model = composite ? compositeLayout({ versions:false }).model : buildFlowModel(chainGeometry(false), false);
+    const rows = [chainOrder].concat(composite ? branches.map(br => br.blocks) : []);
+    const order = [];
+    const push = (k) => { if(k && !order.includes(k)) order.push(k); };
+    rows.forEach(list => list.forEach(b => {
+      const spec = NODE_SPECS[b.dataset.tpl];
+      push(entryKeyOf(b)); spec.mid.forEach((m, mk) => push(b.dataset.id + ':m' + mk)); push(exitKeyOf(b));
+    }));
+    const nodeOf = {};
+    model.nodes.forEach(n => { if(!nodeOf[n.key]) nodeOf[n.key] = n; });
+    Object.keys(nodeOf).forEach(push);                       // callers last
+    // containers
+    const containers = [], contOfKey = {};
+    model.containers.forEach(c => {
+      if(!c.keys.some(k => nodeOf[k])) return;
+      const lab = containerLabel(c.keys) || {};
+      const app = c.owner === 'external' || c.owner === 'caller';
+      const platform = app ? '' : (lab.platform || ''), asset = app ? (lab.name || '') : (lab.asset || '');
+      const ref = app ? (asset ? (c.owner === 'caller' ? 'caller/' : 'endapp/') + slug(asset) : null)
+                      : (platform && asset ? slug(platform) + '/' + slug(asset) : null);
+      const k = { id:'k' + (containers.length + 1), ref, kind:CONT_KIND[c.owner] || c.owner, platform, asset };
+      if(app && lab.process) k.process = lab.process;
+      containers.push(k);
+      c.keys.forEach(key => { if(!contOfKey[key]) contOfKey[key] = k; });
+    });
+    // components (auto labels by type and flow order, like the print)
+    const counter = {}, perCont = {}, comps = [], compOfKey = {};
+    order.forEach(key => {
+      const n = nodeOf[key];
+      if(!n) return;
+      const type = n.type === 'app' ? 'app' : n.type;
+      counter[type] = (counter[type] || 0) + 1;
+      const k = contOfKey[key];
+      let ref = null;
+      if(k && k.ref){
+        const pc = (perCont[k.id] = perCont[k.id] || {});
+        pc[type] = (pc[type] || 0) + 1;
+        ref = k.ref + '#' + type + (pc[type] > 1 ? '-' + pc[type] : '');
+      }
+      const c = { id:'c' + (comps.length + 1), ref, name:compNames[key] || '', autoName:CONNECTOR_LABEL[type] + ' ' + counter[type],
+        type, version:'v1', owner:COMP_OWNER[n.owner] || 'integration', container:k ? k.id : null, key };
+      comps.push(c); compOfKey[key] = c;
+    });
+    // links (one per pair of components)
+    const links = [], seen = new Set();
+    model.links.forEach(l => {
+      const a = compOfKey[l.k1], z = compOfKey[l.k2];
+      if(!a || !z || a === z || seen.has(a.id + '>' + z.id)) return;
+      seen.add(a.id + '>' + z.id);
+      links.push({ from:a.id, to:z.id, fromRef:a.ref, toRef:z.ref });
+    });
+    // blocks
+    const blocks = [], blockId = {};
+    rows.forEach((list, r) => list.forEach((b, i) => {
+      const spec = NODE_SPECS[b.dataset.tpl];
+      const keys = [entryKeyOf(b)].concat(spec.mid.map((m, mk) => b.dataset.id + ':m' + mk), [exitKeyOf(b)]);
+      const id = 'b' + (blocks.length + 1);
+      blockId[b.dataset.id] = id;
+      blocks.push({ id, templateId:b.dataset.tpl, label:b.querySelector('.cblock-label').textContent, row:r, order:i,
+        components:keys.map(k => compOfKey[k] && compOfKey[k].id).filter(Boolean) });
+    }));
+    return { comps, compOfKey, links, containers, blocks, blockId };
+  }
+
+  // every versioning action in the versioned copy, with the key its "why" is stored under
+  function registryEntries(){
+    const list = [];
+    allBlocks().forEach(b => { const v = variantsById[versionOverrides[b.dataset.id]]; if(v) list.push({ key:'ver|' + b.dataset.id, kind:'version', b, v }); });
+    [...manualDeltas].forEach(k => list.push({ key:'delta|' + k, kind:'delta', k }));
+    if(flowMode === 'composite') compositeCallers().forEach(c => { if(callerChange[c.id]) list.push({ key:'caller|' + c.id, kind:'caller', c }); });
+    return list;
+  }
+  function seamKeyOf(b, v, nk){
+    const spec = NODE_SPECS[b.dataset.tpl];
+    if(variantEndNodes(v, spec, 'entry', spec.entry.type).some(n => n.k === nk)) return entryKeyOf(b);
+    if(variantEndNodes(v, spec, 'exit', spec.exit.type).some(n => n.k === nk)) return exitKeyOf(b);
+    const node = v.nodes.find(n => n.k === nk);
+    const mk = spec.mid.findIndex(m => m.type === node.type);
+    return mk >= 0 ? b.dataset.id + ':m' + mk : null;
+  }
+
+  function buildRegistrySpec(meta, canvasFile){
+    const composite = flowMode === 'composite';
+    const base = registryBase();
+    const C = (k) => base.compOfKey[k] || null;
+    const cid = (k) => C(k) ? C(k).id : null;
+    const decisions = composite ? computeCompositeDecisions() : computeDecisions();
+    const rip = composite ? computeCompositeRipples() : computeRipples();
+    const affKey = (d) => { const nb = findBlock(d.blockId); return d.kind === 'ripple' ? d.skey : d.ckey || (nb ? (d.side === 'downstream' ? entryKeyOf(nb) : exitKeyOf(nb)) : null); };
+    const ack = (id) => ackWarn[id] !== undefined ? { acknowledged:true, note:ackWarn[id] } : { acknowledged:false, note:'' };
+    const now = meta.exportedAt;
+    const versions = [];
+    let nAdded = 0;
+    const usedImpactKeys = new Set();
+    const decisionFor = (e, extra) => Object.assign({ what:'', why:(meta.why || {})[e.key] || '', who:meta.author || '', when:now }, extra);
+    registryEntries().forEach(e => {
+      const id = 'v-' + String(versions.length + 1).padStart(2, '0');
+      if(e.kind === 'version'){
+        const { b, v } = e;
+        const pn = v.nodes.find(n => n.role === 'primary') || v.nodes.find(n => n.ver !== 'v1');
+        const pkey = seamKeyOf(b, v, pn.k);
+        const side = pkey === entryKeyOf(b) ? 'downstream' : pkey === exitKeyOf(b) ? 'upstream' : 'both';
+        const added = [], idOfNode = {};
+        v.nodes.forEach(n => {
+          const k = seamKeyOf(b, v, n.k), c = C(k);
+          if(n.ver === 'v1'){ idOfNode[n.k] = c ? c.id : null; return; }
+          const a = { id:'n' + (++nAdded), ref:c ? c.ref : null, name:c && c.name ? c.name + ' ' + n.ver : (c ? c.autoName + ' ' + n.ver : ''),
+            type:n.type, version:n.ver, container:c ? c.container : null, stage:'planned', of:c ? c.id : null };
+          added.push(a); idOfNode[n.k] = a.id;
+        });
+        const refOf = (nk) => { const a = added.find(x => x.id === idOfNode[nk]); if(a) return a.ref ? a.ref + '@' + a.version : null; const c = base.comps.find(x => x.id === idOfNode[nk]); return c && c.ref ? c.ref + '@v1' : null; };
+        const flips = lineFlips[b.dataset.id] || [];
+        const addedLinks = v.links.map(([f, t, st], li) => ({ f, t, line:(st === 'dotted') !== flips.includes(li) ? 'dotted' : 'solid' }))
+          .filter(l => v.nodes.find(n => n.k === l.f).ver !== 'v1' || v.nodes.find(n => n.k === l.t).ver !== 'v1' || l.line === 'dotted')
+          .map(l => ({ from:idOfNode[l.f], to:idOfNode[l.t], fromRef:refOf(l.f), toRef:refOf(l.t), line:l.line }));
+        const changed = added.filter(a => a.of).map(a => ({ component:a.of, from:'v1', to:a.version, change:'breaking' }));
+        const impacts = [];
+        decisions.filter(d => d.sourceId === b.dataset.id && !d.callerId).forEach(d => {
+          const k = affKey(d);
+          if(d.kind === 'ripple') return;
+          const dec = d.kind === 'assess' ? (d.choice === 'v1' ? 'stayV1' : d.choice === 'v2' ? 'moveV2' : d.choice === 'both' ? 'keepBoth' : 'pending') : 'pending';
+          impacts.push(Object.assign({ affected:cid(k), affectedBlock:base.blockId[d.blockId] || null, path:[...new Set([cid(pkey), cid(k)].filter(Boolean))], decision:dec,
+            codeChange:false, warning:dec === 'keepBoth' }, ack('branch|' + d.blockId)));
+        });
+        rip.asks.filter(a => a.sourceId === b.dataset.id).forEach(a => {
+          const dec = !a.resolved ? 'pending' : a.choice.choice === 'absorb' ? 'absorb' : 'passOn';
+          impacts.push({ affected:cid(a.skey), affectedBlock:base.blockId[a.blockId] || null, path:[...new Set([cid(pkey), cid(a.skey)].filter(Boolean))], decision:dec,
+            codeChange: !!a.resolved && (a.choice.choice === 'absorb' || !!a.choice.code), warning:false, acknowledged:false, note:'' });
+        });
+        // callers of a component this version gives a v2
+        if(composite) compositeCallers().forEach(c => {
+          const k = anchorKey(c.anchor);
+          if(!k || !versionedAt(b, k)) return;
+          const cv = callerVer[c.id] || 'v1';
+          impacts.push(Object.assign({ affected:cid(c.key), path:[cid(c.key), cid(k)].filter(Boolean), decision:cv === 'v2' ? 'moveV2' : cv === 'both' ? 'keepBoth' : 'stayV1',
+            codeChange:false, warning:cv !== 'v1' || rip.impact.has(c.key) }, ack(cv === 'both' ? 'caller|' + c.id : 'impact|' + c.key)));
+          usedImpactKeys.add(c.key);
+        });
+        // dependent logic reached by this version (end application / caller)
+        [...rip.impact].forEach(k => {
+          if(usedImpactKeys.has(k)) return;
+          const near = blocksAtComponent(k).includes(b) || rip.asks.some(a => a.sourceId === b.dataset.id && a.far && (a.far.key === k || a.far.caller === k || (Array.isArray(a.far.caller) && a.far.caller.includes(k))));
+          if(!near) return;
+          usedImpactKeys.add(k);
+          impacts.push(Object.assign({ affected:cid(k), path:[cid(pkey), cid(k)].filter(Boolean), decision:'dependentLogic', codeChange:false, warning:true }, ack('impact|' + k)));
+        });
+        const fan = fanOf(v);
+        versions.push({ id, label:variantLabelFor(v, b), status:'open', block:base.blockId[b.dataset.id],
+          appliesTo:{ component:cid(pkey), connector:pn.type, side },
+          decision:decisionFor(e, { what:v.purpose, option:isSwitchAt(v, pn.type) ? 'switch' : 'parallel', variant:v.id,
+            keepBoth: !!(fan && fan.idx.every(li => (v.links[li][2] === 'dotted') === flips.includes(li))) }),
+          added:added.map(a => { const x = Object.assign({}, a); delete x.of; return x; }), addedLinks, changed, impacts, retired:[] });
+      } else if(e.kind === 'delta'){
+        const c = C(e.k);
+        versions.push({ id, label:'Non-breaking change (Δ)', status:'open', appliesTo:{ component:c ? c.id : null, connector:c ? c.type : null, side:'both' },
+          decision:decisionFor(e, { what:'Code change in the same version (v1 Δ), no new version.', option:'nonBreaking' }),
+          added:[], addedLinks:[], changed:c ? [{ component:c.id, from:'v1', to:'v1', change:'nonBreaking' }] : [], impacts:[], retired:[] });
+      } else {
+        const c = C(e.c.key), br = callerChange[e.c.id] === 'breaking';
+        const impacts = decisions.filter(d => d.callerId === e.c.id).map(d => ({ affected:cid(affKey(d)), affectedBlock:base.blockId[d.blockId] || null,
+          path:[c ? c.id : null, cid(affKey(d))].filter(Boolean), decision:d.choice === 'v1' ? 'stayV1' : 'pending', codeChange:false, warning:false, acknowledged:false, note:'' }));
+        versions.push({ id, label:'Change in the calling application', status:'open', appliesTo:{ component:c ? c.id : null, connector:'app', side:'upstream' },
+          decision:decisionFor(e, { what:br ? 'Breaking change in the calling application.' : 'Non-breaking change in the calling application.', option:br ? 'callerBreaking' : 'callerNonBreaking' }),
+          added:[], addedLinks:[], changed:c ? [{ component:c.id, from:'v1', to:'v1', change:br ? 'breaking' : 'nonBreaking' }] : [], impacts, retired:[] });
+      }
+    });
+    return {
+      schema:REG_SCHEMA, schemaVersion:REG_SCHEMA_VERSION,
+      scenario:{ id:meta.id, version:meta.version, name:meta.name, description:meta.description || '', author:meta.author || '', exportedAt:now,
+        source:{ tool:'Pattern Bench', toolVersion:'2.0', mode:composite ? 'composite' : 'single' }, canvas:{ file:canvasFile }, tags:(meta.tags || []).slice() },
+      base:{
+        blocks:base.blocks,
+        components:base.comps.map(c => ({ id:c.id, ref:c.ref, name:c.name || c.autoName, autoName:!c.name, type:c.type, version:c.version, owner:c.owner, container:c.container })),
+        links:base.links, containers:base.containers
+      },
+      versions,
+      acknowledgements:[],
+      relations:(meta.relations || []).map(r => ({ type:r.type, scenarioId:r.scenarioId, version:r.version ?? null }))
+    };
+  }
+
+  function downloadJson(obj, name){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type:'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  // the dialog: scenario details, the why of every versioning decision, component names, relations, warnings
+  const regOverlay = document.getElementById('regOverlay'), regDialog = document.getElementById('regDialog');
+  function closeRegistryDialog(){ regOverlay.hidden = true; regDialog.innerHTML = ''; }
+  function openRegistryDialog(){
+    if(chainOrder.length === 0){ showToast('Nothing to export — the canvas is empty.', true); return; }
+    const meta = scenarioMeta || { id:null, version:0, name:'', description:'', author:'', tags:[], relations:[], why:{} };
+    const base = registryBase();
+    const entries = registryEntries();
+    const el = (tag, cls, text) => { const x = document.createElement(tag); if(cls) x.className = cls; if(text !== undefined) x.textContent = text; return x; };
+    const field = (label, value, attrs) => { const l = el('label', null, label); const i = el(attrs && attrs.area ? 'textarea' : 'input'); i.value = value || ''; Object.entries(attrs || {}).forEach(([k, v]) => { if(k !== 'area') i.setAttribute(k, v); }); l.appendChild(i); return [l, i]; };
+    regDialog.innerHTML = '';
+    regDialog.appendChild(el('h2', null, 'Export for registry'));
+    regDialog.appendChild(el('div', 'rg-id', meta.id ? 'Scenario ' + meta.id + ' · this export becomes version ' + (meta.version + 1)
+                                                     : 'New scenario — its id is created now · version 1'));
+    const [lName, iName] = field('Scenario name *', meta.name, { maxlength:120, 'data-f':'name', placeholder:'e.g. Sales order to S/4 via broker' });
+    const [lDesc, iDesc] = field('Description', meta.description, { maxlength:1000, 'data-f':'description', area:true });
+    const [lAuth, iAuth] = field('Author', meta.author, { maxlength:80, 'data-f':'author' });
+    const [lTags, iTags] = field('Tags (comma separated)', (meta.tags || []).join(', '), { maxlength:400, 'data-f':'tags', placeholder:'e.g. order, EDA' });
+    regDialog.append(lName, lDesc, lAuth, lTags);
+    // why per versioning decision
+    regDialog.appendChild(el('h3', null, 'Versioning decisions — why?'));
+    const whyInputs = {};
+    if(!entries.length) regDialog.appendChild(el('div', 'rg-none', 'No versioning decisions yet — only the base flow is exported.'));
+    entries.forEach(e => {
+      const row = el('div', 'rg-row');
+      const what = el('div', 'rg-what');
+      if(e.kind === 'version'){ what.textContent = variantLabelFor(e.v, e.b); what.appendChild(el('span', 'rg-sub', e.b.querySelector('.cblock-label').textContent)); }
+      else if(e.kind === 'delta'){ const c = base.compOfKey[e.k]; what.textContent = 'Non-breaking change (Δ)'; what.appendChild(el('span', 'rg-sub', c ? (c.name || c.autoName) : '')); }
+      else { what.textContent = 'Change in the calling application'; what.appendChild(el('span', 'rg-sub', callerName(e.c.id) + ' · ' + (callerChange[e.c.id] === 'breaking' ? 'breaking' : 'non-breaking'))); }
+      const inp = el('input'); inp.maxLength = 500; inp.placeholder = 'Why was this decided?'; inp.value = (meta.why || {})[e.key] || ''; inp.dataset.why = e.key;
+      whyInputs[e.key] = inp;
+      row.append(what, inp); regDialog.appendChild(row);
+    });
+    // component names
+    regDialog.appendChild(el('h3', null, 'Component names'));
+    const nameInputs = {};
+    base.comps.forEach(c => {
+      const row = el('div', 'rg-row');
+      const k = base.containers.find(x => x.id === c.container);
+      const what = el('div', 'rg-what', CONNECTOR_LABEL[c.type] + ' · ' + c.autoName);
+      what.appendChild(el('span', 'rg-sub', c.ref || (k ? k.kind + ' — no ref (label the container)' : 'no container')));
+      const inp = el('input'); inp.maxLength = 80; inp.placeholder = c.autoName + ' (auto label)'; inp.value = c.name; inp.dataset.comp = c.key;
+      nameInputs[c.key] = inp;
+      row.append(what, inp); regDialog.appendChild(row);
+    });
+    // relations
+    regDialog.appendChild(el('h3', null, 'Relations to other scenarios (optional)'));
+    const relBox = el('div');
+    const addRel = (r) => {
+      const row = el('div', 'rg-rel');
+      const sel = el('select'); REL_TYPES.forEach(t => { const o = el('option', null, t); o.value = t; sel.appendChild(o); }); sel.value = r ? r.type : 'relatedTo';
+      const sid = el('input'); sid.placeholder = 'scn-…'; sid.value = r ? r.scenarioId : ''; sid.maxLength = 20;
+      const ver = el('input'); ver.placeholder = 'version'; ver.type = 'number'; ver.min = 1; ver.value = r && r.version ? r.version : '';
+      const rm = el('button', 'btn', '×'); rm.title = 'Remove'; rm.addEventListener('click', () => row.remove());
+      row.append(sel, sid, ver, rm); relBox.appendChild(row);
+    };
+    (meta.relations || []).forEach(addRel);
+    const addBtn = el('button', 'btn', '+ Add relation'); addBtn.dataset.a = 'add-rel'; addBtn.style.marginTop = '6px';
+    addBtn.addEventListener('click', () => addRel(null));
+    regDialog.append(relBox, addBtn);
+    // warnings
+    const noRef = base.containers.filter(k => !k.ref);
+    const warn = el('div', 'rg-warn');
+    const updateWarn = () => {
+      const unnamed = base.comps.filter(c => !nameInputs[c.key].value.trim()).length;
+      warn.innerHTML = '';
+      if(noRef.length){ warn.appendChild(el('b', null, '⚠ ')); warn.appendChild(document.createTextNode(noRef.length + ' container' + (noRef.length === 1 ? '' : 's') + ' without ' + 'platform / asset (or application name) — no ref, so other scenarios can’t be matched: ' + noRef.map(k => k.kind).join(', ') + '. Label them on the canvas.')); warn.appendChild(el('br')); }
+      if(unnamed){ warn.appendChild(el('b', null, '⚠ ')); warn.appendChild(document.createTextNode(unnamed + ' unnamed component' + (unnamed === 1 ? '' : 's') + ' — exported with auto labels.')); }
+      warn.hidden = !noRef.length && !unnamed;
+    };
+    Object.values(nameInputs).forEach(i => i.addEventListener('input', updateWarn));
+    updateWarn();
+    regDialog.appendChild(warn);
+    const err = el('div', 'rg-err');
+    regDialog.appendChild(err);
+    const actions = el('div', 'rg-actions');
+    const cancel = el('button', 'btn', 'Cancel'); cancel.dataset.a = 'cancel'; cancel.addEventListener('click', closeRegistryDialog);
+    const go = el('button', 'btn', 'Export'); go.dataset.a = 'export';
+    go.addEventListener('click', () => {
+      const name = iName.value.trim();
+      if(!name){ err.textContent = 'Give the scenario a name.'; iName.focus(); return; }
+      const rels = [...relBox.querySelectorAll('.rg-rel')].map(r => { const [sel, sid, ver] = r.querySelectorAll('select, input'); return { type:sel.value, scenarioId:sid.value.trim().toLowerCase(), version:ver.value ? parseInt(ver.value, 10) : null }; })
+        .filter(r => r.scenarioId);
+      const bad = rels.find(r => !/^scn-[a-z0-9]{4,16}$/.test(r.scenarioId) || (r.version !== null && !(r.version >= 1)));
+      if(bad){ err.textContent = 'Relation "' + bad.scenarioId + '": a scenario id looks like scn-7f3a9c, the version is 1 or more.'; return; }
+      Object.entries(nameInputs).forEach(([k, i]) => { const v = i.value.trim(); if(v) compNames[k] = v; else delete compNames[k]; });
+      const why = {};
+      Object.entries(whyInputs).forEach(([k, i]) => { const v = i.value.trim(); if(v) why[k] = v; });
+      scenarioMeta = { id:meta.id || newScenarioId(), version:(meta.version || 0) + 1, name, description:iDesc.value.trim(), author:iAuth.value.trim(),
+        tags:iTags.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 30), relations:rels, why };
+      exportForRegistry();
+      closeRegistryDialog();
+    });
+    actions.append(cancel, go);
+    regDialog.appendChild(actions);
+    regOverlay.hidden = false;
+    regDialog.addEventListener('keydown', e => { e.stopPropagation(); if(e.key === 'Escape') closeRegistryDialog(); });
+    iName.focus();
+  }
+  function exportForRegistry(){
+    const meta = Object.assign({}, scenarioMeta, { exportedAt:new Date().toISOString() });
+    const stem = meta.id + '.v' + meta.version;
+    const canvas = serializeFlow();
+    canvas.savedAt = meta.exportedAt;
+    const spec = buildRegistrySpec(meta, stem + '.canvas.json');
+    downloadJson(spec, stem + '.registry.json');
+    downloadJson(canvas, stem + '.canvas.json');
+    renderFlows();
+    recordHistory();
+    showToast('Exported ' + meta.id + ' version ' + meta.version + ' for the registry: ' + stem + '.registry.json + ' + stem + '.canvas.json.');
+    return { spec, canvas };
+  }
+  document.getElementById('registryBtn').addEventListener('click', openRegistryDialog);
+  regOverlay.addEventListener('pointerdown', e => { if(e.target === regOverlay) closeRegistryDialog(); });
 
   document.getElementById('exportBtn').addEventListener('click', () => {
     if(chainOrder.length === 0){ showToast('Nothing to export — the canvas is empty.'); return; }
@@ -5780,7 +6175,7 @@
     compositeDecisions: () => computeCompositeDecisions(), compositeRipples: () => computeCompositeRipples(), setRipple,
     renderCopy: () => renderCopy(), lineFlips: () => lineFlips,
     applyVersion: (id, vid) => { versionOverrides[id] = vid; renderFlows(); renderCopy(); },
-    blocksAt: (k) => blocksAtComponent(k).map(b => b.dataset.id), callersList: () => compositeCallers().map(c => ({ id:c.id, key:anchorKey(c.anchor) })), removeCaller };
+    blocksAt: (k) => blocksAtComponent(k).map(b => b.dataset.id), registrySpec: () => buildRegistrySpec(Object.assign({ id:'scn-test00', version:1, name:'test', exportedAt:'t' }, scenarioMeta || {}), 'x.canvas.json'), scenarioMeta: () => scenarioMeta, compNames: () => compNames, callersList: () => compositeCallers().map(c => ({ id:c.id, key:anchorKey(c.anchor) })), removeCaller };
 })();
 </script>
 </body>

@@ -452,3 +452,19 @@ Both modes:
     version API?" with its API versions or "Stay on v1"); saved as `callerChange`, printed.
 - A version applied from the library clears the stale guide card.
 - Tests: new `test_round7.py` 50 checks; all suites pass (467 checks).
+
+### v2.0 trial — fix 17: Export for registry (Nov 15)
+- Toolbar **Export for registry** opens a dialog: scenario name (required), description, author, tags,
+  the "why" of each versioning decision, a name for every component (auto label as placeholder),
+  optional relations (derivedFrom / supersedes / dependsOn / relatedTo + scenario id + version);
+  warns about containers without platform / asset (no ref) and unnamed components.
+- Downloads two files tied by scenario id + version: `<id>.v<N>.registry.json` (schema
+  `pattern-bench.registry-entry` v0.6: base blocks / components / links / containers with generated
+  refs, one `versions[]` entry per versioned block, hand-marked Δ and caller change — added / changed
+  components, lines incl. toggles, impacts with decisions, Δ, ⚠ and acknowledgements, relations) and
+  `<id>.v<N>.canvas.json` (the normal flow file).
+- The canvas file keeps the scenario identity (`scenario`: id, version, name, author, tags, relations,
+  why) and `componentNames`, so re-exporting keeps the id and bumps the version. Both validated on load.
+- Refs: `slug(platform)/slug(asset)#type`, end applications `endapp/…`, callers `caller/…`.
+- The print uses component names. Both modes.
+- Tests: new `test_registry_export.py` 37 checks; all suites pass (504 checks).
