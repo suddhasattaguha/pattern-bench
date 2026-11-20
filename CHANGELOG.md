@@ -5,6 +5,14 @@ produced this tool, written up for context. It's organized as logical
 stages, not literal commits — from this point forward, commits should be
 one logical change each with a real diff behind them.
 
+## v2.0 — registry input fixes (Nov 20 2026)
+From the Integration Registry review (register P-1, P-3, P-4, P-5):
+- **P-1** Export for registry: the canvas file is downloaded a moment after the spec (browsers block back-to-back downloads); a closing dialog names both files and offers "Download again" for each. The normal Export names the file `<scenario-id>.v<version>.canvas.json` once the scenario has been exported.
+- **P-3** End-application APIs and folders get an **endpoint** (e.g. `API_SALES_ORDER_SRV`, `/out/payments`), asked in the export dialog; the ref becomes `endapp/<app>/<endpoint>#api`, so flows that touch the same application but another API are no longer treated as sharing it.
+- **P-4** Export is blocked until every container has its label (platform / asset, or application name).
+- **P-5** Topics get a **topic name**, asked in the export dialog; the topic gets its own broker container (`<platform>/<topic>`), apart from the subscriber queues.
+- Endpoint and topic names are saved in the canvas file (`componentAssets`) and prefilled on re-export.
+
 ## Stage 1 — Canvas foundation
 - Basic HTML/CSS/JS framework: infinite pan/zoom canvas, quadrant-style
   component palette, drag-and-drop block placement, block selection,

@@ -774,6 +774,10 @@
   .reg-dialog .rg-row .rg-what{ color:var(--text-primary); }
   .reg-dialog .rg-row .rg-sub{ display:block; color:var(--text-muted); font-size:11px; }
   .reg-dialog .rg-row input{ margin-top:0; }
+  .reg-dialog .rg-pair{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .reg-dialog .rg-note{ font-size:11.5px; color:var(--text-muted); margin:6px 0 2px; }
+  .reg-dialog input.rg-bad{ border-color:#d97706 !important; box-shadow:0 0 0 2px rgba(217,119,6,.18); }
+  .reg-dialog .mono{ font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
   .reg-dialog .rg-rel{ display:grid; grid-template-columns:1.1fr 1.2fr 0.6fr auto; gap:8px; margin-top:6px; }
   .reg-dialog .rg-rel input, .reg-dialog .rg-rel select{ margin-top:0; }
   .reg-dialog .rg-warn{ margin-top:12px; padding:8px 10px; border-radius:8px; border:1px solid var(--accent-amber); color:var(--text-primary); font-size:12px; }
@@ -936,6 +940,7 @@
   // fix 17 (registry export): component names (component key -> name) and the scenario's registry identity
   // ({ id, version, name, description, author, tags, relations, why:{entry key -> text} }); both saved in the canvas file
   let compNames = {};
+  let compAssets = {};      // P-3 / P-5: endpoint name (end-application API / folder) or topic name, per component key
   const REL_TYPES = ['derivedFrom', 'supersedes', 'dependsOn', 'relatedTo'];
   let scenarioMeta = null;
   let callerCard = null;     // { id, pane, x, y } — the open caller-change card
@@ -3013,7 +3018,7 @@
     callerPrompt = null;
     rippleChoices = {};
     manualDeltas = new Set();
-    lineFlips = {}; callerVer = {}; callerChange = {}; callerCard = null; compNames = {}; scenarioMeta = null; laneChoice = {}; ackWarn = {}; backendApp = new Set(); backendPrompt = null;
+    lineFlips = {}; callerVer = {}; callerChange = {}; callerCard = null; compNames = {}; compAssets = {}; scenarioMeta = null; laneChoice = {}; ackWarn = {}; backendApp = new Set(); backendPrompt = null;
     openWarnings.clear();
     closeLabelEditor();
     selectedBlock = null;
@@ -5453,6 +5458,8 @@
     if(backendApp.size){ const map = ackRefs(); const refs = [...backendApp].map(id => map[id]).filter(Boolean); if(refs.length) f.backend = refs; }
     const names = Object.entries(compNames).filter(([, n]) => n).map(([k, name]) => ({ key:encodeRefs(k), name })).filter(x => x.key);
     if(names.length) f.componentNames = names;
+    const assets = Object.entries(compAssets).filter(([, n]) => n).map(([k, name]) => ({ key:encodeRefs(k), name })).filter(x => x.key);
+    if(assets.length) f.componentAssets = assets;
     if(scenarioMeta){
       f.scenario = { id:scenarioMeta.id, version:scenarioMeta.version, name:scenarioMeta.name || '', description:scenarioMeta.description || '',
         author:scenarioMeta.author || '', tags:(scenarioMeta.tags || []).slice(), relations:(scenarioMeta.relations || []).map(r => Object.assign({}, r)),
@@ -5574,6 +5581,9 @@
     if(f.componentNames !== undefined && (!Array.isArray(f.componentNames) || f.componentNames.length > 500 ||
        !f.componentNames.every(x => x && keyOk(x.key) && typeof x.name === 'string' && x.name.length <= 80)))
       return 'Flow file has an invalid component name.';
+    if(f.componentAssets !== undefined && (!Array.isArray(f.componentAssets) || f.componentAssets.length > 500 ||
+       !f.componentAssets.every(x => x && keyOk(x.key) && typeof x.name === 'string' && x.name.length <= 80)))
+      return 'Flow file has an invalid endpoint / topic name.';
     if(f.scenario !== undefined){
       const sc = f.scenario, str = (v, n) => typeof v === 'string' && v.length <= n;
       if(!sc || typeof sc !== 'object' || !/^scn-[a-z0-9]{4,16}$/.test(sc.id || '') || !Number.isInteger(sc.version) || sc.version < 1 ||
@@ -5632,6 +5642,7 @@
     decodeAcks(f.acks);
     if(f.backend){ const inv = {}; Object.entries(ackRefs()).forEach(([id, ref]) => { inv[ref] = id; }); f.backend.forEach(r => { const id = inv[r]; const b = id && findBlock(id); if(b && b.dataset.tpl === 'api-to-api') backendApp.add(id); }); }
     (f.componentNames || []).forEach(x => { const k = decodeRefs(x.key); if(k) compNames[k] = x.name; });
+    (f.componentAssets || []).forEach(x => { const k = decodeRefs(x.key); if(k) compAssets[k] = x.name; });
     if(f.scenario){
       const why = {};
       (f.scenario.why || []).forEach(w => { const k = decodeRefs(w.key); if(k) why[k] = w.text; });
@@ -5741,15 +5752,25 @@
       if(!n) return;
       const type = n.type === 'app' ? 'app' : n.type;
       counter[type] = (counter[type] || 0) + 1;
-      const k = contOfKey[key];
+      let k = contOfKey[key];
       let ref = null;
+      const named = (compAssets[key] || '').trim();
+      // P-5: a named topic gets its own broker container (topic asset), separate from the subscriber queues
+      if(type === 'topic' && named && k){
+        const tref = k.platform ? slug(k.platform) + '/' + slug(named) : null;
+        let tk = containers.find(x => x.topicOf === tref && tref);
+        if(!tk){ tk = { id:'k' + (containers.length + 1), ref:tref, kind:'broker', platform:k.platform || '', asset:named, topicOf:tref }; containers.push(tk); }
+        k = tk;
+      }
       if(k && k.ref){
-        const pc = (perCont[k.id] = perCont[k.id] || {});
+        // P-3: an end-application API / folder carries its endpoint in the ref (endapp/<app>/<endpoint>#api)
+        const base = k.kind === 'endApp' && named ? k.ref + '/' + slug(named) : k.ref;
+        const pc = (perCont[base] = perCont[base] || {});
         pc[type] = (pc[type] || 0) + 1;
-        ref = k.ref + '#' + type + (pc[type] > 1 ? '-' + pc[type] : '');
+        ref = base + '#' + type + (pc[type] > 1 ? '-' + pc[type] : '');
       }
       const c = { id:'c' + (comps.length + 1), ref, name:compNames[key] || '', autoName:CONNECTOR_LABEL[type] + ' ' + counter[type],
-        type, version:'v1', owner:COMP_OWNER[n.owner] || 'integration', container:k ? k.id : null, key };
+        type, version:'v1', owner:COMP_OWNER[n.owner] || 'integration', container:k ? k.id : null, key, asset:named };
       comps.push(c); compOfKey[key] = c;
     });
     // links (one per pair of components)
@@ -5770,7 +5791,11 @@
       blocks.push({ id, templateId:b.dataset.tpl, label:b.querySelector('.cblock-label').textContent, row:r, order:i,
         components:keys.map(k => compOfKey[k] && compOfKey[k].id).filter(Boolean) });
     }));
-    return { comps, compOfKey, links, containers, blocks, blockId };
+    containers.forEach(x => delete x.topicOf);
+    // containers no component lives in any more (topic split off) are dropped
+    const usedK = new Set(comps.map(c => c.container));
+    const keptContainers = containers.filter(x => usedK.has(x.id));
+    return { comps, compOfKey, links, containers:keptContainers, blocks, blockId };
   }
 
   // every versioning action in the versioned copy, with the key its "why" is stored under
@@ -5937,7 +5962,8 @@
     });
     // component names
     regDialog.appendChild(el('h3', null, 'Component names'));
-    const nameInputs = {};
+    const nameInputs = {}, assetInputs = {};
+    regDialog.appendChild(el('div', 'rg-note', 'End-application APIs and folders need their endpoint, topics need their topic name (*) — they become part of the ref the registry matches on.'));
     base.comps.forEach(c => {
       const row = el('div', 'rg-row');
       const k = base.containers.find(x => x.id === c.container);
@@ -5945,7 +5971,17 @@
       what.appendChild(el('span', 'rg-sub', c.ref || (k ? k.kind + ' — no ref (label the container)' : 'no container')));
       const inp = el('input'); inp.maxLength = 80; inp.placeholder = c.autoName + ' (auto label)'; inp.value = c.name; inp.dataset.comp = c.key;
       nameInputs[c.key] = inp;
-      row.append(what, inp); regDialog.appendChild(row);
+      const needs = (k && k.kind === 'endApp' && (c.type === 'api' || c.type === 'file')) ? 'endpoint' : c.type === 'topic' ? 'topic' : null;
+      if(needs){
+        const box = el('div', 'rg-pair');
+        const ai = el('input'); ai.maxLength = 80; ai.value = compAssets[c.key] || ''; ai.dataset.asset = c.key;
+        ai.placeholder = needs === 'endpoint' ? (c.type === 'file' ? 'Folder, e.g. /out/payments *' : 'Endpoint, e.g. API_SALES_ORDER_SRV *') : 'Topic name, e.g. sales-order-events *';
+        ai.title = needs === 'endpoint' ? 'Which API or folder of this application — so flows that touch the same application but a different API are not treated as sharing it'
+                                        : 'The topic asset — kept apart from the subscriber queues, so the registry can see who publishes and who consumes';
+        assetInputs[c.key] = { input:ai, needs };
+        box.append(inp, ai); row.append(what, box);
+      } else row.append(what, inp);
+      regDialog.appendChild(row);
     });
     // relations
     regDialog.appendChild(el('h3', null, 'Relations to other scenarios (optional)'));
@@ -5969,10 +6005,13 @@
       const unnamed = base.comps.filter(c => !nameInputs[c.key].value.trim()).length;
       warn.innerHTML = '';
       if(noRef.length){ warn.appendChild(el('b', null, '⚠ ')); warn.appendChild(document.createTextNode(noRef.length + ' container' + (noRef.length === 1 ? '' : 's') + ' without ' + 'platform / asset (or application name) — no ref, so other scenarios can’t be matched: ' + noRef.map(k => k.kind).join(', ') + '. Label them on the canvas.')); warn.appendChild(el('br')); }
-      if(unnamed){ warn.appendChild(el('b', null, '⚠ ')); warn.appendChild(document.createTextNode(unnamed + ' unnamed component' + (unnamed === 1 ? '' : 's') + ' — exported with auto labels.')); }
-      warn.hidden = !noRef.length && !unnamed;
+      if(unnamed){ warn.appendChild(el('b', null, '⚠ ')); warn.appendChild(document.createTextNode(unnamed + ' unnamed component' + (unnamed === 1 ? '' : 's') + ' — exported with auto labels.')); warn.appendChild(el('br')); }
+      const missing = Object.values(assetInputs).filter(a => !a.input.value.trim());
+      if(missing.length){ warn.appendChild(el('b', null, '⚠ ')); warn.appendChild(document.createTextNode(missing.length + ' endpoint / topic name' + (missing.length === 1 ? '' : 's') + ' missing (*).')); }
+      warn.hidden = !noRef.length && !unnamed && !missing.length;
     };
     Object.values(nameInputs).forEach(i => i.addEventListener('input', updateWarn));
+    Object.values(assetInputs).forEach(a => a.input.addEventListener('input', () => { a.input.classList.remove('rg-bad'); updateWarn(); }));
     updateWarn();
     regDialog.appendChild(warn);
     const err = el('div', 'rg-err');
@@ -5983,18 +6022,22 @@
     go.addEventListener('click', () => {
       const name = iName.value.trim();
       if(!name){ err.textContent = 'Give the scenario a name.'; iName.focus(); return; }
+      // P-4: every container needs its label — otherwise it has no ref and drops out of the registry
+      if(noRef.length){ err.textContent = 'Label every container first: ' + noRef.length + ' ' + noRef.map(k => k.kind === 'endApp' ? 'end application' : k.kind).join(', ') + ' without platform / asset (or application name). Close this, label them on the canvas, then export.'; return; }
+      const miss = Object.values(assetInputs).filter(a => !a.input.value.trim());
+      if(miss.length){ miss.forEach(a => a.input.classList.add('rg-bad')); err.textContent = 'Fill in the ' + miss.length + ' missing endpoint / topic name' + (miss.length === 1 ? '' : 's') + ' (*).'; miss[0].input.focus(); return; }
       const rels = [...relBox.querySelectorAll('.rg-rel')].map(r => { const [sel, sid, ver] = r.querySelectorAll('select, input'); return { type:sel.value, scenarioId:sid.value.trim().toLowerCase(), version:ver.value ? parseInt(ver.value, 10) : null }; })
         .filter(r => r.scenarioId);
       const bad = rels.find(r => !/^scn-[a-z0-9]{4,16}$/.test(r.scenarioId) || (r.version !== null && !(r.version >= 1)));
       if(bad){ err.textContent = 'Relation "' + bad.scenarioId + '": a scenario id looks like scn-7f3a9c, the version is 1 or more.'; return; }
       Object.entries(nameInputs).forEach(([k, i]) => { const v = i.value.trim(); if(v) compNames[k] = v; else delete compNames[k]; });
+      Object.entries(assetInputs).forEach(([k, a]) => { const v = a.input.value.trim(); if(v) compAssets[k] = v; else delete compAssets[k]; });
       const why = {};
       Object.entries(whyInputs).forEach(([k, i]) => { const v = i.value.trim(); if(v) why[k] = v; });
       scenarioMeta = { id:meta.id || newScenarioId(), version:(meta.version || 0) + 1, name, description:iDesc.value.trim(), author:iAuth.value.trim(),
         tags:iTags.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 30), relations:rels, why };
       exportForRegistry();
-      closeRegistryDialog();
-    });
+      });
     actions.append(cancel, go);
     regDialog.appendChild(actions);
     regOverlay.hidden = false;
@@ -6008,11 +6051,30 @@
     canvas.savedAt = meta.exportedAt;
     const spec = buildRegistrySpec(meta, stem + '.canvas.json');
     downloadJson(spec, stem + '.registry.json');
-    downloadJson(canvas, stem + '.canvas.json');
+    // P-1: browsers often block a second download fired in the same moment — give it a beat
+    setTimeout(() => downloadJson(canvas, stem + '.canvas.json'), 700);
+    lastRegistryExport = { spec, canvas, stem };
     renderFlows();
     recordHistory();
-    showToast('Exported ' + meta.id + ' version ' + meta.version + ' for the registry: ' + stem + '.registry.json + ' + stem + '.canvas.json.');
+    showRegistryDone(stem);
     return { spec, canvas };
+  }
+  let lastRegistryExport = null;
+  // after an export: both file names, a way to download either again, and where they go
+  function showRegistryDone(stem){
+    const el = (tag, cls, text) => { const x = document.createElement(tag); if(cls) x.className = cls; if(text !== undefined) x.textContent = text; return x; };
+    regDialog.innerHTML = '';
+    regDialog.appendChild(el('h2', null, 'Exported for the registry'));
+    regDialog.appendChild(el('div', 'rg-id', 'Two files — keep them together, with these names:'));
+    [['registry', stem + '.registry.json', () => downloadJson(lastRegistryExport.spec, stem + '.registry.json')],
+     ['canvas', stem + '.canvas.json', () => downloadJson(lastRegistryExport.canvas, stem + '.canvas.json')]].forEach(([k, name, fn]) => {
+      const row = el('div', 'rg-row'); row.appendChild(el('div', 'rg-what mono', name));
+      const b = el('button', 'btn', 'Download again'); b.dataset.a = 'redl-' + k; b.addEventListener('click', fn); row.appendChild(b); regDialog.appendChild(row);
+    });
+    regDialog.appendChild(el('div', 'rg-note', 'If your browser asked to allow multiple downloads, allow it — or use “Download again”. Put both files into the registry folder (registry-data/ in the integration-version-registry repo).'));
+    const actions = el('div', 'rg-actions'); const ok = el('button', 'btn', 'Done'); ok.dataset.a = 'done'; ok.addEventListener('click', closeRegistryDialog);
+    actions.appendChild(ok); regDialog.appendChild(actions);
+    regOverlay.hidden = false;
   }
   document.getElementById('registryBtn').addEventListener('click', openRegistryDialog);
   regOverlay.addEventListener('pointerdown', e => { if(e.target === regOverlay) closeRegistryDialog(); });
@@ -6025,7 +6087,7 @@
     const blob = new Blob([JSON.stringify(flow, null, 2)], { type:'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'pattern-bench-flow.json';
+    a.download = scenarioMeta ? scenarioMeta.id + '.v' + scenarioMeta.version + '.canvas.json' : 'pattern-bench-flow.json';
     document.body.appendChild(a);
     a.click();
     a.remove();

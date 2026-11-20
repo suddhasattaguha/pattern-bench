@@ -35,6 +35,7 @@ with sync_playwright() as p:
             if len(got) >= 2: break
             pg.wait_for_timeout(100)
         pg.remove_listener('download', h)
+        if pg.locator('#regDialog [data-a=done]').count(): pg.click('#regDialog [data-a=done]')
         return {dl.suggested_filename: json.load(open(dl.path())) for dl in got}
 
     # ---- composite scenario: API-to-Process → Process-to-Publish → Consume-to-API, a caller, labels
@@ -58,8 +59,18 @@ with sync_playwright() as p:
           'no ref' in txt and 'caller' in txt and 'unnamed component' in txt)
     pg.click('#regDialog [data-a=export]'); pg.wait_for_timeout(50)
     check('dialog: the scenario name is required', 'Give the scenario a name' in pg.inner_text('#regDialog') and not pg.locator('#regOverlay').is_hidden())
+    pg.fill('#regDialog [data-f=name]', 'x'); pg.click('#regDialog [data-a=export]'); pg.wait_for_timeout(50)
+    check('P-4: export is blocked while a container has no label (the caller)', 'Label every container first' in pg.inner_text('#regDialog') and not pg.locator('#regOverlay').is_hidden())
+    check('P-3/P-5: the dialog asks for the endpoint of the end-application API and the topic name',
+          pg.locator('#regDialog [data-asset="block-3:out"]').count() == 1 and pg.locator('#regDialog [data-asset="block-2:out"]').count() == 1)
     pg.click('#regDialog [data-a=cancel]')
     check('dialog: Cancel closes it and changes nothing', pg.locator('#regOverlay').is_hidden() and ev(f"{d}.scenarioMeta()") is None)
+    types = ev("[...document.querySelectorAll('#world .pcont-label .pcont-type')].map(t=>t.textContent)")
+    cal = [i for i, t in enumerate(types) if 'CALL' in t.upper()]
+    label(cal[0], 'Webshop', '', app=True)
+    pg.click('#registryBtn'); pg.wait_for_timeout(80); pg.fill('#regDialog [data-f=name]', 'x'); pg.click('#regDialog [data-a=export]'); pg.wait_for_timeout(50)
+    check('P-3/P-5: export is blocked while the endpoint / topic name is missing', 'missing endpoint / topic' in pg.inner_text('#regDialog'))
+    pg.click('#regDialog [data-a=cancel]')
 
     # ---- add a version, then export
     pg.click('#tabVersioned')
@@ -72,11 +83,22 @@ with sync_playwright() as p:
         pg.fill('#regDialog [data-why^="ver|"]', 'New pricing logic runs next to v1')
         pg.fill('#regDialog [data-comp="block-1:in"]', 'Order API')
         pg.fill('#regDialog [data-comp="block-2:out"]', 'Order events')
+        pg.fill('#regDialog [data-asset="block-2:out"]', 'order-events')
+        pg.fill('#regDialog [data-asset="block-3:out"]', 'API_SALES_ORDER_SRV')
         pg.click('#regDialog [data-a=add-rel]')
         pg.locator('#regDialog .rg-rel select').select_option('derivedFrom')
         pg.fill('#regDialog .rg-rel input >> nth=0', 'scn-12ab34'); pg.fill('#regDialog .rg-rel input >> nth=1', '2')
         if SHOT: os.makedirs(SHOT, exist_ok=True); pg.screenshot(path=os.path.join(SHOT, 'reg-dialog.png'))
-    files = export(fill1)
+    pg.click('#registryBtn'); pg.wait_for_timeout(80); fill1()
+    got = []; pg.on('download', lambda dl: got.append(dl)); pg.click('#regDialog [data-a=export]')
+    for _ in range(50):
+        if len(got) >= 2: break
+        pg.wait_for_timeout(100)
+    done_txt = pg.inner_text('#regDialog')
+    check('P-1: after the export a dialog names both files and offers to download either again',
+          '.registry.json' in done_txt and '.canvas.json' in done_txt and pg.locator('#regDialog [data-a=redl-canvas]').count() == 1)
+    pg.click('#regDialog [data-a=done]')
+    files = {dl.suggested_filename: json.load(open(dl.path())) for dl in got}
     names = sorted(files)
     check('export: two files — <id>.v1.registry.json and <id>.v1.canvas.json',
           len(names) == 2 and re.match(r'^scn-[a-z0-9]{6}\.v1\.canvas\.json$', names[0]) and names[1] == names[0].replace('canvas', 'registry'))
@@ -89,12 +111,18 @@ with sync_playwright() as p:
     comps = {c['id']: c for c in spec['base']['components']}
     by_name = {c['name']: c for c in comps.values()}
     check('spec: refs generated from platform / asset — slug(platform)/slug(asset)#type',
-          by_name['Order API']['ref'] == 'sap-btp/sales-order-iflow#api' and by_name['Order events']['ref'] == 'azure/order-broker#topic')
+          by_name['Order API']['ref'] == 'sap-btp/sales-order-iflow#api')
+    topic_k = [k for k in spec['base']['containers'] if k['asset'] == 'order-events']
+    check('P-5: the named topic has its own broker container (azure/order-events), apart from the queue',
+          by_name['Order events']['ref'] == 'azure/order-events#topic' and len(topic_k) == 1 and topic_k[0]['kind'] == 'broker'
+          and any(c['type'] == 'queue' and c['ref'] == 'azure/order-broker#queue' for c in comps.values()))
     check('spec: a second component of the same type in a container is not numbered unless repeated; process ref', any(c['ref'] == 'sap-btp/sales-order-iflow#process' for c in comps.values()))
-    check('spec: the end application gets endapp/<name> refs', any(c['ref'] == 'endapp/s-4hana#api' and c['owner'] == 'endApp' for c in comps.values()))
-    check('spec: the unlabelled caller container has no ref (and its component neither)', any(k['kind'] == 'caller' and k['ref'] is None for k in spec['base']['containers'])
-          and any(c['type'] == 'app' and c['ref'] is None for c in comps.values()))
+    check('P-3: the end-application API carries its endpoint — endapp/<name>/<endpoint>#api', any(c['ref'] == 'endapp/s-4hana/api-sales-order-srv#api' and c['owner'] == 'endApp' for c in comps.values()))
+    check('spec: the labelled caller gets caller/<name>', any(c['type'] == 'app' and c['ref'] == 'caller/webshop' + '#app' for c in comps.values()))
+    check('P-3/P-5: endpoint and topic names are saved in the canvas file', {'key': '@t1:out', 'name': 'order-events'} in canvas.get('componentAssets', [])
+          and {'key': '@t2:out', 'name': 'API_SALES_ORDER_SRV'} in canvas.get('componentAssets', []))
     check('spec: unnamed components carry auto labels, marked autoName', by_name['Order API']['autoName'] is False and any(c['autoName'] and c['name'] == 'Queue 1' for c in comps.values()))
+    check('spec: links carry fromRef / toRef (topic → queue across the two broker containers)', any(l['fromRef'] == 'azure/order-events#topic' and l['toRef'] == 'azure/order-broker#queue' for l in spec['base']['links']))
     check('spec: links carry fromRef / toRef', any(l['fromRef'] == 'sap-btp/sales-order-iflow#api' and l['toRef'] == 'sap-btp/sales-order-iflow#process' for l in spec['base']['links']))
     check('spec: blocks list their template and components', [b['templateId'] for b in spec['base']['blocks']] == ['api-to-process', 'process-to-publish', 'consume-to-api'])
     v = spec['versions'][0] if spec['versions'] else {}
@@ -141,6 +169,8 @@ with sync_playwright() as p:
     ev(f"{d}.loadFlow({json.dumps(c2)})"); pg.wait_for_timeout(120)
     check('load: scenario identity and component names restored', ev(f"{d}.scenarioMeta().id") == sid and ev(f"{d}.scenarioMeta().version") == 2
           and 'Order API' in ev(f"Object.values({d}.compNames())"))
+    s2c = [f for n, f in files2.items() if n.endswith('.registry.json')][0]
+    check('re-export: endpoint and topic names are kept (no need to type them again)', any(c['ref'] == 'endapp/s-4hana/api-sales-order-srv#api' for c in s2c['base']['components']))
     pg.click('#registryBtn'); pg.wait_for_timeout(80)
     check('load: the next export would be version 3', 'version 3' in pg.inner_text('#regDialog'))
     pg.keyboard.press('Escape')
@@ -157,16 +187,23 @@ with sync_playwright() as p:
     # ---- single flow: Δ and a version, no labels
     pg.goto(URL); pg.wait_for_timeout(100)
     for t in ['api-to-process', 'process-to-api']: ev(f"{d}.append('{t}')")
+    types = ev("[...document.querySelectorAll('#world .pcont-label .pcont-type')].map(t=>t.textContent)")
+    for i, t in enumerate(types):
+        if 'IPAAS' in t.upper(): label(i, 'AIS', 'Order Gateway')
+        elif 'END' in t.upper(): label(i, 'Salesforce', '', app=True)
     pg.click('#tabVersioned')
     click_node('block-1:out'); pg.locator('#world .target-card .dc-side button').first.click()
     ev(f"{d}.dropVersion('a2p-contract-shared', 10, 10)"); pg.wait_for_timeout(120)
     click_node('block-2:out', '#vworld'); pg.click('#vworld .target-card [data-action=mark]'); pg.wait_for_timeout(80)
-    f3 = export(lambda: pg.fill('#regDialog [data-f=name]', 'Single flow scenario'))
+    def fill3():
+        pg.fill('#regDialog [data-f=name]', 'Single flow scenario')
+        for a in pg.locator('#regDialog [data-asset]').all(): a.fill('Order API v58')
+    f3 = export(fill3)
     s3 = [f for n, f in f3.items() if n.endswith('.registry.json')][0]
     check('single flow: exported with mode single, the version and the Δ as entries', s3['scenario']['source']['mode'] == 'single'
           and [x['decision']['option'] for x in s3['versions']] == ['switch', 'nonBreaking'] or [x['decision']['option'] for x in s3['versions']] == ['parallel', 'nonBreaking'])
     check('single flow: the ripple question shows up as an impact', any(i['decision'] in ('pending', 'absorb', 'passOn') for i in s3['versions'][0]['impacts']))
-    check('single flow: no refs without labels — still a valid export', all(c['ref'] is None for c in s3['base']['components']))
+    check('single flow: with labels and endpoint every component has a ref', all(c['ref'] for c in s3['base']['components']))
     check('single flow: the canvas file still validates', ev(f"{d}.validateFlow({json.dumps([f for n, f in f3.items() if n.endswith('.canvas.json')][0])})") is None)
 
     check('no page errors', not errs)
